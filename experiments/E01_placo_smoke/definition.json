@@ -1,0 +1,80 @@
+{
+  "schema_version": "experiment.v1",
+  "experiment_id": "E01",
+  "title": "PlaCo C++ kinematics smoke test",
+  "question": "Can the pinned PlaCo C++ source load a fixed-base robot model and solve a reachable end-effector position task in the native lab runtime?",
+  "hypothesis": "The required PlaCo arm completes without a runtime error and reduces the final end-effector position error below 1e-5 m within 25 solver iterations.",
+  "independent_factors": [
+    "solver_implementation"
+  ],
+  "controlled_factors": {
+    "robot_model": "model/two_link.urdf",
+    "end_effector_frame": "tool0",
+    "initial_joints_rad": {
+      "joint1": 0.25,
+      "joint2": -0.5
+    },
+    "target_position_m": [
+      1.4,
+      0.4,
+      0.0
+    ],
+    "maximum_iterations": 25,
+    "position_tolerance_m": 1e-5,
+    "regularization_weight": 1e-6,
+    "floating_base_masked": true,
+    "joint_limits_enabled": true
+  },
+  "allowed_differences": [],
+  "inputs": [
+    {
+      "input_id": "synthetic_two_link",
+      "artifact": "model/two_link.urdf",
+      "required": true
+    }
+  ],
+  "arms": [
+    {
+      "arm_id": "placo_v0_9_23",
+      "method": "placo_cpp_kinematics",
+      "required": true
+    }
+  ],
+  "evaluation_windows": [
+    {
+      "window_id": "full_solve",
+      "description": "All solver iterations from the declared initial state to termination."
+    }
+  ],
+  "metrics": {
+    "primary": [
+      "final_position_error_m"
+    ],
+    "secondary": [
+      "iteration_count"
+    ],
+    "guardrail": [
+      "joint_limit_violation_count"
+    ],
+    "diagnostic": [
+      "initial_position_error_m",
+      "mean_solve_time_us",
+      "max_solve_time_us"
+    ]
+  },
+  "comparisons": [],
+  "failure_policy": {
+    "required_arm_failure_fails_run": true,
+    "preserve_partial_trace": true,
+    "non_finite_output_fails_arm": true
+  },
+  "artifact_requirements": [
+    "manifest.json",
+    "inputs/synthetic_two_link/canonical_copy.urdf",
+    "arms/placo_v0_9_23/synthetic_two_link/trace.csv",
+    "arms/placo_v0_9_23/synthetic_two_link/status.json",
+    "evaluation/metrics.csv",
+    "evaluation/report.md"
+  ]
+}
+

@@ -1,0 +1,22 @@
+# CMake build trees
+/build/
+/build-*/
+/out/
+
+# Local editor and OS files
+.DS_Store
+.idea/
+.vscode/
+
+# Python tooling caches
+__pycache__/
+*.py[cod]
+
+# Experiment workspaces are append-only local evidence, not source files.
+/experiments/*/runs/*
+!/experiments/*/runs/.gitkeep
+
+# Promoted results are added deliberately after review.
+/experiments/*/results/*
+!/experiments/*/results/.gitkeep
+

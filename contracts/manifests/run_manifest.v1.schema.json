@@ -1,0 +1,87 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "motion-control-lab/run_manifest.v1",
+  "title": "Motion Control Lab run manifest",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "run_id",
+    "run_kind",
+    "experiment_id",
+    "status",
+    "definition",
+    "source_control",
+    "environment",
+    "inputs",
+    "units",
+    "failures",
+    "outputs"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "run_manifest.v1"
+    },
+    "run_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "run_kind": {
+      "enum": [
+        "experiment",
+        "analysis"
+      ]
+    },
+    "experiment_id": {
+      "type": "string",
+      "pattern": "^E[0-9]{2}$"
+    },
+    "status": {
+      "enum": [
+        "running",
+        "completed",
+        "failed"
+      ]
+    },
+    "definition": {
+      "type": "object",
+      "required": [
+        "locator",
+        "sha256",
+        "resolved"
+      ]
+    },
+    "source_control": {
+      "type": "object",
+      "required": [
+        "revision",
+        "dirty"
+      ]
+    },
+    "environment": {
+      "type": "object",
+      "required": [
+        "runtime",
+        "placo_revision"
+      ]
+    },
+    "inputs": {
+      "type": "array",
+      "minItems": 1
+    },
+    "units": {
+      "type": "array",
+      "minItems": 1
+    },
+    "failures": {
+      "type": "object",
+      "required": [
+        "total",
+        "required"
+      ]
+    },
+    "outputs": {
+      "type": "object"
+    }
+  }
+}
+

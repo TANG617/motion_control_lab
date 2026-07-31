@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "motion-control-lab/metric_row.v1",
+  "title": "Motion Control Lab tidy metric row",
+  "type": "object",
+  "required": [
+    "source_id",
+    "input_id",
+    "arm_id",
+    "window_id",
+    "metric_id",
+    "metric_version",
+    "value",
+    "unit",
+    "direction",
+    "role",
+    "status",
+    "sample_count",
+    "notes"
+  ],
+  "properties": {
+    "role": {
+      "enum": [
+        "primary",
+        "secondary",
+        "guardrail",
+        "diagnostic"
+      ]
+    },
+    "status": {
+      "enum": [
+        "available",
+        "unavailable_missing_input",
+        "unavailable_incomplete_arm",
+        "unavailable_incomplete_pair",
+        "unavailable_not_applicable",
+        "failed_metric_evaluation"
+      ]
+    }
+  }
+}
+
