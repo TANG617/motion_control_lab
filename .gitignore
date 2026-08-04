@@ -5,8 +5,12 @@
 
 # Local editor and OS files
 .DS_Store
+.cache/
 .idea/
 .vscode/
+
+# Colcon-generated logs
+/log/
 
 # Python tooling caches
 __pycache__/
@@ -19,4 +23,3 @@ __pycache__/
 # Promoted results are added deliberately after review.
 /experiments/*/results/*
 !/experiments/*/results/.gitkeep
-

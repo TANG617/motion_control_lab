@@ -21,6 +21,8 @@ struct RunMetadata
   std::string input_sha256;
   std::string source_revision;
   bool source_dirty = true;
+  std::map<std::string, std::string> dependencies;
+  // Kept for compatibility with existing run_manifest.v1 consumers.
   std::string placo_revision;
   std::string runtime;
 };
@@ -60,4 +62,3 @@ std::string make_run_id(const std::string& definition_sha256);
 std::string json_to_string(const Json::Value& value);
 Json::Value load_json_file(const std::filesystem::path& path);
 }  // namespace motion_control_lab
-

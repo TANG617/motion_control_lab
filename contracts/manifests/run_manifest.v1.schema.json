@@ -60,9 +60,25 @@
     "environment": {
       "type": "object",
       "required": [
-        "runtime",
-        "placo_revision"
-      ]
+        "runtime"
+      ],
+      "properties": {
+        "runtime": {
+          "type": "string",
+          "minLength": 1
+        },
+        "dependencies": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "placo_revision": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
     },
     "inputs": {
       "type": "array",
@@ -84,4 +100,3 @@
     }
   }
 }
-

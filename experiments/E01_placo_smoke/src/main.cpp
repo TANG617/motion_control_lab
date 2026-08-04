@@ -348,6 +348,7 @@ int main(int argc, char** argv)
     metadata.source_dirty = motion_control_lab::e01::build_config::kSourceDirty;
     metadata.placo_revision =
       std::string(motion_control_lab::e01::build_config::kPlacoRevision);
+    metadata.dependencies["placo"] = metadata.placo_revision;
     metadata.runtime = std::string(motion_control_lab::e01::build_config::kRuntime);
 
     artifacts = std::make_unique<RunArtifacts>(options.output_root, std::move(metadata));

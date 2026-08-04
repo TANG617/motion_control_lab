@@ -50,6 +50,9 @@ def main() -> int:
         manifest = validate_manifest(run_root / "manifest.json")
         if manifest["status"] != "completed":
             raise ValueError(f"unexpected run status: {manifest['status']}")
+        dependencies = manifest["environment"].get("dependencies", {})
+        if "placo" not in dependencies:
+            raise ValueError("run manifest does not record the PlaCo dependency")
 
         expected = set(definition["artifact_requirements"])
         missing = [relative for relative in expected if not (run_root / relative).is_file()]

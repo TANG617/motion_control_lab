@@ -170,7 +170,15 @@ void RunArtifacts::write_manifest(const std::string& status,
   manifest["source_control"]["dirty"] = metadata_.source_dirty;
 
   manifest["environment"]["runtime"] = metadata_.runtime;
-  manifest["environment"]["placo_revision"] = metadata_.placo_revision;
+  manifest["environment"]["dependencies"] = Json::Value(Json::objectValue);
+  for (const auto& [name, revision] : metadata_.dependencies)
+  {
+    manifest["environment"]["dependencies"][name] = revision;
+  }
+  if (!metadata_.placo_revision.empty())
+  {
+    manifest["environment"]["placo_revision"] = metadata_.placo_revision;
+  }
 
   Json::Value input(Json::objectValue);
   input["id"] = metadata_.input_id;

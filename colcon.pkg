@@ -1,0 +1,12 @@
+{
+  "name": "motion_control_lab",
+  "type": "cmake",
+  "dependencies": [
+    "motion_control_core",
+    "motion_control_viz"
+  ],
+  "cmake-args": [
+    "-DMCL_BUILD_MCC_PREVIEW=ON",
+    "-DMCL_BUILD_MCC_PLOTS=OFF"
+  ]
+}
