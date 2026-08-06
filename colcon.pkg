@@ -6,7 +6,9 @@
     "motion_control_viz"
   ],
   "cmake-args": [
-    "-DMCL_BUILD_MCC_PREVIEW=ON",
+    "-DMCL_BUILD_SINGLE_ARM_IK=ON",
+    "-DMCL_BUILD_DUAL_ARM_IK=ON",
+    "-DMCL_BUILD_GROUPED_DUAL_ARM_IK=ON",
     "-DMCL_BUILD_MCC_PLOTS=OFF"
   ]
 }

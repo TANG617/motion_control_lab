@@ -13,11 +13,12 @@ namespace motion_control_lab
 {
 
 std::unique_ptr<motion_control::viz::FrameSink> createVisualizationSink(
-  const R1IkOptions & options)
+  const VisualizationSinkOptions & options,
+  const std::string & server_name)
 {
 #if MCL_WITH_FOXGLOVE_SINK
   motion_control::viz::FoxgloveFrameSinkOptions sink_options;
-  sink_options.server_name = "r1_ik_tui_teleop";
+  sink_options.server_name = server_name;
   sink_options.host = options.host;
   sink_options.port = options.port;
   sink_options.mcap_path = options.mcap_path;
@@ -25,6 +26,7 @@ std::unique_ptr<motion_control::viz::FrameSink> createVisualizationSink(
     std::move(sink_options));
 #else
   (void)options;
+  (void)server_name;
   return std::make_unique<motion_control::viz::NullFrameSink>();
 #endif
 }

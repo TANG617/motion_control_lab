@@ -12,14 +12,13 @@ Motion Control Lab 是面向机器人遥操作 whole-body IK 的可复现实验�
 - `E01_placo_smoke` 实验及其合成二连杆 URDF；
 - 对实验定义、run manifest、artifact 哈希和 placo 求解结果的自动检查。
 
-仓库还提供可选的 MCC 交互预览运行时。它拥有 R1/MCC solver session、TUI 输入和
-wall-clock pacing，并把算法快照映射为 `motion_control_viz::VisualizationFrame`。
+仓库还提供可选的 MCC 交互预览运行时。单臂和双臂入口使用 grouped solver 的
+`RedOnly` profile；三层双臂入口使用独立 Red/Yellow/Green worker。它们复用 TUI、Viz 和
+wall-clock pacing；算法快照统一映射为
+`motion_control_viz::VisualizationFrame`。
 该路径用于开发调试，不替代由 canonical timeline 驱动的可复现实验执行器。
-
-Runner 依赖 Lab 自己的 `motion_control_lab::IkSolverBackend`，当前唯一实现仍是 MCC。
-该 R1 范围的中立合同保留了 `backendId`、joint state/reset、目标、解、状态和诊断，供未来
-PlaCo/MCC A/B 共用输入与结果映射。PlaCo adapter、双后端 A/B runner、CLI 选择和
-差异判定目前均为 planned；默认应用没有增加后端选择，也没有改变原有开发流程。
+MCC builder、task 注册、typed handles、request 组装和状态更新直接位于各入口的
+`main.cpp`，便于逐入口阅读和调试；共享层不定义 solver backend。
 
 E01 是基础设施 smoke test，只证明 placo C++ 求解链与证据落盘链能够跑通，不是
 算法性能结论。
@@ -71,20 +70,54 @@ cmake --build /tmp/mcv_build -j8
 cmake --install /tmp/mcv_build
 
 cmake -S . -B build/mcc-preview \
-  -DMCL_BUILD_MCC_PREVIEW=ON \
+  -DMCL_BUILD_SINGLE_ARM_IK=ON \
+  -DMCL_BUILD_DUAL_ARM_IK=ON \
+  -DMCL_BUILD_GROUPED_DUAL_ARM_IK=ON \
   -DCMAKE_PREFIX_PATH="/tmp/mcc_install;/tmp/mcv_install"
 cmake --build build/mcc-preview \
-  --target r1_single_arm_ik_tui_teleop r1_dual_arm_ik_tui_teleop -j8
+  --target mcl_single_arm_ik mcl_dual_arm_ik mcl_grouped_dual_arm_ik -j8
+```
+
+每个入口可以独立配置。只构建单臂入口：
+
+```bash
+cmake -S . -B build/single-arm \
+  -DMCL_BUILD_SINGLE_ARM_IK=ON \
+  -DCMAKE_PREFIX_PATH="/tmp/mcc_install;/tmp/mcv_install"
+cmake --build build/single-arm --target mcl_single_arm_ik -j8
+```
+
+只构建双臂入口：
+
+```bash
+cmake -S . -B build/dual-arm \
+  -DMCL_BUILD_DUAL_ARM_IK=ON \
+  -DCMAKE_PREFIX_PATH="/tmp/mcc_install;/tmp/mcv_install"
+cmake --build build/dual-arm --target mcl_dual_arm_ik -j8
 ```
 
 从交互终端运行：
 
 ```bash
-./build/mcc-preview/r1_single_arm_ik_tui_teleop \
+./build/mcc-preview/mcl_single_arm_ik \
   --urdf /path/to/Psi_R1_rev1.urdf --rate 20
-./build/mcc-preview/r1_dual_arm_ik_tui_teleop \
+./build/mcc-preview/mcl_dual_arm_ik \
   --urdf /path/to/Psi_R1_rev1.urdf --rate 20 --mcap /new/run/path/preview.mcap
+./build/mcc-preview/mcl_grouped_dual_arm_ik \
+  --urdf /path/to/Psi_R1_rev1.urdf \
+  --red-rate 1000 --yellow-rate 100 --green-rate 10 --ui-rate 20
 ```
+
+三层入口固定使用 `RedYellowGreen` profile，要求
+`red-rate > yellow-rate > green-rate > 0`。每组 period 同时是该 worker 的 deadline；任一
+rejected attempt、deadline miss 或 worker exception 都触发 first-writer Fault、停止并 join 三个
+worker、保留最后 accepted Red state、关闭 sink 并返回非零。默认 1 kHz Red 在普通非实时机器上
+可能立即报告能力不足，这是预期信号；功能检查时可先下调三个 rate，同时保持严格顺序。
+
+Green、Yellow、Red 启动前会顺序预热一次；正式 run 中三者完全异步，不等待 source 的下一条
+结果。TUI、Viz 和 MCAP 只在 `ui-rate` 线程运行，不进入 Red solver 路径。
+
+也可以设置 `MOTION_CONTROL_URDF`，省略每次运行的 `--urdf`。
 
 有 Foxglove sink 时连接 `ws://127.0.0.1:8765`。MCAP 路径存在时会拒绝覆盖。
 默认不录制 MCAP，只有显式传入 `--mcap <path>` 才会录制；`--no-mcap` 可用于显式
@@ -99,10 +132,9 @@ matplotlib。
 
 ```text
 adapters/execution/       通用 artifact store、manifest 与 SHA-256
-adapters/interactive/     TUI 输入、交互式 runner 和 Viz sink composition
-adapters/solver/          R1 IK backend-neutral contract；A/B runner planned
-adapters/motion_control_core/ MCC solver session 与 R1 profile
-apps/                     交互预览和可选 planning plot composition roots
+adapters/interactive/     共享 CLI、TUI、wall-clock scheduler 和 Viz helpers
+apps/common/              仅共享无 topology 决策的 IK 工具和 R1 被动配置
+apps/<entry>/             直接拥有 MCC topology、solve/worker loop、main、CMake 和 help test
 contracts/                definition、manifest、metric 合同
 data/raw/                 原始数据占位；不得静默改写
 data/canonical/           规范数据占位

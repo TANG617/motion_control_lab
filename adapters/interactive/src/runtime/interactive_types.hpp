@@ -1,12 +1,78 @@
 #pragma once
 
-#include <motion_control_lab/ik_solver_backend.hpp>
+#include <Eigen/Geometry>
 
+#include <cstddef>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
 namespace motion_control_lab
 {
+
+using Pose = Eigen::Isometry3d;
+using JointNames = std::vector<std::string>;
+
+enum class ArmSide
+{
+  Left,
+  Right,
+};
+
+inline const char * armSideName(ArmSide side)
+{
+  return side == ArmSide::Left ? "left" : "right";
+}
+
+inline ArmSide parseArmSide(const std::string & side)
+{
+  if (side == "left") {
+    return ArmSide::Left;
+  }
+  if (side == "right") {
+    return ArmSide::Right;
+  }
+  throw std::runtime_error("side must be either 'left' or 'right'");
+}
+
+struct ArmTarget
+{
+  ArmSide side{ArmSide::Left};
+  Pose target_pose{Pose::Identity()};
+};
+
+struct ArmTargetError
+{
+  ArmSide side{ArmSide::Left};
+  double position_m{0.0};
+  double orientation_rad{0.0};
+};
+
+struct ArmPresentation
+{
+  ArmSide side{ArmSide::Left};
+  std::string target_channel;
+  std::vector<std::size_t> joint_indices;
+};
+
+struct InteractiveIkPresentation
+{
+  std::string base_frame_id;
+  std::string joint_state_channel;
+  std::vector<ArmPresentation> arms;
+};
+
+inline const ArmPresentation * findArmPresentation(
+  const InteractiveIkPresentation & presentation,
+  ArmSide side)
+{
+  for (const auto & arm : presentation.arms) {
+    if (arm.side == side) {
+      return &arm;
+    }
+  }
+  return nullptr;
+}
 
 struct TargetCommand
 {
@@ -19,7 +85,6 @@ struct TargetCommand
 
 struct IkDebugFrame
 {
-  std::string backend_id{"unknown"};
   std::vector<ArmTarget> targets;
   JointNames joint_names;
   std::vector<double> positions;

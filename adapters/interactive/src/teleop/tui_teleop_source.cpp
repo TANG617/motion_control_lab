@@ -56,9 +56,12 @@ bool hasTarget(const std::vector<ArmTarget> & targets, ArmSide side)
   return findTarget(targets, side) != nullptr;
 }
 
-const char * targetTopicForSide(ArmSide side)
+std::string targetTopicForSide(
+  const InteractiveIkPresentation & presentation,
+  ArmSide side)
 {
-  return side == ArmSide::Left ? kLeftTargetPoseTopic : kRightTargetPoseTopic;
+  const auto * arm = findArmPresentation(presentation, side);
+  return arm == nullptr ? "<unconfigured>" : arm->target_channel;
 }
 
 std::string selectedRotationAxis(std::size_t axis_index)
@@ -69,7 +72,7 @@ std::string selectedRotationAxis(std::size_t axis_index)
 void adjustStep(
   TargetCommand & command,
   double & step_m,
-  const R1IkOptions & options,
+  const TuiTeleopOptions & options,
   double scale)
 {
   const double next_step = std::clamp(
@@ -85,7 +88,7 @@ void adjustStep(
 void setStep(
   TargetCommand & command,
   double & step_m,
-  const R1IkOptions & options,
+  const TuiTeleopOptions & options,
   double next_step_m)
 {
   if (!std::isfinite(next_step_m)) {
@@ -159,7 +162,7 @@ void rotateSelected(
   command.status = status.str();
 }
 
-std::string formatPose(const ArmTarget * target)
+std::string formatPose(const ArmTarget * target, const std::string & base_frame_id)
 {
   if (target == nullptr) {
     return "<none>";
@@ -168,7 +171,7 @@ std::string formatPose(const ArmTarget * target)
   const auto & pose = target->target_pose;
   const Eigen::Quaterniond q(pose.linear());
   std::ostringstream text;
-  text << "frame=" << kBaseFrame
+  text << "frame=" << base_frame_id
        << " pos=(" << std::showpos << std::fixed << std::setprecision(4)
        << pose.translation().x() << ", "
        << pose.translation().y() << ", "
@@ -320,10 +323,16 @@ void TerminalSession::write(const std::string & text) const
 }
 
 TuiTeleopSource::TuiTeleopSource(
-  const R1IkOptions & options,
+  const TuiTeleopOptions & options,
+  double rate_hz,
+  std::string title,
+  InteractiveIkPresentation presentation,
   std::vector<ArmTarget> initial_targets,
   bool allow_side_switching)
 : options_(options),
+  rate_hz_(rate_hz),
+  title_(std::move(title)),
+  presentation_(std::move(presentation)),
   step_m_(options.step_m),
   rotation_step_rad_(options.rotation_step_deg * kPi / 180.0),
   allow_side_switching_(allow_side_switching)
@@ -397,7 +406,7 @@ void TuiTeleopSource::render(
   std::ostringstream screen;
   screen << "\033[H\033[2J";
 
-  addLine(screen, 0, 0, "Motion Control R1 IK TUI", width);
+  addLine(screen, 0, 0, title_, width);
   addLine(
     screen,
     1,
@@ -405,20 +414,24 @@ void TuiTeleopSource::render(
     "side=" + std::string{armSideName(command_.selected_side)} +
       "  " + sink_status +
       "  mode=" + (command_.paused ? "PAUSED" : "PUBLISHING") +
-      "  rate=" + std::to_string(static_cast<int>(options_.rate_hz)) + " Hz" +
+      "  rate=" + std::to_string(static_cast<int>(rate_hz_)) + " Hz" +
       "  publish_ticks=" + std::to_string(publish_count),
     width);
 
   if (allow_side_switching_) {
-    addLine(screen, 3, 0, std::string{"IK target left : "} + kLeftTargetPoseTopic, width);
-    addLine(screen, 4, 0, std::string{"IK target right: "} + kRightTargetPoseTopic, width);
+    addLine(
+      screen, 3, 0,
+      "IK target left : " + targetTopicForSide(presentation_, ArmSide::Left), width);
+    addLine(
+      screen, 4, 0,
+      "IK target right: " + targetTopicForSide(presentation_, ArmSide::Right), width);
   } else {
     addLine(
       screen,
       3,
       0,
       std::string{"IK target "} + armSideName(command_.selected_side) + ": " +
-        targetTopicForSide(command_.selected_side),
+        targetTopicForSide(presentation_, command_.selected_side),
       width);
   }
 
@@ -436,13 +449,15 @@ void TuiTeleopSource::render(
       screen,
       8,
       0,
-      "target left : " + formatPose(findTarget(command_.targets, ArmSide::Left)),
+      "target left : " + formatPose(
+        findTarget(command_.targets, ArmSide::Left), presentation_.base_frame_id),
       width);
     addLine(
       screen,
       9,
       0,
-      "target right: " + formatPose(findTarget(command_.targets, ArmSide::Right)),
+      "target right: " + formatPose(
+        findTarget(command_.targets, ArmSide::Right), presentation_.base_frame_id),
       width);
   } else {
     addLine(
@@ -450,13 +465,15 @@ void TuiTeleopSource::render(
       8,
       0,
       std::string{"target "} + armSideName(command_.selected_side) + ": " +
-        formatPose(findTarget(command_.targets, command_.selected_side)),
+        formatPose(
+          findTarget(command_.targets, command_.selected_side),
+          presentation_.base_frame_id),
       width);
   }
 
   {
     std::ostringstream line;
-    line << "IK[" << frame.backend_id << "]: " << frame.ik_status
+    line << "IK: " << frame.ik_status
          << "  iterations=" << frame.iterations
          << "  converged=" << std::boolalpha << frame.converged
          << "  solve_ms=" << std::fixed << std::setprecision(3) << frame.solve_time_ms;
@@ -478,15 +495,19 @@ void TuiTeleopSource::render(
 
   if (!frame.positions.empty()) {
     std::ostringstream line;
-    const std::size_t start_index = command_.selected_side == ArmSide::Left ? 6 : 13;
-    const std::size_t end_index = start_index + 6;
     line << armSideName(command_.selected_side) << " arm q: ";
-    for (std::size_t index = start_index; index <= end_index && index < frame.positions.size(); ++index) {
-      const std::string joint_name = index < frame.joint_names.size()
-        ? frame.joint_names[index]
-        : ("joint_" + std::to_string(index));
-      line << joint_name << "="
-           << std::fixed << std::setprecision(3) << frame.positions[index] << " ";
+    const auto * arm = findArmPresentation(presentation_, command_.selected_side);
+    if (arm != nullptr) {
+      for (const auto index : arm->joint_indices) {
+        if (index >= frame.positions.size()) {
+          continue;
+        }
+        const std::string joint_name = index < frame.joint_names.size()
+          ? frame.joint_names[index]
+          : ("joint_" + std::to_string(index));
+        line << joint_name << "="
+             << std::fixed << std::setprecision(3) << frame.positions[index] << " ";
+      }
     }
     addLine(screen, 15, 0, line.str(), width);
   }

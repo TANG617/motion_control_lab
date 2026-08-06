@@ -1,7 +1,7 @@
 #pragma once
 
-#include "config/r1_ik_options.hpp"
-#include "teleop/teleop_source.hpp"
+#include "config/interactive_ik_options.hpp"
+#include "runtime/interactive_types.hpp"
 
 #include <optional>
 #include <string>
@@ -53,37 +53,43 @@ private:
   bool raw_enabled_{false};
 };
 
-class TuiTeleopSource final : public TeleopSource
+class TuiTeleopSource
 {
 public:
   TuiTeleopSource(
-    const R1IkOptions & options,
+    const TuiTeleopOptions & options,
+    double rate_hz,
+    std::string title,
+    InteractiveIkPresentation presentation,
     std::vector<ArmTarget> initial_targets,
     bool allow_side_switching);
-  ~TuiTeleopSource() override;
+  ~TuiTeleopSource();
 
-  void poll() override;
+  void poll();
 
-  const TargetCommand & command() const override;
+  const TargetCommand & command() const;
 
-  std::optional<ArmSide> consumeResetRequest() override;
+  std::optional<ArmSide> consumeResetRequest();
 
   void setTargetPose(
     ArmSide side,
     const Pose & target_pose,
-    const std::string & status) override;
+    const std::string & status);
 
-  void setStatus(const std::string & status) override;
+  void setStatus(const std::string & status);
 
   void render(
     const IkDebugFrame & frame,
     std::size_t publish_count,
-    const std::string & sink_status) override;
+    const std::string & sink_status);
 
 private:
   void handleKey(const KeyInput & input);
 
-  R1IkOptions options_;
+  TuiTeleopOptions options_;
+  double rate_hz_{20.0};
+  std::string title_;
+  InteractiveIkPresentation presentation_;
   TerminalSession terminal_;
   TargetCommand command_;
   double step_m_{0.01};

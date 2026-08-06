@@ -15,15 +15,30 @@ include(CTest)
 include(GNUInstallDirs)
 
 option(
-  MCL_BUILD_MCC_PREVIEW
-  "Build interactive R1 preview applications backed by motion_control_core and motion_control_viz"
+  MCL_BUILD_SINGLE_ARM_IK
+  "Build the single-arm interactive IK application"
+  ON
+)
+option(
+  MCL_BUILD_DUAL_ARM_IK
+  "Build the dual-arm interactive IK application"
+  ON
+)
+option(
+  MCL_BUILD_GROUPED_DUAL_ARM_IK
+  "Build the Red/Yellow/Green dual-arm IK application"
   ON
 )
 option(
   MCL_BUILD_MCC_PLOTS
   "Build the optional motion_control_core matplotlib renderer"
-  ON
+  OFF
 )
+
+set(MCL_BUILD_ANY_INTERACTIVE_IK OFF)
+if(MCL_BUILD_SINGLE_ARM_IK OR MCL_BUILD_DUAL_ARM_IK OR MCL_BUILD_GROUPED_DUAL_ARM_IK)
+  set(MCL_BUILD_ANY_INTERACTIVE_IK ON)
+endif()
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -34,78 +49,62 @@ list(PREPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
 include(cmake/Dependencies.cmake)
 
-add_library(mcl_solver_contract INTERFACE)
-add_library(motion_control_lab::solver_contract ALIAS mcl_solver_contract)
-target_include_directories(
-  mcl_solver_contract
-  INTERFACE
-    "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/adapters/solver/include>"
-)
-target_link_libraries(mcl_solver_contract INTERFACE Eigen3::Eigen)
-
-if(MCL_BUILD_MCC_PREVIEW OR MCL_BUILD_MCC_PLOTS)
+if(MCL_BUILD_ANY_INTERACTIVE_IK OR MCL_BUILD_MCC_PLOTS)
   find_package(motion_control_core CONFIG REQUIRED)
 endif()
 
-if(MCL_BUILD_MCC_PREVIEW)
+if(MCL_BUILD_ANY_INTERACTIVE_IK)
   find_package(motion_control_viz 0.2 CONFIG REQUIRED)
 
   add_library(
-    mcl_mcc_interactive_runtime
-    adapters/motion_control_core/src/runtime/r1_ik_solver_session.cpp
-    adapters/motion_control_core/src/runtime/r1_robot_setup.cpp
-    adapters/interactive/src/config/r1_ik_options.cpp
-    adapters/interactive/src/runtime/interactive_runner.cpp
+    mcl_interactive_support
+    adapters/interactive/src/config/interactive_ik_options.cpp
+    adapters/interactive/src/runtime/grouped_worker.cpp
+    adapters/interactive/src/runtime/interactive_scheduler.cpp
+    adapters/interactive/src/sinks/ik_visualization.cpp
     adapters/interactive/src/sinks/visualization_sink_factory.cpp
     adapters/interactive/src/teleop/tui_teleop_source.cpp
   )
+  add_library(motion_control_lab::interactive_support ALIAS mcl_interactive_support)
   target_include_directories(
-    mcl_mcc_interactive_runtime
+    mcl_interactive_support
     PUBLIC
-      "${CMAKE_CURRENT_SOURCE_DIR}/adapters/motion_control_core/src"
       "${CMAKE_CURRENT_SOURCE_DIR}/adapters/interactive/src"
   )
   target_link_libraries(
-    mcl_mcc_interactive_runtime
+    mcl_interactive_support
     PUBLIC
-      motion_control_lab::solver_contract
-      motion_control_core::motion_control_core
+      Eigen3::Eigen
       motion_control_viz::motion_control_viz
   )
 
   if(TARGET motion_control_viz::foxglove_sink)
     target_link_libraries(
-      mcl_mcc_interactive_runtime
+      mcl_interactive_support
       PUBLIC motion_control_viz::foxglove_sink
     )
     target_compile_definitions(
-      mcl_mcc_interactive_runtime
+      mcl_interactive_support
       PRIVATE MCL_WITH_FOXGLOVE_SINK=1
     )
   else()
     target_compile_definitions(
-      mcl_mcc_interactive_runtime
+      mcl_interactive_support
       PRIVATE MCL_WITH_FOXGLOVE_SINK=0
     )
   endif()
 
-  add_executable(
-    r1_single_arm_ik_tui_teleop
-    apps/r1_single_arm_ik_tui_teleop.cpp
-  )
-  target_link_libraries(
-    r1_single_arm_ik_tui_teleop
-    PRIVATE mcl_mcc_interactive_runtime
-  )
+  add_subdirectory(apps/common)
 
-  add_executable(
-    r1_dual_arm_ik_tui_teleop
-    apps/r1_dual_arm_ik_tui_teleop.cpp
-  )
-  target_link_libraries(
-    r1_dual_arm_ik_tui_teleop
-    PRIVATE mcl_mcc_interactive_runtime
-  )
+  if(MCL_BUILD_SINGLE_ARM_IK)
+    add_subdirectory(apps/single_arm_ik)
+  endif()
+  if(MCL_BUILD_DUAL_ARM_IK)
+    add_subdirectory(apps/dual_arm_ik)
+  endif()
+  if(MCL_BUILD_GROUPED_DUAL_ARM_IK)
+    add_subdirectory(apps/grouped_dual_arm_ik)
+  endif()
 endif()
 
 if(MCL_BUILD_MCC_PLOTS)
@@ -248,13 +247,6 @@ target_link_libraries(
 )
 
 set(MCL_INSTALL_RUNTIME_TARGETS e01_placo_smoke)
-if(MCL_BUILD_MCC_PREVIEW)
-  list(
-    APPEND MCL_INSTALL_RUNTIME_TARGETS
-    r1_single_arm_ik_tui_teleop
-    r1_dual_arm_ik_tui_teleop
-  )
-endif()
 if(MCL_BUILD_MCC_PLOTS)
   list(APPEND MCL_INSTALL_RUNTIME_TARGETS motion_control_lab_plot_core_planning)
 endif()
@@ -266,18 +258,37 @@ install(
 if(BUILD_TESTING)
   find_package(Python3 REQUIRED COMPONENTS Interpreter)
 
-  add_executable(
-    test_ik_solver_backend_contract
-    tests/ik_solver_backend_contract.cpp
-  )
-  target_link_libraries(
-    test_ik_solver_backend_contract
-    PRIVATE motion_control_lab::solver_contract
-  )
-  add_test(
-    NAME contracts.ik_solver_backend
-    COMMAND test_ik_solver_backend_contract
-  )
+  if(MCL_BUILD_ANY_INTERACTIVE_IK)
+    add_executable(
+      test_interactive_ik_configuration
+      tests/interactive_ik_configuration.cpp
+    )
+    target_link_libraries(
+      test_interactive_ik_configuration
+      PRIVATE
+        motion_control_lab::app_common
+        motion_control_lab::interactive_support
+    )
+    add_test(
+      NAME interactive.ik_configuration
+      COMMAND test_interactive_ik_configuration
+    )
+
+    add_executable(
+      test_grouped_runtime
+      tests/grouped_runtime.cpp
+    )
+    target_link_libraries(
+      test_grouped_runtime
+      PRIVATE
+        motion_control_lab::interactive_support
+        Threads::Threads
+    )
+    add_test(
+      NAME interactive.grouped_runtime
+      COMMAND test_grouped_runtime
+    )
+  endif()
 
   add_test(
     NAME contracts.e01_definition
@@ -301,15 +312,4 @@ if(BUILD_TESTING)
     experiments.e01_placo_smoke
     PROPERTIES DEPENDS contracts.e01_definition
   )
-
-  if(MCL_BUILD_MCC_PREVIEW)
-    add_test(
-      NAME apps.r1_single_arm_ik_tui_teleop_help
-      COMMAND r1_single_arm_ik_tui_teleop --help
-    )
-    add_test(
-      NAME apps.r1_dual_arm_ik_tui_teleop_help
-      COMMAND r1_dual_arm_ik_tui_teleop --help
-    )
-  endif()
 endif()
