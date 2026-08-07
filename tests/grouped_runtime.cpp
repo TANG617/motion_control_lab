@@ -6,6 +6,8 @@
 #include <chrono>
 #include <cstdint>
 #include <cstdlib>
+#include <iostream>
+#include <stdexcept>
 #include <thread>
 #include <vector>
 
@@ -90,29 +92,53 @@ bool testFirstWriterFault()
 
 bool testRejectedAttemptFault()
 {
-  std::atomic_bool stop{false};
+  mcl::WorkerStopController stop;
   mcl::GroupedFaultState fault;
+  mcl::PeriodicWorkerDiagnostics diagnostics;
   mcl::runPeriodicWorker(
-    {mcl::WorkerGroup::Green, 1000.0},
+    {mcl::WorkerGroup::Green, 1000.0, mcl::DeadlinePolicy::Monitor},
     stop,
     fault,
+    diagnostics,
     [](double, std::int64_t) {
       return mcl::WorkerIterationResult{false, 7, 0.1, "rejected"};
     });
   const auto snapshot = fault.snapshot();
-  return stop.load() && snapshot.has_value() &&
+  const auto statistics = diagnostics.snapshot();
+  return stop.stopRequested() && snapshot.has_value() &&
          snapshot->failure == mcl::WorkerFailureKind::RejectedAttempt &&
-         snapshot->revision == 7;
+         snapshot->revision == 7 && statistics.iteration_count == 1;
+}
+
+bool testMonitorPolicyDoesNotSuppressExceptions()
+{
+  mcl::WorkerStopController stop;
+  mcl::GroupedFaultState fault;
+  mcl::PeriodicWorkerDiagnostics diagnostics;
+  mcl::runPeriodicWorker(
+    {mcl::WorkerGroup::Yellow, 100.0, mcl::DeadlinePolicy::Monitor},
+    stop,
+    fault,
+    diagnostics,
+    [](double, std::int64_t) -> mcl::WorkerIterationResult {
+      throw std::runtime_error("worker failed");
+    });
+  const auto snapshot = fault.snapshot();
+  return stop.stopRequested() && snapshot.has_value() &&
+         snapshot->failure == mcl::WorkerFailureKind::Exception &&
+         snapshot->detail == "worker failed";
 }
 
 bool testDeadlineAndCooperativeStop()
 {
-  std::atomic_bool deadline_stop{false};
+  mcl::WorkerStopController deadline_stop;
   mcl::GroupedFaultState deadline_fault;
+  mcl::PeriodicWorkerDiagnostics deadline_diagnostics;
   mcl::runPeriodicWorker(
     {mcl::WorkerGroup::Red, 100.0},
     deadline_stop,
     deadline_fault,
+    deadline_diagnostics,
     [](double, std::int64_t) {
       std::this_thread::sleep_for(std::chrono::milliseconds(20));
       return mcl::WorkerIterationResult{true, 1, 20.0, {}};
@@ -127,17 +153,19 @@ bool testDeadlineAndCooperativeStop()
     return false;
   }
 
-  std::atomic_bool stop{false};
+  mcl::WorkerStopController stop;
   std::atomic_int iterations{0};
   mcl::GroupedFaultState no_fault;
+  mcl::PeriodicWorkerDiagnostics diagnostics;
   std::thread worker([&]() {
     mcl::runPeriodicWorker(
       {mcl::WorkerGroup::Yellow, 100.0},
       stop,
       no_fault,
+      diagnostics,
       [&](double, std::int64_t) {
         if (iterations.fetch_add(1) >= 4) {
-          stop.store(true, std::memory_order_release);
+          stop.requestStop();
         }
         return mcl::WorkerIterationResult{true, 1, 0.0, {}};
       });
@@ -146,10 +174,77 @@ bool testDeadlineAndCooperativeStop()
   return iterations.load() >= 5 && !no_fault.triggered();
 }
 
+bool testMonitorPolicyContinuesAndSkipsExpiredReleases()
+{
+  mcl::WorkerStopController stop;
+  mcl::GroupedFaultState fault;
+  mcl::PeriodicWorkerDiagnostics diagnostics;
+  std::atomic_int iterations{0};
+  mcl::runPeriodicWorker(
+    {mcl::WorkerGroup::Red, 100.0, mcl::DeadlinePolicy::Monitor},
+    stop,
+    fault,
+    diagnostics,
+    [&](double, std::int64_t) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(20));
+      if (iterations.fetch_add(1, std::memory_order_relaxed) >= 2) {
+        stop.requestStop();
+      }
+      return mcl::WorkerIterationResult{true, 1, 20.0, {}};
+    });
+
+  const auto statistics = diagnostics.snapshot();
+  return iterations.load(std::memory_order_relaxed) == 3 && !fault.triggered() &&
+         statistics.iteration_count == 3 && statistics.deadline_miss_count == 3 &&
+         statistics.consecutive_deadline_misses == 3 &&
+         statistics.skipped_release_count >= 3 &&
+         statistics.maximum_overrun_ms > 0.0 && statistics.maximum_solver_ms == 20.0;
+}
+
+bool testPeriodicWaitIsInterruptible()
+{
+  mcl::WorkerStopController stop;
+  mcl::GroupedFaultState fault;
+  mcl::PeriodicWorkerDiagnostics diagnostics;
+  std::atomic_bool iteration_finished{false};
+  std::thread worker([&]() {
+    mcl::runPeriodicWorker(
+      {mcl::WorkerGroup::Green, 0.5},
+      stop,
+      fault,
+      diagnostics,
+      [&](double, std::int64_t) {
+        iteration_finished.store(true, std::memory_order_release);
+        return mcl::WorkerIterationResult{true, 1, 0.0, {}};
+      });
+  });
+  while (!iteration_finished.load(std::memory_order_acquire)) {
+    std::this_thread::yield();
+  }
+  const auto stop_started = std::chrono::steady_clock::now();
+  stop.requestStop();
+  worker.join();
+  const auto stop_elapsed = std::chrono::steady_clock::now() - stop_started;
+  return stop_elapsed < std::chrono::milliseconds(200) && !fault.triggered();
+}
+
 }  // namespace
 
 int main()
 {
-  return testMailbox() && testFirstWriterFault() && testRejectedAttemptFault() &&
-         testDeadlineAndCooperativeStop() ? EXIT_SUCCESS : EXIT_FAILURE;
+  bool passed = true;
+  auto check = [&](const char * name, bool result) {
+      if (!result) {
+        std::cerr << "failed: " << name << '\n';
+        passed = false;
+      }
+    };
+  check("mailbox", testMailbox());
+  check("first writer fault", testFirstWriterFault());
+  check("rejected attempt", testRejectedAttemptFault());
+  check("monitor exception", testMonitorPolicyDoesNotSuppressExceptions());
+  check("deadline and cooperative stop", testDeadlineAndCooperativeStop());
+  check("monitor policy", testMonitorPolicyContinuesAndSkipsExpiredReleases());
+  check("interruptible wait", testPeriodicWaitIsInterruptible());
+  return passed ? EXIT_SUCCESS : EXIT_FAILURE;
 }

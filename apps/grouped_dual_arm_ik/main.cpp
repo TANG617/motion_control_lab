@@ -14,13 +14,16 @@
 
 #include <Eigen/Core>
 
-#include <atomic>
+#include <cmath>
 #include <chrono>
 #include <cstdint>
 #include <cstdlib>
 #include <filesystem>
+#include <iomanip>
 #include <iostream>
+#include <limits>
 #include <memory>
+#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <thread>
@@ -44,11 +47,15 @@ constexpr const char * kTitle = "Motion Control Grouped Dual-arm IK";
 constexpr const char *kJointStateChannel = "/mc/ik/joint_states";
 constexpr const char *kLeftTargetChannel = "/mc/ik/target/left_pose";
 constexpr const char *kRightTargetChannel = "/mc/ik/target/right_pose";
+constexpr const char * kLeftElbowFrame = "left_arm_link4";
+constexpr const char * kRightElbowFrame = "right_arm_link4";
+constexpr double kYellowCartesianWeight = 10.0;
+constexpr double kYellowElbowWeight = 3.0;
+constexpr double kYellowElbowOutwardOffsetM = 2.5;
 
-bool acceptedStatus(const mcc::Status & status)
+bool operationSucceeded(const mcc::Status & status)
 {
-  return status.ok() || status.code == mcc::StatusCode::BestEffort ||
-         status.code == mcc::StatusCode::Saturated;
+  return status.ok();
 }
 
 struct TargetSnapshot
@@ -93,6 +100,8 @@ struct GroupedHandles
 {
   CartesianHandles red;
   CartesianHandles yellow;
+  mcc::GroupedPositionTaskHandle yellow_left_elbow;
+  mcc::GroupedPositionTaskHandle yellow_right_elbow;
   mcc::GroupedPostureTaskHandle green_posture;
 };
 
@@ -127,8 +136,10 @@ void addCartesianTargets(
 
 void initializeCartesianRequest(
   const CartesianHandles & handles,
+  const mcc::FrameName & reference_frame_name,
   mcc::GroupedInverseKinematicsRequest & request)
 {
+  request.reference_frame_name = reference_frame_name;
   request.position_targets.resize(2);
   request.orientation_targets.resize(2);
   request.position_targets[0].handle = handles.left_position;
@@ -137,15 +148,40 @@ void initializeCartesianRequest(
   request.orientation_targets[1].handle = handles.right_orientation;
 }
 
+void initializeYellowRequest(
+  const GroupedHandles & handles,
+  const mcc::FrameName & reference_frame_name,
+  mcc::GroupedInverseKinematicsRequest & request)
+{
+  initializeCartesianRequest(handles.yellow, reference_frame_name, request);
+  request.position_targets.resize(4);
+  request.position_targets[2].handle = handles.yellow_left_elbow;
+  request.position_targets[3].handle = handles.yellow_right_elbow;
+}
+
+void addYellowTargets(
+  const GroupedHandles & handles,
+  const TargetSnapshot & target,
+  const Eigen::Vector3d & left_elbow_target,
+  const Eigen::Vector3d & right_elbow_target,
+  mcc::GroupedInverseKinematicsRequest & request)
+{
+  addCartesianTargets(handles.yellow, target, request);
+  request.position_targets[2].position = left_elbow_target;
+  request.position_targets[3].position = right_elbow_target;
+}
+
 CartesianHandles addCartesianTasks(
   mcc::GroupedKinematicsSolverBuilder & builder,
   mcc::SolverGroup group,
   const std::string & prefix,
-  const mcl::R1RobotConfig & robot)
+  const mcl::R1RobotConfig & robot,
+  const mcc::RequirementEnforcement & position_enforcement,
+  const mcc::RequirementEnforcement & orientation_enforcement)
 {
   CartesianHandles handles;
   mcc::PositionTaskConfig position;
-  position.enforcement = mcc::HardEnforcement{};
+  position.enforcement = position_enforcement;
   position.name = prefix + "-left-position";
   requireOk(
     builder.addPositionTask(
@@ -158,7 +194,7 @@ CartesianHandles addCartesianTasks(
     "Failed to register " + position.name);
 
   mcc::OrientationTaskConfig orientation;
-  orientation.enforcement = mcc::HardEnforcement{};
+  orientation.enforcement = orientation_enforcement;
   orientation.name = prefix + "-left-orientation";
   requireOk(
     builder.addOrientationTask(
@@ -197,6 +233,80 @@ std::string statusDetail(const mcc::Status & status)
   return status.message.empty() ? "solver returned a rejected result" : status.message;
 }
 
+const mcc::RequirementDiagnostic * maximumViolatedHardRequirement(
+  const mcc::OptimizationDiagnostics & diagnostics)
+{
+  if (diagnostics.maximum_hard_violation <= 0.0) {
+    return nullptr;
+  }
+  const mcc::RequirementDiagnostic * result = nullptr;
+  double smallest_distance = std::numeric_limits<double>::infinity();
+  for (const auto & requirement : diagnostics.requirements) {
+    // Hard requirements do not accumulate a soft cost. Matching against the
+    // independently computed maximum avoids selecting the soft coupling slot.
+    if (!requirement.enabled || requirement.cost != 0.0) {
+      continue;
+    }
+    const double distance = std::abs(
+      requirement.maximum_violation - diagnostics.maximum_hard_violation);
+    if (distance < smallest_distance) {
+      smallest_distance = distance;
+      result = &requirement;
+    }
+  }
+  return result;
+}
+
+std::string rejectedAttemptDetail(
+  const mcc::Status & status,
+  const mcc::GroupedInverseKinematicsDiagnostics & diagnostics)
+{
+  const auto & kinematics = diagnostics.kinematics;
+  const auto & optimization = kinematics.optimization;
+  const auto * requirement = maximumViolatedHardRequirement(optimization);
+
+  std::ostringstream output;
+  output << statusDetail(status) << std::scientific << std::setprecision(9)
+         << " maximum_hard_violation=" << optimization.maximum_hard_violation;
+  if (requirement == nullptr) {
+    output << " max_violated_requirement=<unavailable>"
+           << " maximum_violation=<unavailable>"
+           << " requirement_unit=<unavailable>"
+           << " requirement_source=<unavailable>";
+  } else {
+    output << " max_violated_requirement=\"" << requirement->name << '"'
+           << " maximum_violation=" << requirement->maximum_violation
+           << " requirement_unit=\"" << requirement->unit << '"'
+           << " requirement_source=\"" << requirement->source << '"';
+  }
+
+  output << " position_errors=[";
+  for (std::size_t index = 0; index < kinematics.position_errors.size(); ++index) {
+    if (index != 0) {
+      output << ',';
+    }
+    const auto & error = kinematics.position_errors[index];
+    output << "{frame=\"" << error.frame_name << "\",norm_m=" << error.norm_m << '}';
+  }
+  output << "] orientation_errors=[";
+  for (std::size_t index = 0; index < kinematics.orientation_errors.size(); ++index) {
+    if (index != 0) {
+      output << ',';
+    }
+    const auto & error = kinematics.orientation_errors[index];
+    output << "{frame=\"" << error.frame_name << "\",norm_rad=" << error.norm_rad << '}';
+  }
+  output << "] saturated_joints=[";
+  for (std::size_t index = 0; index < kinematics.saturated_joints.size(); ++index) {
+    if (index != 0) {
+      output << ',';
+    }
+    output << '"' << kinematics.saturated_joints[index] << '"';
+  }
+  output << ']';
+  return output.str();
+}
+
 void fillRedErrors(
   const CartesianHandles & handles,
   const mcc::GroupedInverseKinematicsDiagnostics & diagnostics,
@@ -229,31 +339,31 @@ int run(int argc, char ** argv)
   const auto & joint_names = robot.joint_names;
   const Eigen::VectorXd initial_positions = toEigen(robot.default_positions);
   StateSnapshot initial_state;
+  initial_state.sequence = 1;
+  initial_state.monotonic_time_nanoseconds = 1;
   initial_state.positions = initial_positions;
   initial_state.velocities.setZero(initial_positions.size());
 
   mcc::RobotModelDescription model_description;
   model_description.urdf_path = options.urdf_path;
-  model_description.base_frame = robot.base_frame;
+  model_description.kinematics_reference_frame = robot.base_frame;
   model_description.joint_names = joint_names;
-  model_description.end_effector_names = {
-    robot.left_end_effector_frame,
-    robot.right_end_effector_frame};
   std::shared_ptr<const mcc::RobotModel> model;
   requireOk(mcc::RobotModel::load(model_description, model), "Failed to load robot model");
 
   mcc::GroupedKinematicsSolverConfig solver_config;
-  solver_config.profile = mcc::SolverProfile::RedYellowGreen;
+  solver_config.profile = mcc::GroupedSolverProfile::RedYellowGreen;
   solver_config.red.mode = mcc::IkSolveMode::ServoStep;
   solver_config.red.maximum_iterations = 1;
-  solver_config.red.maximum_solve_time_ms = 1000.0 / options.red_rate_hz;
+  solver_config.red.soft_solve_time_budget_ms = 1000.0 / options.red_rate_hz;
   solver_config.yellow.mode = mcc::IkSolveMode::TargetSolve;
   solver_config.yellow.maximum_iterations = 80;
-  solver_config.yellow.maximum_solve_time_ms = 1000.0 / options.yellow_rate_hz;
+  solver_config.yellow.soft_solve_time_budget_ms = 1000.0 / options.yellow_rate_hz;
   solver_config.green.mode = mcc::IkSolveMode::TargetSolve;
   solver_config.green.maximum_iterations = 80;
-  solver_config.green.maximum_solve_time_ms = 1000.0 / options.green_rate_hz;
+  solver_config.green.soft_solve_time_budget_ms = 1000.0 / options.green_rate_hz;
   for (auto * config : {&solver_config.red, &solver_config.yellow, &solver_config.green}) {
+    config->joint_limit_policy = mcc::KinematicsJointLimitPolicy::ExplicitRequirements;
     config->qp.backend = mcc::QpBackend::ProxQp;
     config->qp.regularization = 1.0e-8;
     config->position_tolerance_m = 1.0e-4;
@@ -267,8 +377,40 @@ int run(int argc, char ** argv)
     builder.configure(model, joint_names, solver_config, initial_positions),
     "Failed to configure grouped IK builder");
   GroupedHandles handles;
-  handles.red = addCartesianTasks(builder, mcc::SolverGroup::Red, "red", robot);
-  handles.yellow = addCartesianTasks(builder, mcc::SolverGroup::Yellow, "yellow", robot);
+  handles.red = addCartesianTasks(
+    builder,
+    mcc::SolverGroup::Red,
+    "red",
+    robot,
+    mcc::HardEnforcement{},
+    mcc::HardEnforcement{});
+  handles.yellow = addCartesianTasks(
+    builder,
+    mcc::SolverGroup::Yellow,
+    "yellow",
+    robot,
+    mcc::squaredL2Penalty(kYellowCartesianWeight, 3),
+    mcc::squaredL2Penalty(kYellowCartesianWeight, 3));
+  mcc::PositionTaskConfig yellow_left_elbow;
+  yellow_left_elbow.name = "yellow-left-elbow-outward";
+  yellow_left_elbow.enforcement = mcc::squaredL2Penalty(kYellowElbowWeight, 3);
+  requireOk(
+    builder.addPositionTask(
+      mcc::SolverGroup::Yellow,
+      kLeftElbowFrame,
+      yellow_left_elbow,
+      handles.yellow_left_elbow),
+    "Failed to register Yellow left-elbow task");
+  mcc::PositionTaskConfig yellow_right_elbow;
+  yellow_right_elbow.name = "yellow-right-elbow-outward";
+  yellow_right_elbow.enforcement = mcc::squaredL2Penalty(kYellowElbowWeight, 3);
+  requireOk(
+    builder.addPositionTask(
+      mcc::SolverGroup::Yellow,
+      kRightElbowFrame,
+      yellow_right_elbow,
+      handles.yellow_right_elbow),
+    "Failed to register Yellow right-elbow task");
   mcc::PostureTaskConfig green_posture;
   green_posture.name = "green-initial-posture";
   green_posture.enforcement = mcc::squaredL2Penalty(1.0, 1);
@@ -284,21 +426,34 @@ int run(int argc, char ** argv)
   mcc::GroupedKinematicsSolver solver;
   requireOk(builder.finalize(solver), "Failed to finalize grouped IK solver");
 
+  mcc::ForwardKinematicsRequest initial_fk_request;
+  initial_fk_request.state = robotState(initial_state);
+  initial_fk_request.frame_names = {
+    robot.left_end_effector_frame,
+    robot.right_end_effector_frame,
+    kLeftElbowFrame,
+    kRightElbowFrame};
+  initial_fk_request.reference_frame_name = robot.base_frame;
   mcc::ForwardKinematicsSolution initial_fk;
   mcc::ForwardKinematicsDiagnostics initial_fk_diagnostics;
   requireOk(
-    solver.solveForwardKinematics(
+    solver.computeForwardKinematics(
       mcc::SolverGroup::Red,
-      robotState(initial_state),
+      initial_fk_request,
       initial_fk,
-      initial_fk_diagnostics,
-      mcc::JointPositionValidation::LimitChecked),
+      initial_fk_diagnostics),
     "Initial FK failed");
 
   TargetSnapshot initial_target;
   initial_target.revision = 1;
   initial_target.left = requirePose(initial_fk.poses, robot.left_end_effector_frame).pose;
   initial_target.right = requirePose(initial_fk.poses, robot.right_end_effector_frame).pose;
+  Eigen::Vector3d left_elbow_target =
+    requirePose(initial_fk.poses, kLeftElbowFrame).pose.translation();
+  Eigen::Vector3d right_elbow_target =
+    requirePose(initial_fk.poses, kRightElbowFrame).pose.translation();
+  left_elbow_target.y() += kYellowElbowOutwardOffsetM;
+  right_elbow_target.y() -= kYellowElbowOutwardOffsetM;
 
   // Warm all numerical workspaces and the coupling path before deadlines apply.
   requireOk(solver.beginRun(1), "Failed to begin warm-up run");
@@ -306,36 +461,41 @@ int run(int argc, char ** argv)
     mcc::GroupedInverseKinematicsSolution solution;
     mcc::GroupedInverseKinematicsDiagnostics diagnostics;
     mcc::GroupedInverseKinematicsRequest green;
-    green.current_state = capturedState(initial_state);
+    green.reference_frame_name = robot.base_frame;
+    green.captured_state = capturedState(initial_state);
     green.dt = 1.0 / options.green_rate_hz;
     green.posture_targets.push_back(
       {handles.green_posture, initial_positions, true});
     auto status = solver.solveInverseKinematics(
       mcc::SolverGroup::Green, green, solution, diagnostics);
-    if (!acceptedStatus(status) || !diagnostics.attempt_accepted) {
-      throw std::runtime_error("Green warm-up failed: " + statusDetail(status));
+    if (!operationSucceeded(status) || !diagnostics.attempt_accepted) {
+      throw std::runtime_error(
+              "Green warm-up failed: " + rejectedAttemptDetail(status, diagnostics));
     }
 
     mcc::GroupedInverseKinematicsRequest yellow;
-    initializeCartesianRequest(handles.yellow, yellow);
-    yellow.current_state = capturedState(initial_state);
+    initializeYellowRequest(handles, robot.base_frame, yellow);
+    yellow.captured_state = capturedState(initial_state);
     yellow.dt = 1.0 / options.yellow_rate_hz;
-    addCartesianTargets(handles.yellow, initial_target, yellow);
+    addYellowTargets(
+      handles, initial_target, left_elbow_target, right_elbow_target, yellow);
     status = solver.solveInverseKinematics(
       mcc::SolverGroup::Yellow, yellow, solution, diagnostics);
-    if (!acceptedStatus(status) || !diagnostics.attempt_accepted) {
-      throw std::runtime_error("Yellow warm-up failed: " + statusDetail(status));
+    if (!operationSucceeded(status) || !diagnostics.attempt_accepted) {
+      throw std::runtime_error(
+              "Yellow warm-up failed: " + rejectedAttemptDetail(status, diagnostics));
     }
 
     mcc::GroupedInverseKinematicsRequest red;
-    initializeCartesianRequest(handles.red, red);
-    red.current_state = capturedState(initial_state);
+    initializeCartesianRequest(handles.red, robot.base_frame, red);
+    red.captured_state = capturedState(initial_state);
     red.dt = 1.0 / options.red_rate_hz;
     addCartesianTargets(handles.red, initial_target, red);
     status = solver.solveInverseKinematics(
       mcc::SolverGroup::Red, red, solution, diagnostics);
-    if (!acceptedStatus(status) || !diagnostics.attempt_accepted) {
-      throw std::runtime_error("Red warm-up failed: " + statusDetail(status));
+    if (!operationSucceeded(status) || !diagnostics.attempt_accepted) {
+      throw std::runtime_error(
+              "Red warm-up failed: " + rejectedAttemptDetail(status, diagnostics));
     }
   }
   requireOk(solver.beginRun(2), "Failed to begin timed grouped run");
@@ -370,13 +530,16 @@ int run(int argc, char ** argv)
     true);
   auto visualization_sink = mcl::createVisualizationSink(options.visualization, kProgramId);
 
-  std::atomic_bool stop_requested{false};
+  mcl::WorkerStopController stop_controller;
   mcl::GroupedFaultState fault;
+  mcl::PeriodicWorkerDiagnostics red_worker_diagnostics;
+  mcl::PeriodicWorkerDiagnostics yellow_worker_diagnostics;
+  mcl::PeriodicWorkerDiagnostics green_worker_diagnostics;
   std::thread red_thread;
   std::thread yellow_thread;
   std::thread green_thread;
   auto joinWorkers = [&]() {
-      stop_requested.store(true, std::memory_order_release);
+      stop_controller.requestStop();
       if (red_thread.joinable()) {
         red_thread.join();
       }
@@ -397,17 +560,19 @@ int run(int argc, char ** argv)
     green_thread = std::thread([&]() {
       StateSnapshot state = initial_state;
       mcc::GroupedInverseKinematicsRequest request;
+      request.reference_frame_name = robot.base_frame;
       request.posture_targets.push_back(
         {handles.green_posture, initial_positions, true});
       mcc::GroupedInverseKinematicsSolution solution;
       mcc::GroupedInverseKinematicsDiagnostics diagnostics;
       mcl::runPeriodicWorker(
-        {mcl::WorkerGroup::Green, options.green_rate_hz},
-        stop_requested,
+        {mcl::WorkerGroup::Green, options.green_rate_hz, options.deadline_policy},
+        stop_controller,
         fault,
+        green_worker_diagnostics,
         [&](double dt, std::int64_t) {
           state_to_green.readLatest(state);
-          request.current_state = capturedState(state);
+          request.captured_state = capturedState(state);
           request.dt = dt;
           const auto status = solver.solveInverseKinematics(
             mcc::SolverGroup::Green, request, solution, diagnostics);
@@ -415,7 +580,8 @@ int run(int argc, char ** argv)
             diagnostics.attempt_accepted,
             diagnostics.attempt_revision,
             diagnostics.kinematics.solve_time_ms,
-            diagnostics.attempt_accepted ? std::string{} : statusDetail(status)};
+            diagnostics.attempt_accepted ? std::string{} :
+            rejectedAttemptDetail(status, diagnostics)};
         });
     });
 
@@ -423,26 +589,29 @@ int run(int argc, char ** argv)
       StateSnapshot state = initial_state;
       TargetSnapshot target = initial_target;
       mcc::GroupedInverseKinematicsRequest request;
-      initializeCartesianRequest(handles.yellow, request);
+      initializeYellowRequest(handles, robot.base_frame, request);
       mcc::GroupedInverseKinematicsSolution solution;
       mcc::GroupedInverseKinematicsDiagnostics diagnostics;
       mcl::runPeriodicWorker(
-        {mcl::WorkerGroup::Yellow, options.yellow_rate_hz},
-        stop_requested,
+        {mcl::WorkerGroup::Yellow, options.yellow_rate_hz, options.deadline_policy},
+        stop_controller,
         fault,
+        yellow_worker_diagnostics,
         [&](double dt, std::int64_t) {
           state_to_yellow.readLatest(state);
           target_to_yellow.readLatest(target);
-          request.current_state = capturedState(state);
+          request.captured_state = capturedState(state);
           request.dt = dt;
-          addCartesianTargets(handles.yellow, target, request);
+          addYellowTargets(
+            handles, target, left_elbow_target, right_elbow_target, request);
           const auto status = solver.solveInverseKinematics(
             mcc::SolverGroup::Yellow, request, solution, diagnostics);
           return mcl::WorkerIterationResult{
             diagnostics.attempt_accepted,
             diagnostics.attempt_revision,
             diagnostics.kinematics.solve_time_ms,
-            diagnostics.attempt_accepted ? std::string{} : statusDetail(status)};
+            diagnostics.attempt_accepted ? std::string{} :
+            rejectedAttemptDetail(status, diagnostics)};
         });
     });
 
@@ -451,23 +620,24 @@ int run(int argc, char ** argv)
       TargetSnapshot target = initial_target;
       RedOutputSnapshot output = initial_output;
       mcc::GroupedInverseKinematicsRequest request;
-      initializeCartesianRequest(handles.red, request);
+      initializeCartesianRequest(handles.red, robot.base_frame, request);
       mcc::GroupedInverseKinematicsSolution solution;
       mcc::GroupedInverseKinematicsDiagnostics diagnostics;
       mcl::runPeriodicWorker(
-        {mcl::WorkerGroup::Red, options.red_rate_hz},
-        stop_requested,
+        {mcl::WorkerGroup::Red, options.red_rate_hz, options.deadline_policy},
+        stop_controller,
         fault,
+        red_worker_diagnostics,
         [&](double dt, std::int64_t sample_time_ns) {
           target_to_red.readLatest(target);
-          request.current_state = capturedState(state);
+          request.captured_state = capturedState(state);
           request.dt = dt;
           addCartesianTargets(handles.red, target, request);
           const auto status = solver.solveInverseKinematics(
             mcc::SolverGroup::Red, request, solution, diagnostics);
           if (diagnostics.attempt_accepted) {
-            state.positions = solution.value.joint_positions;
-            state.velocities = solution.value.joint_velocities;
+            state.positions = solution.kinematics_solution.joint_positions;
+            state.velocities = solution.kinematics_solution.joint_velocities;
             ++state.sequence;
             state.monotonic_time_nanoseconds = sample_time_ns;
             state_to_yellow.publish(state);
@@ -476,9 +646,11 @@ int run(int argc, char ** argv)
             output.revision = diagnostics.value_revision;
             output.state = state;
             output.left_pose = requirePose(
-              solution.value.solved_poses, robot.left_end_effector_frame).pose;
+              solution.kinematics_solution.solved_poses,
+              robot.left_end_effector_frame).pose;
             output.right_pose = requirePose(
-              solution.value.solved_poses, robot.right_end_effector_frame).pose;
+              solution.kinematics_solution.solved_poses,
+              robot.right_end_effector_frame).pose;
             output.solve_time_ms = diagnostics.kinematics.solve_time_ms;
             output.iterations = diagnostics.kinematics.iterations;
             output.converged = diagnostics.kinematics.converged;
@@ -489,7 +661,8 @@ int run(int argc, char ** argv)
             diagnostics.attempt_accepted,
             diagnostics.attempt_revision,
             diagnostics.kinematics.solve_time_ms,
-            diagnostics.attempt_accepted ? std::string{} : statusDetail(status)};
+            diagnostics.attempt_accepted ? std::string{} :
+            rejectedAttemptDetail(status, diagnostics)};
         });
     });
 
@@ -505,7 +678,7 @@ int run(int argc, char ** argv)
     frame.velocities.assign(joint_names.size(), 0.0);
     frame.selected_side = mcl::parseArmSide(options.tui.side);
 
-    while (!stop_requested.load(std::memory_order_acquire)) {
+    while (!stop_controller.stopRequested()) {
       const auto schedule = ui_scheduler.next();
       if (!schedule) {
         break;
@@ -537,7 +710,16 @@ int run(int argc, char ** argv)
         frame.targets = command.targets;
         frame.positions = toStdVector(latest_output.state.positions);
         frame.velocities = toStdVector(latest_output.state.velocities);
-        frame.ik_status = fault.triggered() ? "fault" : "running";
+        const auto red_stats = red_worker_diagnostics.snapshot();
+        const auto yellow_stats = yellow_worker_diagnostics.snapshot();
+        const auto green_stats = green_worker_diagnostics.snapshot();
+        frame.ik_status = fault.triggered() ? "fault" :
+          "running deadline_misses R=" + std::to_string(red_stats.deadline_miss_count) +
+          " Y=" + std::to_string(yellow_stats.deadline_miss_count) +
+          " G=" + std::to_string(green_stats.deadline_miss_count) +
+          " skipped R=" + std::to_string(red_stats.skipped_release_count) +
+          " Y=" + std::to_string(yellow_stats.skipped_release_count) +
+          " G=" + std::to_string(green_stats.skipped_release_count);
         frame.iterations = latest_output.iterations;
         frame.converged = latest_output.converged;
         frame.solve_time_ms = latest_output.solve_time_ms;
@@ -548,7 +730,10 @@ int run(int argc, char ** argv)
           {mcl::ArmSide::Right,
             latest_output.right_position_error_m,
             latest_output.right_orientation_error_rad}};
-        frame.status = command.status;
+        frame.status = command.status +
+          " | skipped_releases R=" + std::to_string(red_stats.skipped_release_count) +
+          " Y=" + std::to_string(yellow_stats.skipped_release_count) +
+          " G=" + std::to_string(green_stats.skipped_release_count);
         frame.paused = command.paused;
         frame.selected_side = command.selected_side;
 

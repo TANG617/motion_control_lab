@@ -5,6 +5,8 @@
 #include <optional>
 #include <string>
 
+#include "runtime/grouped_worker.hpp"
+
 namespace motion_control_lab
 {
 
@@ -40,6 +42,7 @@ struct GroupedInteractiveIkOptions
   double yellow_rate_hz{50.0};
   double green_rate_hz{10.0};
   double ui_rate_hz{20.0};
+  DeadlinePolicy deadline_policy{DeadlinePolicy::Strict};
   double duration_s{0.0};
   TuiTeleopOptions tui;
   VisualizationSinkOptions visualization;

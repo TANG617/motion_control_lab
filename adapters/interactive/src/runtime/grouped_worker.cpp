@@ -67,10 +67,89 @@ std::optional<GroupedWorkerFault> GroupedFaultState::snapshot() const
   return fault_;
 }
 
+void WorkerStopController::requestStop()
+{
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    stop_requested_.store(true, std::memory_order_release);
+  }
+  condition_.notify_all();
+}
+
+bool WorkerStopController::stopRequested() const
+{
+  return stop_requested_.load(std::memory_order_acquire);
+}
+
+bool WorkerStopController::waitUntil(std::chrono::steady_clock::time_point deadline)
+{
+  std::unique_lock<std::mutex> lock(mutex_);
+  return condition_.wait_until(lock, deadline, [this]() {
+      return stopRequested();
+    });
+}
+
+namespace
+{
+
+void updateMaximum(std::atomic<double> & maximum, double value)
+{
+  double current = maximum.load(std::memory_order_relaxed);
+  while (current < value &&
+    !maximum.compare_exchange_weak(
+      current, value, std::memory_order_relaxed, std::memory_order_relaxed))
+  {
+  }
+}
+
+}  // namespace
+
+PeriodicWorkerStatistics PeriodicWorkerDiagnostics::snapshot() const
+{
+  return PeriodicWorkerStatistics{
+    iteration_count_.load(std::memory_order_relaxed),
+    deadline_miss_count_.load(std::memory_order_relaxed),
+    consecutive_deadline_misses_.load(std::memory_order_relaxed),
+    skipped_release_count_.load(std::memory_order_relaxed),
+    maximum_release_lateness_ms_.load(std::memory_order_relaxed),
+    maximum_execution_ms_.load(std::memory_order_relaxed),
+    maximum_release_to_finish_ms_.load(std::memory_order_relaxed),
+    maximum_overrun_ms_.load(std::memory_order_relaxed),
+    maximum_solver_ms_.load(std::memory_order_relaxed)};
+}
+
+void PeriodicWorkerDiagnostics::recordIteration(
+  bool deadline_missed,
+  double release_lateness_ms,
+  double execution_ms,
+  double release_to_finish_ms,
+  double overrun_ms,
+  double solver_ms)
+{
+  iteration_count_.fetch_add(1, std::memory_order_relaxed);
+  if (deadline_missed) {
+    deadline_miss_count_.fetch_add(1, std::memory_order_relaxed);
+    consecutive_deadline_misses_.fetch_add(1, std::memory_order_relaxed);
+  } else {
+    consecutive_deadline_misses_.store(0, std::memory_order_relaxed);
+  }
+  updateMaximum(maximum_release_lateness_ms_, release_lateness_ms);
+  updateMaximum(maximum_execution_ms_, execution_ms);
+  updateMaximum(maximum_release_to_finish_ms_, release_to_finish_ms);
+  updateMaximum(maximum_overrun_ms_, overrun_ms);
+  updateMaximum(maximum_solver_ms_, solver_ms);
+}
+
+void PeriodicWorkerDiagnostics::recordSkippedReleases(std::uint64_t count)
+{
+  skipped_release_count_.fetch_add(count, std::memory_order_relaxed);
+}
+
 void runPeriodicWorker(
   PeriodicWorkerOptions options,
-  std::atomic_bool & stop_requested,
+  WorkerStopController & stop_controller,
   GroupedFaultState & fault,
+  PeriodicWorkerDiagnostics & diagnostics,
   const WorkerIteration & iteration)
 {
   using Clock = std::chrono::steady_clock;
@@ -79,38 +158,49 @@ void runPeriodicWorker(
   }
   const auto period = std::chrono::duration_cast<Clock::duration>(
     std::chrono::duration<double>(1.0 / options.rate_hz));
+  if (period <= Clock::duration::zero()) {
+    throw std::runtime_error("worker rate produces a zero clock period");
+  }
   const double deadline_ms = 1000.0 / options.rate_hz;
   auto release = Clock::now();
   const auto epoch = release;
 
-  while (!stop_requested.load(std::memory_order_acquire)) {
+  while (!stop_controller.stopRequested()) {
     const auto deadline = release + period;
     const auto started = Clock::now();
-    auto makeFault = [&](
+    struct IterationTiming
+    {
+      double release_lateness_ms;
+      double execution_ms;
+      double release_to_finish_ms;
+      double overrun_ms;
+    };
+    auto calculateTiming = [&](Clock::time_point finished) {
+        return IterationTiming{
+          std::max(
+            0.0,
+            std::chrono::duration<double, std::milli>(started - release).count()),
+          std::chrono::duration<double, std::milli>(finished - started).count(),
+          std::chrono::duration<double, std::milli>(finished - release).count(),
+          std::max(
+            0.0,
+            std::chrono::duration<double, std::milli>(finished - deadline).count())};
+      };
+    auto makeFault = [&options, deadline_ms](
         WorkerFailureKind failure,
         std::uint64_t revision,
-        Clock::time_point finished,
+        const IterationTiming & timing,
         double solver_ms,
         std::string detail) {
-        const double release_lateness_ms = std::max(
-          0.0,
-          std::chrono::duration<double, std::milli>(started - release).count());
-        const double execution_ms = std::chrono::duration<double, std::milli>(
-          finished - started).count();
-        const double release_to_finish_ms = std::chrono::duration<double, std::milli>(
-          finished - release).count();
-        const double overrun_ms = std::max(
-          0.0,
-          std::chrono::duration<double, std::milli>(finished - deadline).count());
         return GroupedWorkerFault{
           options.group,
           failure,
           revision,
-          release_lateness_ms,
-          execution_ms,
-          release_to_finish_ms,
+          timing.release_lateness_ms,
+          timing.execution_ms,
+          timing.release_to_finish_ms,
           deadline_ms,
-          overrun_ms,
+          timing.overrun_ms,
           solver_ms,
           std::move(detail)};
       };
@@ -119,53 +209,84 @@ void runPeriodicWorker(
         started - epoch).count();
       const WorkerIterationResult result = iteration(1.0 / options.rate_hz, sample_time_ns);
       const auto finished = Clock::now();
+      const IterationTiming timing = calculateTiming(finished);
+      const bool deadline_missed = finished > deadline;
+      diagnostics.recordIteration(
+        deadline_missed,
+        timing.release_lateness_ms,
+        timing.execution_ms,
+        timing.release_to_finish_ms,
+        timing.overrun_ms,
+        result.solve_time_ms);
       if (!result.accepted) {
         fault.trigger(makeFault(
           WorkerFailureKind::RejectedAttempt,
           result.revision,
-          finished,
+          timing,
           result.solve_time_ms,
           result.detail));
-        stop_requested.store(true, std::memory_order_release);
+        stop_controller.requestStop();
         return;
       }
-      if (finished > deadline) {
+      if (deadline_missed && options.deadline_policy == DeadlinePolicy::Strict) {
         fault.trigger(makeFault(
           WorkerFailureKind::DeadlineMiss,
           result.revision,
-          finished,
+          timing,
           result.solve_time_ms,
           result.detail));
-        stop_requested.store(true, std::memory_order_release);
+        stop_controller.requestStop();
         return;
       }
+
+      if (deadline_missed) {
+        std::uint64_t skipped_releases = 0;
+        do {
+          release += period;
+          ++skipped_releases;
+        } while (release <= finished);
+        diagnostics.recordSkippedReleases(skipped_releases);
+      } else {
+        release += period;
+      }
     } catch (const std::exception & error) {
+      const auto timing = calculateTiming(Clock::now());
+      diagnostics.recordIteration(
+        timing.overrun_ms > 0.0,
+        timing.release_lateness_ms,
+        timing.execution_ms,
+        timing.release_to_finish_ms,
+        timing.overrun_ms,
+        0.0);
       fault.trigger(makeFault(
         WorkerFailureKind::Exception,
         0,
-        Clock::now(),
+        timing,
         0.0,
         error.what()));
-      stop_requested.store(true, std::memory_order_release);
+      stop_controller.requestStop();
       return;
     } catch (...) {
+      const auto timing = calculateTiming(Clock::now());
+      diagnostics.recordIteration(
+        timing.overrun_ms > 0.0,
+        timing.release_lateness_ms,
+        timing.execution_ms,
+        timing.release_to_finish_ms,
+        timing.overrun_ms,
+        0.0);
       fault.trigger(makeFault(
         WorkerFailureKind::Exception,
         0,
-        Clock::now(),
+        timing,
         0.0,
         "unknown exception"));
-      stop_requested.store(true, std::memory_order_release);
+      stop_controller.requestStop();
       return;
     }
 
-    release += period;
-    while (!stop_requested.load(std::memory_order_acquire)) {
-      const auto now = Clock::now();
-      if (now >= release) {
-        break;
-      }
-      std::this_thread::sleep_until(std::min(release, now + std::chrono::milliseconds(1)));
+    if (stop_controller.waitUntil(release)) {
+      return;
     }
   }
 }

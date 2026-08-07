@@ -40,9 +40,37 @@ int main()
   char grouped_urdf_value[] = "/tmp/robot.urdf";
   char * grouped_argv[]{grouped_program, grouped_urdf_option, grouped_urdf_value};
   const auto grouped = motion_control_lab::parseGroupedInteractiveIkOptions(3, grouped_argv);
-  if (grouped.red_rate_hz != 1000.0 || grouped.yellow_rate_hz != 100.0 ||
-      grouped.green_rate_hz != 10.0 || grouped.ui_rate_hz != 20.0) {
+  if (grouped.red_rate_hz != 100.0 || grouped.yellow_rate_hz != 50.0 ||
+      grouped.green_rate_hz != 10.0 || grouped.ui_rate_hz != 20.0 ||
+      grouped.deadline_policy != motion_control_lab::DeadlinePolicy::Strict) {
     return EXIT_FAILURE;
+  }
+
+  char deadline_policy_option[] = "--deadline-policy";
+  char deadline_policy_value[] = "monitor";
+  char * monitor_grouped_argv[]{
+    grouped_program,
+    grouped_urdf_option,
+    grouped_urdf_value,
+    deadline_policy_option,
+    deadline_policy_value};
+  const auto monitor = motion_control_lab::parseGroupedInteractiveIkOptions(
+    5, monitor_grouped_argv);
+  if (monitor.deadline_policy != motion_control_lab::DeadlinePolicy::Monitor) {
+    return EXIT_FAILURE;
+  }
+
+  char invalid_deadline_policy_value[] = "ignore";
+  char * invalid_policy_argv[]{
+    grouped_program,
+    grouped_urdf_option,
+    grouped_urdf_value,
+    deadline_policy_option,
+    invalid_deadline_policy_value};
+  try {
+    (void)motion_control_lab::parseGroupedInteractiveIkOptions(5, invalid_policy_argv);
+    return EXIT_FAILURE;
+  } catch (const std::runtime_error &) {
   }
 
   char red_option[] = "--red-rate";

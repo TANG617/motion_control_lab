@@ -12,6 +12,8 @@
 
 #include <Eigen/Core>
 
+#include <algorithm>
+#include <cstdint>
 #include <cstdlib>
 #include <filesystem>
 #include <iostream>
@@ -46,27 +48,25 @@ int run(int argc, char ** argv)
 
   mcc::RobotModelDescription model_description;
   model_description.urdf_path = options.urdf_path;
-  model_description.base_frame = robot.base_frame;
+  model_description.kinematics_reference_frame = robot.base_frame;
   model_description.joint_names = joint_names;
-  model_description.end_effector_names = {
-    robot.left_end_effector_frame,
-    robot.right_end_effector_frame};
 
   std::shared_ptr<const mcc::RobotModel> model;
   mcl::requireOk(mcc::RobotModel::load(model_description, model), "Failed to load robot model");
 
   mcc::KinematicsSolverConfig solver_config;
+  solver_config.joint_limit_policy = mcc::KinematicsJointLimitPolicy::ExplicitRequirements;
   solver_config.qp.backend = mcc::QpBackend::ProxQp;
   solver_config.qp.regularization = 1.0e-8;
   solver_config.maximum_iterations = 80;
-  solver_config.maximum_solve_time_ms = 100.0;
+  solver_config.soft_solve_time_budget_ms = 100.0;
   solver_config.position_tolerance_m = 1.0e-4;
   solver_config.orientation_tolerance_rad = 1.0e-4;
   solver_config.minimum_position_improvement_m = 1.0e-8;
   solver_config.minimum_orientation_improvement_rad = 1.0e-8;
 
   mcc::GroupedKinematicsSolverConfig grouped_config;
-  grouped_config.profile = mcc::SolverProfile::RedOnly;
+  grouped_config.profile = mcc::GroupedSolverProfile::RedOnly;
   grouped_config.red = solver_config;
   mcc::GroupedKinematicsSolverBuilder builder;
   mcl::requireOk(
@@ -122,27 +122,36 @@ int run(int argc, char ** argv)
     "Failed to register right orientation task");
 
   mcc::JointPositionLimitConfig joint_limit_config;
-  joint_limit_config.margin = 0.0;
+  joint_limit_config.margin = 1e-3;
   joint_limit_config.enforcement = mcc::HardEnforcement{};
   mcc::GroupedJointPositionLimitHandle joint_limits;
   mcl::requireOk(
     builder.addJointPositionLimits(mcc::SolverGroup::Red, joint_limit_config, joint_limits),
     "Failed to register joint-position limits");
 
+  mcc::JointVelocityLimitConfig velocity_limit_config;
+  velocity_limit_config.mode = mcc::JointVelocityLimitMode::VelocityOnly;
+  velocity_limit_config.enforcement = mcc::HardEnforcement{};
+  mcc::GroupedJointVelocityLimitHandle velocity_limits;
+  mcl::requireOk(
+    builder.addJointVelocityLimits(
+      mcc::SolverGroup::Red, velocity_limit_config, velocity_limits),
+    "Failed to register joint-velocity limits");
+
   mcc::GroupedKinematicsSolver solver;
   mcl::requireOk(builder.finalize(solver), "Failed to finalize IK solver");
   mcl::requireOk(solver.beginRun(1), "Failed to begin grouped IK run");
 
   auto currentTargetPose = [&](mcl::ArmSide side) {
+    mcc::ForwardKinematicsRequest request;
+    request.state = mcl::makeRobotState(positions, velocities);
+    request.frame_names = {mcl::frameForSide(robot, side)};
+    request.reference_frame_name = robot.base_frame;
     mcc::ForwardKinematicsSolution solution;
     mcc::ForwardKinematicsDiagnostics diagnostics;
     mcl::requireOk(
-      solver.solveForwardKinematics(
-        mcc::SolverGroup::Red,
-        mcl::makeRobotState(positions, velocities),
-        solution,
-        diagnostics,
-        mcc::JointPositionValidation::LimitChecked),
+      solver.computeForwardKinematics(
+        mcc::SolverGroup::Red, request, solution, diagnostics),
       "FK failed");
     return mcl::requirePose(solution.poses, mcl::frameForSide(robot, side)).pose;
   };
@@ -203,11 +212,13 @@ int run(int argc, char ** argv)
         const auto & right_target = mcl::requireTarget(command.targets, mcl::ArmSide::Right);
 
         mcc::GroupedInverseKinematicsRequest request;
-        request.current_state.state = mcl::makeRobotState(positions, velocities);
-        request.current_state.sequence = ++solve_sequence;
-        request.current_state.monotonic_time_nanoseconds = schedule->sample_time_ns;
+        request.reference_frame_name = robot.base_frame;
+        request.captured_state.state = mcl::makeRobotState(positions, velocities);
+        request.captured_state.sequence = ++solve_sequence;
+        request.captured_state.monotonic_time_nanoseconds =
+          std::max<std::int64_t>(1, schedule->sample_time_ns);
         request.dt = schedule->dt;
-        request.seed_positions = request.current_state.state.joint_positions;
+        request.seed_positions = request.captured_state.state.joint_positions;
         request.position_targets.push_back(
           {left_position_task, left_target.target_pose.translation(), true});
         request.orientation_targets.push_back(
@@ -221,17 +232,17 @@ int run(int argc, char ** argv)
         mcc::GroupedInverseKinematicsDiagnostics diagnostics;
         const auto status = solver.solveInverseKinematics(
           mcc::SolverGroup::Red, request, solution, diagnostics);
-        if (!diagnostics.attempt_accepted) {
+        if (!status.ok() || !diagnostics.attempt_accepted) {
           throw std::runtime_error(
                   "Red IK rejected attempt " + std::to_string(diagnostics.attempt_revision) +
                   ": " + (status.message.empty() ? "solver failure" : status.message));
         }
-        if (solution.value.joint_positions.size() ==
+        if (solution.kinematics_solution.joint_positions.size() ==
             static_cast<Eigen::Index>(joint_names.size())) {
-          positions = mcl::toStdVector(solution.value.joint_positions);
-          if (solution.value.joint_velocities.size() ==
+          positions = mcl::toStdVector(solution.kinematics_solution.joint_positions);
+          if (solution.kinematics_solution.joint_velocities.size() ==
               static_cast<Eigen::Index>(joint_names.size())) {
-            velocities = mcl::toStdVector(solution.value.joint_velocities);
+            velocities = mcl::toStdVector(solution.kinematics_solution.joint_velocities);
           } else {
             velocities.assign(joint_names.size(), 0.0);
           }

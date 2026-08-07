@@ -30,6 +30,7 @@ mcc::Pose makePose(const Eigen::Vector3d & translation, double yaw)
 mcc::CartesianMoveLineRequest makeCartesianRequest()
 {
   mcc::CartesianMoveLineRequest request;
+  request.reference_frame_name = "world";
   request.sample_period = 0.01;
   request.path_limits.max_velocity = 0.2;
   request.path_limits.max_acceleration = 0.6;
@@ -39,12 +40,16 @@ mcc::CartesianMoveLineRequest makeCartesianRequest()
     mcc::CartesianMoveLineSegment{
       "left_tcp",
       makePose(Eigen::Vector3d{0.40, 0.20, 0.80}, 0.0),
+      mcc::Twist::Zero(),
+      mcc::SpatialAcceleration::Zero(),
       makePose(Eigen::Vector3d{0.55, 0.28, 0.86}, 0.45),
       0.5});
   request.segments.push_back(
     mcc::CartesianMoveLineSegment{
       "right_tcp",
       makePose(Eigen::Vector3d{0.40, -0.20, 0.80}, 0.0),
+      mcc::Twist::Zero(),
+      mcc::SpatialAcceleration::Zero(),
       makePose(Eigen::Vector3d{0.50, -0.30, 0.82}, -0.30),
       0.5});
 
@@ -71,6 +76,8 @@ mcc::JointTrajectoryRequest makeJointRequest()
   request.target.velocities.assign(request.joint_names.size(), 0.0);
   request.target.accelerations.assign(request.joint_names.size(), 0.0);
 
+  request.limits.position_lower.assign(request.joint_names.size(), -3.14);
+  request.limits.position_upper.assign(request.joint_names.size(), 3.14);
   request.limits.max_velocity.assign(request.joint_names.size(), 1.0);
   request.limits.max_acceleration.assign(request.joint_names.size(), 2.0);
   request.limits.max_jerk.assign(request.joint_names.size(), 8.0);
@@ -91,7 +98,7 @@ mcc::CartesianTrajectory sampleCartesianTrajectory()
   mcc::CartesianTrajectory trajectory;
   mcc::PlanningDiagnostics diagnostics;
   requireOk(
-    planner.sampleAll(makeCartesianRequest(), trajectory, diagnostics),
+    planner.generate(makeCartesianRequest(), trajectory, diagnostics),
     "Cartesian planning");
   return trajectory;
 }
@@ -106,7 +113,7 @@ mcc::JointTrajectory sampleJointTrajectory()
   mcc::JointTrajectory trajectory;
   mcc::PlanningDiagnostics diagnostics;
   requireOk(
-    planner.sampleAll(makeJointRequest(), trajectory, diagnostics),
+    planner.generate(makeJointRequest(), trajectory, diagnostics),
     "Joint trajectory planning");
   return trajectory;
 }

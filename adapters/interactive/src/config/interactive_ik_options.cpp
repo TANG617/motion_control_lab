@@ -142,10 +142,11 @@ void printGroupedInteractiveIkUsage(const char * program)
     << "  --urdf <path>       Robot URDF path (or $" << kUrdfEnvironmentVariable << ")\n"
     << "  --host <address>    WebSocket bind address (default: 127.0.0.1)\n"
     << "  --port <port>       WebSocket port (default: 8765)\n"
-    << "  --red-rate <hz>     Red servo rate/deadline (default: 1000)\n"
-    << "  --yellow-rate <hz>  Yellow proposal rate/deadline (default: 100)\n"
+    << "  --red-rate <hz>     Red servo rate/deadline (default: 100)\n"
+    << "  --yellow-rate <hz>  Yellow proposal rate/deadline (default: 50)\n"
     << "  --green-rate <hz>   Green proposal rate/deadline (default: 10)\n"
     << "  --ui-rate <hz>      TUI and visualization rate (default: 20)\n"
+    << "  --deadline-policy <strict|monitor>  Deadline handling (default: strict)\n"
     << "  --duration <sec>    Stop after seconds; 0 runs until Ctrl-C (default: 0)\n"
     << "  --step-m <meters>   Cartesian increment per keypress (default: 0.01)\n"
     << "  --min-step-m <m>    Minimum step size (default: 0.001)\n"
@@ -191,6 +192,16 @@ GroupedInteractiveIkOptions parseGroupedInteractiveIkOptions(int argc, char ** a
       options.green_rate_hz = parsePositiveDouble("green rate", requireValue(arg));
     } else if (arg == "--ui-rate") {
       options.ui_rate_hz = parsePositiveDouble("UI rate", requireValue(arg));
+    } else if (arg == "--deadline-policy") {
+      const std::string value = requireValue(arg);
+      if (value == "strict") {
+        options.deadline_policy = DeadlinePolicy::Strict;
+      } else if (value == "monitor") {
+        options.deadline_policy = DeadlinePolicy::Monitor;
+      } else {
+        throw std::runtime_error(
+                "--deadline-policy must be either 'strict' or 'monitor'");
+      }
     } else if (arg == "--duration") {
       const double duration = std::stod(requireValue(arg));
       if (duration < 0.0 || !std::isfinite(duration)) {

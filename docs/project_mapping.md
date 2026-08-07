@@ -71,7 +71,13 @@ UI thread <--latest Red output-- Red
 ```
 
 solver worker 之间和 UI 之间使用 bounded latest-value mailbox，不等待对方；deadline 和
-Starting/Running/Fault 属于 Lab 外层，不进入 MCC。
+Starting/Running/Fault 属于 Lab 外层，不进入 MCC。Lab 的 deadline policy 支持用于能力验证的
+`strict` 和用于非实时主机交互调试的 `monitor`；后者保留统计并跳过过期 release，但不会放宽
+rejected attempt 或 worker exception。
+
+当前 grouped app 的 Yellow proposal 使用 Soft 双手 Cartesian task，并以更低权重对
+`left_arm_link4`/`right_arm_link4` 施加三轴 PositionTask，固定初始 X/Z、将左右 Y 分别向外偏置。
+这是应用层近似，不新增 MCC 单轴 task；Red 双手 task 与三组 joint limits 仍为 Hard。
 
 单臂和双臂入口显式拥有不同的 task topology、solver config、typed handles 和状态更新，
 只共享参数解析、终端输入、wall-clock 调度、frame 映射和 sink 创建。正式实验的 `dt`

@@ -27,38 +27,44 @@ if(NOT TARGET jsoncpp_lib AND TARGET jsoncpp_static)
   add_library(jsoncpp_lib ALIAS jsoncpp_static)
 endif()
 
-# eiquadprog's upstream CMake layer fetches additional unpinned build modules.
-# Build its two source files directly so the dependency graph remains pinned.
-FetchContent_Declare(
-  eiquadprog_source
-  GIT_REPOSITORY https://github.com/stack-of-tasks/eiquadprog.git
-  GIT_TAG ec402b4dbcce32fd936fd39a3c6fc32f08b35a54
-  GIT_SHALLOW FALSE
-  UPDATE_DISCONNECTED TRUE
-  SOURCE_SUBDIR mcl-no-upstream-cmake
-  SYSTEM
-)
-FetchContent_MakeAvailable(eiquadprog_source)
-FetchContent_GetProperties(eiquadprog_source SOURCE_DIR EIQ_SOURCE_DIR)
+# Prefer the independently installed shared package required by an installed
+# motion_control_core. Standalone PlaCo experiments retain the pinned static
+# fallback when no package is available.
+find_package(eiquadprog CONFIG QUIET)
+if(NOT TARGET eiquadprog::eiquadprog)
+  # eiquadprog's upstream CMake layer fetches additional unpinned build modules.
+  # Build its two source files directly so the fallback graph remains pinned.
+  FetchContent_Declare(
+    eiquadprog_source
+    GIT_REPOSITORY https://github.com/stack-of-tasks/eiquadprog.git
+    GIT_TAG ec402b4dbcce32fd936fd39a3c6fc32f08b35a54
+    GIT_SHALLOW FALSE
+    UPDATE_DISCONNECTED TRUE
+    SOURCE_SUBDIR mcl-no-upstream-cmake
+    SYSTEM
+  )
+  FetchContent_MakeAvailable(eiquadprog_source)
+  FetchContent_GetProperties(eiquadprog_source SOURCE_DIR EIQ_SOURCE_DIR)
 
-add_library(
-  eiquadprog
-  STATIC
-  "${EIQ_SOURCE_DIR}/src/eiquadprog.cpp"
-  "${EIQ_SOURCE_DIR}/src/eiquadprog-fast.cpp"
-)
-add_library(eiquadprog::eiquadprog ALIAS eiquadprog)
-target_include_directories(
-  eiquadprog
-  SYSTEM PUBLIC
-    "$<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}/compat>"
-    "$<BUILD_INTERFACE:${EIQ_SOURCE_DIR}/include>"
-)
-target_link_libraries(eiquadprog PUBLIC Eigen3::Eigen)
-target_compile_definitions(eiquadprog PUBLIC EIQUADPROG_STATIC)
-set_target_properties(eiquadprog PROPERTIES POSITION_INDEPENDENT_CODE ON)
-if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
-  target_compile_options(eiquadprog PRIVATE -Wno-sign-conversion)
+  add_library(
+    eiquadprog
+    STATIC
+    "${EIQ_SOURCE_DIR}/src/eiquadprog.cpp"
+    "${EIQ_SOURCE_DIR}/src/eiquadprog-fast.cpp"
+  )
+  add_library(eiquadprog::eiquadprog ALIAS eiquadprog)
+  target_include_directories(
+    eiquadprog
+    SYSTEM PUBLIC
+      "$<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}/compat>"
+      "$<BUILD_INTERFACE:${EIQ_SOURCE_DIR}/include>"
+  )
+  target_link_libraries(eiquadprog PUBLIC Eigen3::Eigen)
+  target_compile_definitions(eiquadprog PUBLIC EIQUADPROG_STATIC)
+  set_target_properties(eiquadprog PROPERTIES POSITION_INDEPENDENT_CODE ON)
+  if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
+    target_compile_options(eiquadprog PRIVATE -Wno-sign-conversion)
+  endif()
 endif()
 
 set(

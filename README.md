@@ -31,9 +31,9 @@ E01 是基础设施 smoke test，只证明 placo C++ 求解链与证据落盘链
 brew install cmake pinocchio
 ```
 
-placo 源码已经保存在 `third_party/placo/`，配置时不下载 placo。首次配置仍需
-联网获取固定版本的 eiquadprog 和 jsoncpp；Pinocchio 使用本机安装，这两个小型
-依赖下载到 CMake build tree。
+placo 源码已经保存在 `third_party/placo/`，配置时不下载 placo。Pinocchio 使用本机安装，
+jsoncpp 首次配置时按固定版本下载到 CMake build tree。若 `CMAKE_PREFIX_PATH` 中已有
+eiquadprog package，Lab 会复用它；否则 standalone PlaCo 实验按固定版本构建 static fallback。
 
 ## 构建与测试
 
@@ -55,12 +55,14 @@ ctest --preset dev
 
 ## 可选 MCC 交互预览
 
-先分别安装 `motion_control_core` 和 `motion_control_viz`，再通过 CMake package
-消费它们；Lab 不猜测 `../../components` sibling 路径：
+先按 MCC README 的 Strategy A 准备独立的 shared eiquadprog package（下例前缀为
+`/tmp/eiq_install`），再分别安装 `motion_control_core` 和 `motion_control_viz`。Lab 通过
+CMake package 消费三者，不猜测 `../../components` sibling 路径：
 
 ```bash
 cmake -S ../../components/motion_control_core -B /tmp/mcc_build \
-  -DCMAKE_INSTALL_PREFIX=/tmp/mcc_install
+  -DCMAKE_INSTALL_PREFIX=/tmp/mcc_install \
+  -DCMAKE_PREFIX_PATH=/tmp/eiq_install
 cmake --build /tmp/mcc_build -j8
 cmake --install /tmp/mcc_build
 
@@ -73,7 +75,7 @@ cmake -S . -B build/mcc-preview \
   -DMCL_BUILD_SINGLE_ARM_IK=ON \
   -DMCL_BUILD_DUAL_ARM_IK=ON \
   -DMCL_BUILD_GROUPED_DUAL_ARM_IK=ON \
-  -DCMAKE_PREFIX_PATH="/tmp/mcc_install;/tmp/mcv_install"
+  -DCMAKE_PREFIX_PATH="/tmp/mcc_install;/tmp/eiq_install;/tmp/mcv_install"
 cmake --build build/mcc-preview \
   --target mcl_single_arm_ik mcl_dual_arm_ik mcl_grouped_dual_arm_ik -j8
 ```
@@ -83,7 +85,7 @@ cmake --build build/mcc-preview \
 ```bash
 cmake -S . -B build/single-arm \
   -DMCL_BUILD_SINGLE_ARM_IK=ON \
-  -DCMAKE_PREFIX_PATH="/tmp/mcc_install;/tmp/mcv_install"
+  -DCMAKE_PREFIX_PATH="/tmp/mcc_install;/tmp/eiq_install;/tmp/mcv_install"
 cmake --build build/single-arm --target mcl_single_arm_ik -j8
 ```
 
@@ -92,7 +94,7 @@ cmake --build build/single-arm --target mcl_single_arm_ik -j8
 ```bash
 cmake -S . -B build/dual-arm \
   -DMCL_BUILD_DUAL_ARM_IK=ON \
-  -DCMAKE_PREFIX_PATH="/tmp/mcc_install;/tmp/mcv_install"
+  -DCMAKE_PREFIX_PATH="/tmp/mcc_install;/tmp/eiq_install;/tmp/mcv_install"
 cmake --build build/dual-arm --target mcl_dual_arm_ik -j8
 ```
 
@@ -105,17 +107,27 @@ cmake --build build/dual-arm --target mcl_dual_arm_ik -j8
   --urdf /path/to/Psi_R1_rev1.urdf --rate 20 --mcap /new/run/path/preview.mcap
 ./build/mcc-preview/mcl_grouped_dual_arm_ik \
   --urdf /path/to/Psi_R1_rev1.urdf \
-  --red-rate 1000 --yellow-rate 100 --green-rate 10 --ui-rate 20
+  --red-rate 100 --yellow-rate 50 --green-rate 10 --ui-rate 20 \
+  --deadline-policy monitor
 ```
 
 三层入口固定使用 `RedYellowGreen` profile，要求
-`red-rate > yellow-rate > green-rate > 0`。每组 period 同时是该 worker 的 deadline；任一
-rejected attempt、deadline miss 或 worker exception 都触发 first-writer Fault、停止并 join 三个
-worker、保留最后 accepted Red state、关闭 sink 并返回非零。默认 1 kHz Red 在普通非实时机器上
-可能立即报告能力不足，这是预期信号；功能检查时可先下调三个 rate，同时保持严格顺序。
+`red-rate > yellow-rate > green-rate > 0`。每组 period 同时是该 worker 的 deadline。默认
+`--deadline-policy strict`：任一 rejected attempt、deadline miss 或 worker exception 都触发
+first-writer Fault、停止并 join 三个 worker、保留最后 accepted Red state、关闭 sink 并返回非零。
+
+macOS 等非实时开发环境可显式使用 `--deadline-policy monitor`。该模式记录 deadline miss 并继续，
+同时跳过已经过期的 release，避免 worker 无间隔追赶；TUI 会显示各组累计 miss 和 skipped release。
+rejected attempt 和 worker exception 在 monitor 模式下仍然触发 Fault。正式时序能力验证应使用
+`strict`。
 
 Green、Yellow、Red 启动前会顺序预热一次；正式 run 中三者完全异步，不等待 source 的下一条
 结果。TUI、Viz 和 MCAP 只在 `ui-rate` 线程运行，不进入 Red solver 路径。
+
+当前三层示例中，Red 保持双手 Hard Cartesian task；Yellow 使用高权重 Soft 双手 task，并对
+`left_arm_link4`、`right_arm_link4` 添加弱 Soft 肘部外展偏好。肘部目标保持初始 X/Z，左侧 Y
+增加 `0.25 m`、右侧 Y 减少 `0.25 m`。这是基于现有三轴 PositionTask 的近似，肘部权重仅为
+`0.1`，不会取代 Hard joint limits 或 Green coupling。
 
 也可以设置 `MOTION_CONTROL_URDF`，省略每次运行的 `--urdf`。
 
