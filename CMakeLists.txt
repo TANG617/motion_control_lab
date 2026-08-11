@@ -34,6 +34,11 @@ option(
   "Build the optional motion_control_core matplotlib renderer"
   OFF
 )
+option(
+  MCL_BUILD_CARTESIAN_PLANNING
+  "Build the JSON-driven Cartesian MoveLine visualization application"
+  OFF
+)
 
 set(MCL_BUILD_ANY_INTERACTIVE_IK OFF)
 if(MCL_BUILD_SINGLE_ARM_IK OR MCL_BUILD_DUAL_ARM_IK OR MCL_BUILD_GROUPED_DUAL_ARM_IK)
@@ -49,12 +54,15 @@ list(PREPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
 include(cmake/Dependencies.cmake)
 
-if(MCL_BUILD_ANY_INTERACTIVE_IK OR MCL_BUILD_MCC_PLOTS)
+if(MCL_BUILD_ANY_INTERACTIVE_IK OR MCL_BUILD_MCC_PLOTS OR MCL_BUILD_CARTESIAN_PLANNING)
   find_package(motion_control_core CONFIG REQUIRED)
 endif()
 
+if(MCL_BUILD_ANY_INTERACTIVE_IK OR MCL_BUILD_CARTESIAN_PLANNING)
+  find_package(motion_control_viz 0.3 CONFIG REQUIRED)
+endif()
+
 if(MCL_BUILD_ANY_INTERACTIVE_IK)
-  find_package(motion_control_viz 0.2 CONFIG REQUIRED)
 
   add_library(
     mcl_interactive_support
@@ -107,6 +115,30 @@ if(MCL_BUILD_ANY_INTERACTIVE_IK)
   endif()
 endif()
 
+if(MCL_BUILD_CARTESIAN_PLANNING)
+  if(NOT TARGET motion_control_viz::foxglove_sink)
+    message(
+      FATAL_ERROR
+      "MCL_BUILD_CARTESIAN_PLANNING requires motion_control_viz with Foxglove support"
+    )
+  endif()
+  find_package(Python3 REQUIRED COMPONENTS Interpreter Development NumPy)
+  execute_process(
+    COMMAND "${Python3_EXECUTABLE}" -c "import matplotlib, numpy"
+    RESULT_VARIABLE MCL_CARTESIAN_MATPLOTLIB_IMPORT_RESULT
+    OUTPUT_VARIABLE MCL_CARTESIAN_MATPLOTLIB_IMPORT_OUTPUT
+    ERROR_VARIABLE MCL_CARTESIAN_MATPLOTLIB_IMPORT_ERROR
+  )
+  if(NOT MCL_CARTESIAN_MATPLOTLIB_IMPORT_RESULT EQUAL 0)
+    message(
+      FATAL_ERROR
+      "MCL_BUILD_CARTESIAN_PLANNING requires matplotlib and numpy:\n"
+      "${MCL_CARTESIAN_MATPLOTLIB_IMPORT_OUTPUT}${MCL_CARTESIAN_MATPLOTLIB_IMPORT_ERROR}"
+    )
+  endif()
+  add_subdirectory(apps/cartesian_planning)
+endif()
+
 if(MCL_BUILD_MCC_PLOTS)
   find_package(Python3 REQUIRED COMPONENTS Interpreter Development NumPy)
   execute_process(
@@ -130,6 +162,10 @@ if(MCL_BUILD_MCC_PLOTS)
   target_include_directories(
     motion_control_lab_plot_core_planning
     SYSTEM PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/third_party/matplotlib-cpp"
+  )
+  target_compile_definitions(
+    motion_control_lab_plot_core_planning
+    PRIVATE MATPLOTLIBCPP_PYTHON_EXECUTABLE="${Python3_EXECUTABLE}"
   )
   target_link_libraries(
     motion_control_lab_plot_core_planning

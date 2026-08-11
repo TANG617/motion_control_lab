@@ -1,0 +1,152 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "motion_control_lab.cartesian_move_line_request.v1",
+  "title": "Motion Control Lab Cartesian MoveLine request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "reference_frame_name",
+    "sample_period_s",
+    "path_limits",
+    "segments"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "motion_control_lab.cartesian_move_line_request.v1"
+    },
+    "reference_frame_name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "sample_period_s": {
+      "type": "number",
+      "exclusiveMinimum": 0
+    },
+    "maximum_sample_count": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "synchronization": {
+      "enum": ["time", "phase"]
+    },
+    "path_limits": {
+      "$ref": "#/$defs/path_limits"
+    },
+    "segments": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/segment"
+      }
+    }
+  },
+  "$defs": {
+    "vector3": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 3,
+      "items": {
+        "type": "number"
+      }
+    },
+    "quaternion_xyzw": {
+      "type": "array",
+      "minItems": 4,
+      "maxItems": 4,
+      "items": {
+        "type": "number"
+      },
+      "$comment": "Runtime validation additionally requires unit length within 1e-9."
+    },
+    "pose": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["position_m", "orientation_xyzw"],
+      "properties": {
+        "position_m": {
+          "$ref": "#/$defs/vector3"
+        },
+        "orientation_xyzw": {
+          "$ref": "#/$defs/quaternion_xyzw"
+        }
+      }
+    },
+    "twist": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["linear_mps", "angular_rps"],
+      "properties": {
+        "linear_mps": {
+          "$ref": "#/$defs/vector3"
+        },
+        "angular_rps": {
+          "$ref": "#/$defs/vector3"
+        }
+      }
+    },
+    "acceleration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["linear_mps2", "angular_rps2"],
+      "properties": {
+        "linear_mps2": {
+          "$ref": "#/$defs/vector3"
+        },
+        "angular_rps2": {
+          "$ref": "#/$defs/vector3"
+        }
+      }
+    },
+    "path_limits": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "max_velocity_mps",
+        "max_acceleration_mps2",
+        "max_jerk_mps3"
+      ],
+      "properties": {
+        "max_velocity_mps": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "max_acceleration_mps2": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "max_jerk_mps3": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        }
+      }
+    },
+    "segment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["frame_name", "start_pose", "target_pose"],
+      "properties": {
+        "frame_name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "start_pose": {
+          "$ref": "#/$defs/pose"
+        },
+        "target_pose": {
+          "$ref": "#/$defs/pose"
+        },
+        "current_twist": {
+          "$ref": "#/$defs/twist"
+        },
+        "current_acceleration": {
+          "$ref": "#/$defs/acceleration"
+        },
+        "equivalent_radius_m": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        }
+      }
+    }
+  }
+}

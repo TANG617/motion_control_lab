@@ -1,0 +1,46 @@
+{
+  "schema_version": "motion_control_lab.cartesian_move_line_request.v1",
+  "reference_frame_name": "world",
+  "sample_period_s": 0.01,
+  "maximum_sample_count": 100000,
+  "synchronization": "time",
+  "path_limits": {
+    "max_velocity_mps": 0.2,
+    "max_acceleration_mps2": 0.6,
+    "max_jerk_mps3": 2.0
+  },
+  "segments": [
+    {
+      "frame_name": "left_tcp",
+      "start_pose": {
+        "position_m": [0.4, 0.2, 0.8],
+        "orientation_xyzw": [0.0, 0.0, 0.0, 1.0]
+      },
+      "target_pose": {
+        "position_m": [0.55, 0.28, 0.86],
+        "orientation_xyzw": [0.0, 0.0, 0.22310636213174545, 0.9747941070689433]
+      },
+      "equivalent_radius_m": 0.5
+    },
+    {
+      "frame_name": "right_tcp",
+      "start_pose": {
+        "position_m": [0.4, -0.2, 0.8],
+        "orientation_xyzw": [0.0, 0.0, 0.0, 1.0]
+      },
+      "current_twist": {
+        "linear_mps": [0.0, 0.0, 0.0],
+        "angular_rps": [0.0, 0.0, 0.0]
+      },
+      "current_acceleration": {
+        "linear_mps2": [0.0, 0.0, 0.0],
+        "angular_rps2": [0.0, 0.0, 0.0]
+      },
+      "target_pose": {
+        "position_m": [0.5, -0.3, 0.82],
+        "orientation_xyzw": [0.0, 0.0, -0.14943813247359922, 0.9887710779360422]
+      },
+      "equivalent_radius_m": 0.5
+    }
+  ]
+}

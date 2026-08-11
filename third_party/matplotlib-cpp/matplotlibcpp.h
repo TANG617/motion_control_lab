@@ -169,7 +169,12 @@ private:
 
         // optional but recommended
 #if PY_MAJOR_VERSION >= 3
+#ifdef MATPLOTLIBCPP_PYTHON_EXECUTABLE
+        static wchar_t *name = Py_DecodeLocale(MATPLOTLIBCPP_PYTHON_EXECUTABLE, NULL);
+        if (!name) throw std::runtime_error("could not decode Python executable path");
+#else
         wchar_t name[] = L"plotting";
+#endif
 #else
         char name[] = "plotting";
 #endif
@@ -353,9 +358,13 @@ template <> struct select_npy_type<uint64_t> { const static NPY_TYPES type = NPY
 // Sanity checks; comment them out or change the numpy type below if you're compiling on
 // a platform where they don't apply
 static_assert(sizeof(long long) == 8);
+#if !defined(__APPLE__)
 template <> struct select_npy_type<long long> { const static NPY_TYPES type = NPY_INT64; };
+#endif
 static_assert(sizeof(unsigned long long) == 8);
+#if !defined(__APPLE__)
 template <> struct select_npy_type<unsigned long long> { const static NPY_TYPES type = NPY_UINT64; };
+#endif
 
 template<typename Numeric>
 PyObject* get_array(const std::vector<Numeric>& v)
@@ -560,13 +569,16 @@ void plot_surface(const std::vector<::std::vector<Numeric>> &x,
   PyObject *gca_kwargs = PyDict_New();
   PyDict_SetItemString(gca_kwargs, "projection", PyString_FromString("3d"));
 
-  PyObject *gca = PyObject_GetAttrString(fig, "gca");
-  if (!gca) throw std::runtime_error("No gca");
+  PyObject *gca = PyObject_GetAttrString(fig, "add_subplot");
+  if (!gca) throw std::runtime_error("No add_subplot");
   Py_INCREF(gca);
   PyObject *axis = PyObject_Call(
       gca, detail::_interpreter::get().s_python_empty_tuple, gca_kwargs);
 
-  if (!axis) throw std::runtime_error("No axis");
+  if (!axis) {
+    PyErr_Print();
+    throw std::runtime_error("No axis");
+  }
   Py_INCREF(axis);
 
   Py_DECREF(gca);
@@ -728,16 +740,24 @@ void plot3(const std::vector<Numeric> &x,
   PyObject *gca_kwargs = PyDict_New();
   PyDict_SetItemString(gca_kwargs, "projection", PyString_FromString("3d"));
 
-  PyObject *gca = PyObject_GetAttrString(fig, "gca");
-  if (!gca) throw std::runtime_error("No gca");
-  Py_INCREF(gca);
-  PyObject *axis = PyObject_Call(
-      gca, detail::_interpreter::get().s_python_empty_tuple, gca_kwargs);
+  PyObject *axis = nullptr;
+  PyObject *axes = PyObject_GetAttrString(fig, "axes");
+  if (axes && PyList_Check(axes) && PyList_Size(axes) > 0) {
+    axis = PyList_GetItem(axes, PyList_Size(axes) - 1);
+    Py_INCREF(axis);
+  } else {
+    PyObject *gca = PyObject_GetAttrString(fig, "add_subplot");
+    if (!gca) throw std::runtime_error("No add_subplot");
+    axis = PyObject_Call(
+        gca, detail::_interpreter::get().s_python_empty_tuple, gca_kwargs);
+    Py_DECREF(gca);
+  }
+  Py_XDECREF(axes);
 
-  if (!axis) throw std::runtime_error("No axis");
-  Py_INCREF(axis);
-
-  Py_DECREF(gca);
+  if (!axis) {
+    PyErr_Print();
+    throw std::runtime_error("No axis");
+  }
   Py_DECREF(gca_kwargs);
 
   PyObject *plot3 = PyObject_GetAttrString(axis, "plot");
@@ -1131,16 +1151,24 @@ bool scatter(const std::vector<NumericX>& x,
   PyObject *gca_kwargs = PyDict_New();
   PyDict_SetItemString(gca_kwargs, "projection", PyString_FromString("3d"));
 
-  PyObject *gca = PyObject_GetAttrString(fig, "gca");
-  if (!gca) throw std::runtime_error("No gca");
-  Py_INCREF(gca);
-  PyObject *axis = PyObject_Call(
-      gca, detail::_interpreter::get().s_python_empty_tuple, gca_kwargs);
+  PyObject *axis = nullptr;
+  PyObject *axes = PyObject_GetAttrString(fig, "axes");
+  if (axes && PyList_Check(axes) && PyList_Size(axes) > 0) {
+    axis = PyList_GetItem(axes, PyList_Size(axes) - 1);
+    Py_INCREF(axis);
+  } else {
+    PyObject *gca = PyObject_GetAttrString(fig, "add_subplot");
+    if (!gca) throw std::runtime_error("No add_subplot");
+    axis = PyObject_Call(
+        gca, detail::_interpreter::get().s_python_empty_tuple, gca_kwargs);
+    Py_DECREF(gca);
+  }
+  Py_XDECREF(axes);
 
-  if (!axis) throw std::runtime_error("No axis");
-  Py_INCREF(axis);
-
-  Py_DECREF(gca);
+  if (!axis) {
+    PyErr_Print();
+    throw std::runtime_error("No axis");
+  }
   Py_DECREF(gca_kwargs);
 
   PyObject *plot3 = PyObject_GetAttrString(axis, "scatter");
@@ -2257,12 +2285,15 @@ inline void subplot(long nrows, long ncols, long plot_number)
 
     // construct positional args
     PyObject* args = PyTuple_New(3);
-    PyTuple_SetItem(args, 0, PyFloat_FromDouble(nrows));
-    PyTuple_SetItem(args, 1, PyFloat_FromDouble(ncols));
-    PyTuple_SetItem(args, 2, PyFloat_FromDouble(plot_number));
+    PyTuple_SetItem(args, 0, PyLong_FromLong(nrows));
+    PyTuple_SetItem(args, 1, PyLong_FromLong(ncols));
+    PyTuple_SetItem(args, 2, PyLong_FromLong(plot_number));
 
     PyObject* res = PyObject_CallObject(detail::_interpreter::get().s_python_function_subplot, args);
-    if(!res) throw std::runtime_error("Call to subplot() failed.");
+    if(!res) {
+      PyErr_Print();
+      throw std::runtime_error("Call to subplot() failed.");
+    }
 
     Py_DECREF(args);
     Py_DECREF(res);

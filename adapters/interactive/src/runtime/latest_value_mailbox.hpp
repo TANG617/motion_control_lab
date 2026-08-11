@@ -3,6 +3,7 @@
 #include <array>
 #include <atomic>
 #include <cstddef>
+#include <cstdint>
 
 namespace motion_control_lab
 {
@@ -19,7 +20,7 @@ public:
   explicit LatestValueMailbox(const T & initial_value)
   {
     for (auto & slot : slots_) {
-      slot.value = initial_value;
+      slot = initial_value;
     }
   }
 
@@ -28,44 +29,34 @@ public:
 
   void publish(const T & value)
   {
-    const int current = published_.load(std::memory_order_acquire);
-    for (int index = 0; index < static_cast<int>(slots_.size()); ++index) {
-      Slot & slot = slots_[static_cast<std::size_t>(index)];
-      if (index != current && slot.readers.load(std::memory_order_acquire) == 0) {
-        slot.value = value;
-        published_.store(index, std::memory_order_release);
-        return;
-      }
-    }
+    slots_[back_index_] = value;
+    const std::uint32_t previous = middle_.exchange(
+      static_cast<std::uint32_t>(back_index_) | kDirty,
+      std::memory_order_acq_rel);
+    back_index_ = static_cast<std::size_t>(previous & kIndexMask);
   }
 
   bool readLatest(T & value) const
   {
-    for (;;) {
-      const int selected = published_.load(std::memory_order_acquire);
-      if (selected < 0) {
-        return false;
-      }
-      Slot & slot = slots_[static_cast<std::size_t>(selected)];
-      slot.readers.fetch_add(1, std::memory_order_acq_rel);
-      if (published_.load(std::memory_order_acquire) == selected) {
-        value = slot.value;
-        slot.readers.fetch_sub(1, std::memory_order_release);
-        return true;
-      }
-      slot.readers.fetch_sub(1, std::memory_order_release);
+    if ((middle_.load(std::memory_order_acquire) & kDirty) == 0) {
+      return false;
     }
+    const std::uint32_t previous = middle_.exchange(
+      static_cast<std::uint32_t>(front_index_),
+      std::memory_order_acq_rel);
+    front_index_ = static_cast<std::size_t>(previous & kIndexMask);
+    value = slots_[front_index_];
+    return true;
   }
 
 private:
-  struct Slot
-  {
-    T value{};
-    mutable std::atomic<unsigned int> readers{0};
-  };
+  static constexpr std::uint32_t kDirty = 1U << 31U;
+  static constexpr std::uint32_t kIndexMask = 0x3U;
 
-  mutable std::array<Slot, 3> slots_;
-  std::atomic<int> published_{-1};
+  std::array<T, 3> slots_;
+  std::size_t back_index_{0};
+  mutable std::size_t front_index_{1};
+  mutable std::atomic<std::uint32_t> middle_{2};
 };
 
 }  // namespace motion_control_lab

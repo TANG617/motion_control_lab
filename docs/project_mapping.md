@@ -14,6 +14,7 @@ planned。
 | Experiment executor | 当前为 `e01_placo_smoke`；canonical timeline 驱动的通用调度 CLI planned |
 | Execution adapter | `adapters/execution/` 中的 append-only artifact store、manifest writer 与通用 dependency provenance |
 | MCC interactive apps | `apps/single_arm_ik/`、`apps/dual_arm_ik/` 使用 `RedOnly`；`apps/grouped_dual_arm_ik/` 固定使用 Red/Yellow/Green |
+| Cartesian planning preview | `apps/cartesian_planning/` 读取版本化 JSON，调用 Core MoveLine planner，输出 CSV/PNG 并循环发布 Foxglove；不加载 robot model 或调用 IK |
 | Interactive support | `adapters/interactive/` 提供 CLI、TUI、wall-clock scheduler、SPSC latest mailbox、periodic worker/Fault 和 Viz helpers |
 | Solver A/B runner | planned；需要时由正式 Experiment 的 canonical timeline 单独设计，不预留交互 backend 接口 |
 | Interactive preview | 独立 app topology + 共享 interactive support；wall-clock/TUI 开发路径，不是正式 Experiment runner |
@@ -24,7 +25,7 @@ planned。
 | Artifact root | `experiments/<experiment>/runs/<run-id>/` |
 | Result promotion | 人工复核后写入 `experiments/<experiment>/results/`；promotion command planned |
 | Analysis collector | planned |
-| Static renderer | 正式 artifact-only renderer planned；现有 `motion_control_lab_plot_core_planning` 仅为可选 API smoke app |
+| Static renderer | 正式 artifact-only renderer planned；`mcl_cartesian_planning` 只渲染本次开发预览结果，现有 `motion_control_lab_plot_core_planning` 仍为可选 API smoke app |
 | Publisher / Release index | planned |
 
 ## 当前数据流

@@ -57,10 +57,12 @@ int run(int argc, char ** argv)
   mcl::requireOk(mcc::RobotModel::load(model_description, model), "Failed to load robot model");
 
   mcc::KinematicsSolverConfig solver_config;
+  solver_config.mode = mcc::IkSolveMode::ServoStep;
+  solver_config.servo_period = 1.0 / options.rate_hz;
   solver_config.joint_limit_policy = mcc::KinematicsJointLimitPolicy::ExplicitRequirements;
   solver_config.qp.backend = mcc::QpBackend::ProxQp;
   solver_config.qp.regularization = 1.0e-8;
-  solver_config.maximum_iterations = 80;
+  solver_config.maximum_iterations = 1;
   solver_config.soft_solve_time_budget_ms = 100.0;
   solver_config.position_tolerance_m = 1.0e-4;
   solver_config.orientation_tolerance_rad = 1.0e-4;
@@ -72,7 +74,7 @@ int run(int argc, char ** argv)
   grouped_config.red = solver_config;
   mcc::GroupedKinematicsSolverBuilder builder;
   mcl::requireOk(
-    builder.configure(model, joint_names, grouped_config, mcl::toEigen(positions)),
+    builder.configure(model, joint_names, grouped_config),
     "Failed to configure IK builder");
 
   mcc::PositionTaskConfig position_task_config;
@@ -103,7 +105,6 @@ int run(int argc, char ** argv)
     "Failed to register joint-position limits");
 
   mcc::JointVelocityLimitConfig velocity_limit_config;
-  velocity_limit_config.mode = mcc::JointVelocityLimitMode::VelocityOnly;
   velocity_limit_config.enforcement = mcc::HardEnforcement{};
   mcc::GroupedJointVelocityLimitHandle velocity_limits;
   mcl::requireOk(
@@ -185,8 +186,6 @@ int run(int argc, char ** argv)
         request.captured_state.sequence = ++solve_sequence;
         request.captured_state.monotonic_time_nanoseconds =
           std::max<std::int64_t>(1, schedule->sample_time_ns);
-        request.dt = schedule->dt;
-        request.seed_positions = request.captured_state.state.joint_positions;
         request.position_targets.push_back(
           {position_task, target.target_pose.translation(), true});
         request.orientation_targets.push_back(

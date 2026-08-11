@@ -140,12 +140,54 @@ Green、Yellow、Red 启动前会顺序预热一次；正式 run 中三者完全
 `MCL_BUILD_MCC_PLOTS=ON` 显式启用；它需要当前 Python 环境包含 NumPy 和
 matplotlib。
 
+## 笛卡尔 MoveLine 规划预览
+
+`mcl_cartesian_planning` 是独立于 IK app 的 JSON 驱动预览入口。它只调用
+`motion_control::core::CartesianMoveLinePlanner`，不读取 URDF、不创建 RobotModel，也不调用
+FK/IK。多个 `segments` 表示同一次请求中的并行同步 frame move，不是连续路点。
+
+先安装启用了 Foxglove 的 `motion_control_viz >= 0.3` 和 `motion_control_core`，然后单独构建：
+
+```bash
+cmake -S . -B build/cartesian-planning \
+  -DMCL_BUILD_SINGLE_ARM_IK=OFF \
+  -DMCL_BUILD_DUAL_ARM_IK=OFF \
+  -DMCL_BUILD_GROUPED_DUAL_ARM_IK=OFF \
+  -DMCL_BUILD_CARTESIAN_PLANNING=ON \
+  -DCMAKE_PREFIX_PATH="/path/to/mcc-install;/path/to/eiq-install;/path/to/mcv-install"
+cmake --build build/cartesian-planning --target mcl_cartesian_planning -j8
+```
+
+用仓库内的双 frame 示例生成完整 CSV、3D 路径图和运动曲线，并循环发布到 Foxglove：
+
+```bash
+./build/cartesian-planning/mcl_cartesian_planning \
+  --request apps/cartesian_planning/example_request.json \
+  --output-dir build/cartesian-planning/output
+```
+
+Foxglove 连接 `ws://127.0.0.1:8765`，场景位于 `/mc/cartesian/scene`，原始 pose 位于
+`/mc/cartesian/pose/<frame_name>`。默认按规划时间循环播放至 Ctrl-C；`--once` 只播放一次，
+`--playback-rate` 只改变展示速度。仅生成离线结果时使用：
+
+```bash
+./build/cartesian-planning/mcl_cartesian_planning \
+  --request apps/cartesian_planning/example_request.json \
+  --output-dir build/cartesian-planning/output \
+  --no-live --force
+```
+
+请求合同见 `apps/cartesian_planning/request.schema.json`。位姿 quaternion 固定为 `xyzw`；
+省略 `current_twist` 和 `current_acceleration` 时按零值处理。当前入口只支持 Core 已有的
+MoveLine，不增加 circle、spline、blend 或 waypoint 拼接语义。
+
 ## 目录
 
 ```text
 adapters/execution/       通用 artifact store、manifest 与 SHA-256
 adapters/interactive/     共享 CLI、TUI、wall-clock scheduler 和 Viz helpers
 apps/common/              仅共享无 topology 决策的 IK 工具和 R1 被动配置
+apps/cartesian_planning/  JSON 驱动的纯 Cartesian MoveLine 规划、渲染和 Foxglove 回放
 apps/<entry>/             直接拥有 MCC topology、solve/worker loop、main、CMake 和 help test
 contracts/                definition、manifest、metric 合同
 data/raw/                 原始数据占位；不得静默改写

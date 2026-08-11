@@ -220,7 +220,6 @@ void addExplicitLimits(
     "Failed to register grouped joint-position limits");
 
   mcc::JointVelocityLimitConfig velocity;
-  velocity.mode = mcc::JointVelocityLimitMode::VelocityOnly;
   velocity.enforcement = mcc::HardEnforcement{};
   mcc::GroupedJointVelocityLimitHandle velocity_handle;
   requireOk(
@@ -354,13 +353,16 @@ int run(int argc, char ** argv)
   mcc::GroupedKinematicsSolverConfig solver_config;
   solver_config.profile = mcc::GroupedSolverProfile::RedYellowGreen;
   solver_config.red.mode = mcc::IkSolveMode::ServoStep;
+  solver_config.red.servo_period = 1.0 / options.red_rate_hz;
   solver_config.red.maximum_iterations = 1;
   solver_config.red.soft_solve_time_budget_ms = 1000.0 / options.red_rate_hz;
-  solver_config.yellow.mode = mcc::IkSolveMode::TargetSolve;
-  solver_config.yellow.maximum_iterations = 80;
+  solver_config.yellow.mode = mcc::IkSolveMode::ServoStep;
+  solver_config.yellow.servo_period = 1.0 / options.yellow_rate_hz;
+  solver_config.yellow.maximum_iterations = 1;
   solver_config.yellow.soft_solve_time_budget_ms = 1000.0 / options.yellow_rate_hz;
-  solver_config.green.mode = mcc::IkSolveMode::TargetSolve;
-  solver_config.green.maximum_iterations = 80;
+  solver_config.green.mode = mcc::IkSolveMode::ServoStep;
+  solver_config.green.servo_period = 1.0 / options.green_rate_hz;
+  solver_config.green.maximum_iterations = 1;
   solver_config.green.soft_solve_time_budget_ms = 1000.0 / options.green_rate_hz;
   for (auto * config : {&solver_config.red, &solver_config.yellow, &solver_config.green}) {
     config->joint_limit_policy = mcc::KinematicsJointLimitPolicy::ExplicitRequirements;
@@ -374,7 +376,7 @@ int run(int argc, char ** argv)
 
   mcc::GroupedKinematicsSolverBuilder builder;
   requireOk(
-    builder.configure(model, joint_names, solver_config, initial_positions),
+    builder.configure(model, joint_names, solver_config),
     "Failed to configure grouped IK builder");
   GroupedHandles handles;
   handles.red = addCartesianTasks(
@@ -463,9 +465,6 @@ int run(int argc, char ** argv)
     mcc::GroupedInverseKinematicsRequest green;
     green.reference_frame_name = robot.base_frame;
     green.captured_state = capturedState(initial_state);
-    green.dt = 1.0 / options.green_rate_hz;
-    green.posture_targets.push_back(
-      {handles.green_posture, initial_positions, true});
     auto status = solver.solveInverseKinematics(
       mcc::SolverGroup::Green, green, solution, diagnostics);
     if (!operationSucceeded(status) || !diagnostics.attempt_accepted) {
@@ -476,7 +475,6 @@ int run(int argc, char ** argv)
     mcc::GroupedInverseKinematicsRequest yellow;
     initializeYellowRequest(handles, robot.base_frame, yellow);
     yellow.captured_state = capturedState(initial_state);
-    yellow.dt = 1.0 / options.yellow_rate_hz;
     addYellowTargets(
       handles, initial_target, left_elbow_target, right_elbow_target, yellow);
     status = solver.solveInverseKinematics(
@@ -489,7 +487,6 @@ int run(int argc, char ** argv)
     mcc::GroupedInverseKinematicsRequest red;
     initializeCartesianRequest(handles.red, robot.base_frame, red);
     red.captured_state = capturedState(initial_state);
-    red.dt = 1.0 / options.red_rate_hz;
     addCartesianTargets(handles.red, initial_target, red);
     status = solver.solveInverseKinematics(
       mcc::SolverGroup::Red, red, solution, diagnostics);
@@ -561,8 +558,6 @@ int run(int argc, char ** argv)
       StateSnapshot state = initial_state;
       mcc::GroupedInverseKinematicsRequest request;
       request.reference_frame_name = robot.base_frame;
-      request.posture_targets.push_back(
-        {handles.green_posture, initial_positions, true});
       mcc::GroupedInverseKinematicsSolution solution;
       mcc::GroupedInverseKinematicsDiagnostics diagnostics;
       mcl::runPeriodicWorker(
@@ -570,10 +565,9 @@ int run(int argc, char ** argv)
         stop_controller,
         fault,
         green_worker_diagnostics,
-        [&](double dt, std::int64_t) {
+        [&](double, std::int64_t) {
           state_to_green.readLatest(state);
           request.captured_state = capturedState(state);
-          request.dt = dt;
           const auto status = solver.solveInverseKinematics(
             mcc::SolverGroup::Green, request, solution, diagnostics);
           return mcl::WorkerIterationResult{
@@ -597,11 +591,10 @@ int run(int argc, char ** argv)
         stop_controller,
         fault,
         yellow_worker_diagnostics,
-        [&](double dt, std::int64_t) {
+        [&](double, std::int64_t) {
           state_to_yellow.readLatest(state);
           target_to_yellow.readLatest(target);
           request.captured_state = capturedState(state);
-          request.dt = dt;
           addYellowTargets(
             handles, target, left_elbow_target, right_elbow_target, request);
           const auto status = solver.solveInverseKinematics(
@@ -628,10 +621,9 @@ int run(int argc, char ** argv)
         stop_controller,
         fault,
         red_worker_diagnostics,
-        [&](double dt, std::int64_t sample_time_ns) {
+        [&](double, std::int64_t sample_time_ns) {
           target_to_red.readLatest(target);
           request.captured_state = capturedState(state);
-          request.dt = dt;
           addCartesianTargets(handles.red, target, request);
           const auto status = solver.solveInverseKinematics(
             mcc::SolverGroup::Red, request, solution, diagnostics);
