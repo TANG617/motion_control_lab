@@ -8,11 +8,16 @@ planned。
 | 抽象角色 | 当前实现 |
 |---|---|
 | Raw data | `data/raw/`；当前无业务 MCAP |
-| Canonical data | `data/canonical/`；MCAP→CSV schema 与 normalizer planned |
+| Canonical data | `data/canonical/`；MCAP/CSV 现在经相同 typed contracts 与 timeline 消费，正式 dataset promotion 仍 planned |
 | Definition format | `contracts/definitions/experiment.v1.schema.json` + 每个实验的 `definition.json` |
 | Definition validator | `tests/validate_contracts.py definition` |
-| Experiment executor | 当前为 `e01_placo_smoke`；canonical timeline 驱动的通用调度 CLI planned |
+| Experiment executor | `e01_placo_smoke`；`mcl_dual_arm_replay_ik` 提供独立的双臂 canonical replay 纵向切片 |
 | Execution adapter | `adapters/execution/` 中的 append-only artifact store、manifest writer 与通用 dependency provenance |
+| Physical source | `adapters/data/source/` 中平级的 `McapSource` / `CsvSource`；只处理物理格式 |
+| Typed decoder | `adapters/data/decoder/` 中的 registry、ROS2 CDR Pose/JointState 和 CSV mapping decoder |
+| Temporal projector | `adapters/data/temporal/` 中的 timestamp selection、严格时间校验、immutable Timeline、projection 与 ReplayClock |
+| Semantic projector | `adapters/data/projection/dual_arm_timeline.*`；只消费两个 `TypedStream<StampedPose>` |
+| Replay plan | `mcl_replay_plan`；预加载输入并输出 timeline trace/manifest，不运行 solver |
 | MCC interactive apps | `apps/single_arm_ik/`、`apps/dual_arm_ik/` 使用 `RedOnly`；`apps/grouped_dual_arm_ik/` 固定使用 Red/Yellow/Green |
 | Cartesian planning preview | `apps/cartesian_planning/` 读取版本化 JSON，调用 Core MoveLine planner，输出 CSV/PNG 并循环发布 Foxglove；不加载 robot model 或调用 IK |
 | Interactive support | `adapters/interactive/` 提供 CLI、TUI、wall-clock scheduler、SPSC latest mailbox、periodic worker/Fault 和 Viz helpers |
@@ -84,3 +89,33 @@ rejected attempt 或 worker exception。
 只共享参数解析、终端输入、wall-clock 调度、frame 映射和 sink 创建。正式实验的 `dt`
 必须来自 canonical 时间轴，不能复用交互 scheduler；未来若实现 PlaCo/MCC A/B，应从
 正式 Experiment 的真实需求重新设计，而不是让交互入口提前承担 backend-neutral 合同。
+
+## Canonical replay 数据流
+
+```text
+MCAP channel/schema/payload ----> ROS2 CDR decoder --\
+                                                    +--> TypedStream<StampedPose>
+CSV header/row -------------> configured CSV decoder-/              |
+                                                                    v
+                                             original timestamp validation
+                                                                    |
+                                                                    v
+                                      exact/nearest DualArmTimeline pairing
+                                                                    |
+                                                                    v
+                                         preserve/fixed-period one-to-one retime
+                                                                    |
+                                                                    v
+                                    ReplayClock -> optional headless MCC IK
+```
+
+MCAP 与 CSV 是同层 source backend；semantic projector 不查看 physical format。时间顺序
+固定为：选择 logical timestamp、严格校验原 stream、在原时间上配对、形成 semantic
+frame，最后 projection。`fixed-period` 仅将第 `i` 帧标为 `i * period_ns`，不执行
+interpolation/resampling，也不会补齐缺失的左/右样本；unmatched 事实在 retime 前已经
+成为 error 或 diagnostics。
+
+`mcl_replay_plan` 与 `mcl_dual_arm_replay_ik` 在启动 clock 前完整读取和解码输入。
+后者的 realtime 路径使用 absolute monotonic deadline 并记录 lateness/miss；batch 不
+sleep。现有 interactive preview 使用 TUI/Viz 和 interactive scheduler，服务人工调试，
+不是 canonical replay 或证据执行器。E01 的合成 PlaCo smoke 语义和输入保持不变。

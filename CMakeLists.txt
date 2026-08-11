@@ -39,6 +39,11 @@ option(
   "Build the JSON-driven Cartesian MoveLine visualization application"
   OFF
 )
+option(
+  MCL_BUILD_DUAL_ARM_REPLAY_IK
+  "Build the canonical, headless dual-arm replay IK runner"
+  ON
+)
 
 set(MCL_BUILD_ANY_INTERACTIVE_IK OFF)
 if(MCL_BUILD_SINGLE_ARM_IK OR MCL_BUILD_DUAL_ARM_IK OR MCL_BUILD_GROUPED_DUAL_ARM_IK)
@@ -54,13 +59,55 @@ list(PREPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
 include(cmake/Dependencies.cmake)
 
-if(MCL_BUILD_ANY_INTERACTIVE_IK OR MCL_BUILD_MCC_PLOTS OR MCL_BUILD_CARTESIAN_PLANNING)
+if(MCL_BUILD_ANY_INTERACTIVE_IK OR MCL_BUILD_MCC_PLOTS OR MCL_BUILD_CARTESIAN_PLANNING OR
+   MCL_BUILD_DUAL_ARM_REPLAY_IK)
   find_package(motion_control_core CONFIG REQUIRED)
 endif()
 
 if(MCL_BUILD_ANY_INTERACTIVE_IK OR MCL_BUILD_CARTESIAN_PLANNING)
   find_package(motion_control_viz 0.3 CONFIG REQUIRED)
 endif()
+
+add_library(
+  mcl_mcap
+  adapters/data/source/mcap_implementation.cpp
+)
+add_library(motion_control_lab::mcap ALIAS mcl_mcap)
+target_include_directories(
+  mcl_mcap
+  SYSTEM PUBLIC "${MCAP_CPP_SOURCE_DIR}/cpp/mcap/include"
+)
+target_compile_definitions(mcl_mcap PUBLIC MCAP_COMPRESSION_NO_LZ4)
+target_link_libraries(mcl_mcap PUBLIC ${MCL_ZSTD_TARGET})
+
+add_library(
+  mcl_data
+  contracts/data/sample_time.cpp
+  adapters/data/source/data_source.cpp
+  adapters/data/source/mcap_source.cpp
+  adapters/data/source/csv_source.cpp
+  adapters/data/decoder/decoder_registry.cpp
+  adapters/data/decoder/cdr_reader.cpp
+  adapters/data/decoder/decoder_utils.cpp
+  adapters/data/decoder/ros2_pose_stamped_cdr_decoder.cpp
+  adapters/data/decoder/ros2_joint_state_cdr_decoder.cpp
+  adapters/data/decoder/csv_pose_decoder.cpp
+  adapters/data/decoder/csv_joint_state_decoder.cpp
+  adapters/data/temporal/timestamp_policy.cpp
+  adapters/data/temporal/timestamp_projector.cpp
+  adapters/data/temporal/stream_alignment.cpp
+  adapters/data/temporal/replay_clock.cpp
+  adapters/data/projection/dual_arm_timeline.cpp
+)
+add_library(motion_control_lab::data ALIAS mcl_data)
+target_include_directories(
+  mcl_data
+  PUBLIC "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>"
+)
+target_link_libraries(
+  mcl_data
+  PUBLIC Eigen3::Eigen motion_control_lab::mcap Threads::Threads
+)
 
 if(MCL_BUILD_ANY_INTERACTIVE_IK)
 
@@ -189,6 +236,25 @@ target_include_directories(
 )
 target_link_libraries(mcl_run_artifacts PUBLIC jsoncpp_lib)
 
+add_library(
+  mcl_replay_support
+  apps/dual_arm_replay_ik/replay_support.cpp
+)
+add_library(motion_control_lab::replay_support ALIAS mcl_replay_support)
+target_include_directories(
+  mcl_replay_support
+  PUBLIC "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>"
+)
+target_link_libraries(
+  mcl_replay_support
+  PUBLIC motion_control_lab::data motion_control_lab::run_artifacts jsoncpp_lib
+)
+
+add_subdirectory(apps/replay_plan)
+if(MCL_BUILD_DUAL_ARM_REPLAY_IK)
+  add_subdirectory(apps/dual_arm_replay_ik)
+endif()
+
 set(MCL_SOURCE_REVISION "unborn")
 set(MCL_SOURCE_DIRTY true)
 execute_process(
@@ -293,6 +359,25 @@ install(
 
 if(BUILD_TESTING)
   find_package(Python3 REQUIRED COMPONENTS Interpreter)
+
+  add_executable(
+    test_data_pipeline
+    tests/data_pipeline.cpp
+  )
+  target_link_libraries(
+    test_data_pipeline
+    PRIVATE motion_control_lab::data
+  )
+  add_test(NAME data.pipeline COMMAND test_data_pipeline)
+
+  add_test(
+    NAME apps.mcl_replay_plan_invalid_arguments
+    COMMAND mcl_replay_plan --timestamp-policy not-a-policy
+  )
+  set_tests_properties(
+    apps.mcl_replay_plan_invalid_arguments
+    PROPERTIES WILL_FAIL TRUE
+  )
 
   if(MCL_BUILD_ANY_INTERACTIVE_IK)
     add_executable(

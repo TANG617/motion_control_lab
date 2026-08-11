@@ -43,6 +43,97 @@ cmake --build --preset dev --target e01_placo_smoke -j8
 ctest --preset dev
 ```
 
+## ROS-free 数据源与 canonical replay
+
+Lab 的 replay 输入链分为五个单向依赖的层次：
+
+```text
+McapSource / CsvSource
+        -> DecoderRegistry -> TypedStream<StampedPose / StampedJointState>
+        -> 原始时间校验与 stream alignment
+        -> DualArmTimeline semantic projector
+        -> preserve / fixed-period timestamp projection
+        -> ReplayClock -> headless IK runner
+```
+
+- `adapters/data/source/` 只理解 MCAP 的 channel/schema/chunk/index/zstd 和 CSV 的
+  header/row；source 不解码 ROS message，也不知道 dual-arm 或 IK。
+- `adapters/data/decoder/` 负责 ROS2 CDR 或可配置 CSV 列到 typed sample 的转换。
+  CDR 路径不依赖 ROS2、rclcpp、rosbag2 或生产消息包；typed sample 分别保留
+  header、log、publish 和 configured-column 时间 provenance。
+- `adapters/data/temporal/` 只处理 typed stream 的时间选择、严格单调校验和最终
+  projection；不存在静默 timestamp fallback。
+- `adapters/data/projection/` 在原始 logical timestamp 上完成 exact/nearest 双臂配对，
+  不感知输入来自 MCAP 还是 CSV。
+- `ReplayClock` 的 realtime deadline 是
+  `run_start + projected_time / playback_rate`，使用 monotonic absolute deadline；
+  batch 模式不 sleep。
+
+`fixed-period` 是一对一 retime：第 `i` 个已配对 semantic frame 的 projected time 为
+`i * period_ns`。它不插值、不生成或丢弃 sample、不改变 frame 顺序，也不改写 sample
+内部任何原始 timestamp。左右流必须先按原始 logical timestamp 完成配对，之后才能
+retime；真正的 resampling/interpolation 若需要，应作为未来独立 transform。
+
+默认构建包含不依赖 Core/Viz 的 inspect/replay-plan 入口：
+
+```bash
+./build/dev/mcl_replay_plan \
+  --input /path/to/input.mcap \
+  --input-format mcap \
+  --left-stream /mc/ik/target/left_pose \
+  --right-stream /mc/ik/target/right_pose \
+  --timestamp-source header_stamp \
+  --timestamp-policy fixed-period \
+  --period-ms 10 \
+  --execution-mode batch \
+  --output-dir /tmp/mcl-replay-plan
+```
+
+它会在运行时钟开始前完整读取、解压、解码和投影输入，并写出 `trace.csv` 与带输入
+SHA-256、decoder、时间/配对策略和统计的 `manifest.json`。
+
+CSV 使用同一组上层参数，将 `--input-format` 改为 `csv`。未提供 `--csv-mapping` 时，
+canonical dual-arm CSV 使用 `timestamp_ns` 以及 `left_frame_id,left_x,...,left_qw`、
+`right_frame_id,right_x,...,right_qw`。自定义列使用 JSON：
+
+```json
+{
+  "schema_version": "mcl.csv_mapping.v1",
+  "streams": {
+    "left": {
+      "timestamp_column": "time_ns",
+      "timestamp_target": "header_stamp",
+      "frame_id_column": "reference_frame",
+      "columns": {"x":"lx","y":"ly","z":"lz","qx":"lqx","qy":"lqy","qz":"lqz","qw":"lqw"}
+    },
+    "right": {
+      "timestamp_column": "time_ns",
+      "timestamp_target": "header_stamp",
+      "frame_id_column": "reference_frame",
+      "columns": {"x":"rx","y":"ry","z":"rz","qx":"rqx","qy":"rqy","qz":"rqz","qw":"rqw"}
+    }
+  }
+}
+```
+
+可选的 headless IK 纵向切片只依赖安装后的 `motion_control_core`，不依赖 Viz/TUI：
+
+```bash
+cmake -S . -B build/replay-ik \
+  -DMCL_BUILD_SINGLE_ARM_IK=OFF \
+  -DMCL_BUILD_DUAL_ARM_IK=OFF \
+  -DMCL_BUILD_GROUPED_DUAL_ARM_IK=OFF \
+  -DMCL_BUILD_DUAL_ARM_REPLAY_IK=ON \
+  -DCMAKE_PREFIX_PATH="/path/to/mcc-install;/path/to/eiq-install"
+cmake --build build/replay-ik --target mcl_dual_arm_replay_ik -j8
+```
+
+`mcl_dual_arm_replay_ik` 支持 `batch|realtime`、`previous_solution|fixed_initial_state`
+以及独立的 `--servo-period-ms` 控制 horizon。servo period 不从播放 rate 推导，并写入
+manifest。macOS 上的 realtime 模式只记录 lateness/deadline miss，不声称 hard real-time。
+该 runner 是 canonical evidence 路径；现有 `mcl_dual_arm_ik` 仍是 TUI/Viz 开发预览，
+继续使用 wall-clock interactive scheduler，二者不共享调度语义。
+
 手动运行 E01，并把证据写入 build tree：
 
 ```bash
@@ -185,9 +276,12 @@ MoveLine，不增加 circle、spline、blend 或 waypoint 拼接语义。
 
 ```text
 adapters/execution/       通用 artifact store、manifest 与 SHA-256
+adapters/data/            ROS-free source、decoder、temporal/semantic projection 与 ReplayClock
 adapters/interactive/     共享 CLI、TUI、wall-clock scheduler 和 Viz helpers
 apps/common/              仅共享无 topology 决策的 IK 工具和 R1 被动配置
 apps/cartesian_planning/  JSON 驱动的纯 Cartesian MoveLine 规划、渲染和 Foxglove 回放
+apps/replay_plan/         不运行 solver 的 canonical timeline inspect/artifact 入口
+apps/dual_arm_replay_ik/  可选的 headless MCC 双臂 canonical replay runner
 apps/<entry>/             直接拥有 MCC topology、solve/worker loop、main、CMake 和 help test
 contracts/                definition、manifest、metric 合同
 data/raw/                 原始数据占位；不得静默改写
