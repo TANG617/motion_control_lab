@@ -23,6 +23,11 @@ FetchContent_Declare(
   SYSTEM
 )
 FetchContent_MakeAvailable(jsoncpp)
+if(TARGET jsoncpp_static)
+  # PlaCo links jsoncpp into its shared library, so the fetched static archive
+  # must contain position-independent objects.
+  set_target_properties(jsoncpp_static PROPERTIES POSITION_INDEPENDENT_CODE ON)
+endif()
 if(NOT TARGET jsoncpp_lib AND TARGET jsoncpp_static)
   add_library(jsoncpp_lib ALIAS jsoncpp_static)
 endif()
