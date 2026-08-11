@@ -1,0 +1,8 @@
+{
+  "schema_version": "external_input.v1",
+  "input_id": "motion_control_psi_r1_20260801_101533_0",
+  "kind": "raw_mcap",
+  "workspace_locator": "fixtures/raw/motion_control-psi_r1-20260801-101533_0.mcap",
+  "sha256": "a50166c3a29afda6cae5d7df214781f74544f26b7f538ee3139adb3b0c8d6efb",
+  "size_bytes": 70809489
+}

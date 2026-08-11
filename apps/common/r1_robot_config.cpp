@@ -1,5 +1,7 @@
 #include "r1_robot_config.hpp"
 
+#include "contracts/visualization/foxglove_ik_v1.hpp"
+
 namespace motion_control_lab
 {
 
@@ -41,6 +43,17 @@ const R1RobotConfig & r1RobotConfig()
   return config;
 }
 
+ArmVisualizationChannels foxgloveIkVisualizationChannels()
+{
+  namespace contract = contracts::foxglove_ik_v1;
+  return {
+    contract::kJointStates,
+    contract::kLeftTargetPose,
+    contract::kRightTargetPose,
+    contract::kLeftEndEffectorPose,
+    contract::kRightEndEffectorPose};
+}
+
 const std::string & frameForSide(
   const R1RobotConfig & robot,
   ArmSide side)
@@ -58,8 +71,10 @@ InteractiveIkPresentation makeArmPresentation(
   presentation.base_frame_id = robot.base_frame;
   presentation.joint_state_channel = channels.joint_states;
   presentation.arms = {
-    {ArmSide::Left, channels.left_target, robot.left_arm_joint_indices},
-    {ArmSide::Right, channels.right_target, robot.right_arm_joint_indices}};
+    {ArmSide::Left, channels.left_target, channels.left_forward_kinematics,
+      robot.left_arm_joint_indices},
+    {ArmSide::Right, channels.right_target, channels.right_forward_kinematics,
+      robot.right_arm_joint_indices}};
   return presentation;
 }
 

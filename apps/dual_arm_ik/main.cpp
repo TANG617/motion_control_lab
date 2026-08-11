@@ -30,9 +30,6 @@ namespace mcl = motion_control_lab;
 
 constexpr const char * kProgramId = "mcl_dual_arm_ik";
 constexpr const char * kTitle = "Motion Control Dual-arm IK";
-constexpr const char * kJointStateChannel = "/mc/ik/joint_states";
-constexpr const char * kLeftTargetChannel = "/mc/ik/target/left_pose";
-constexpr const char * kRightTargetChannel = "/mc/ik/target/right_pose";
 
 int run(int argc, char ** argv)
 {
@@ -158,16 +155,17 @@ int run(int argc, char ** argv)
   };
 
   const auto presentation = mcl::makeArmPresentation(
-    robot,
-    {kJointStateChannel, kLeftTargetChannel, kRightTargetChannel});
+    robot, mcl::foxgloveIkVisualizationChannels());
+  const auto initial_left_fk = currentTargetPose(mcl::ArmSide::Left);
+  const auto initial_right_fk = currentTargetPose(mcl::ArmSide::Right);
   mcl::TuiTeleopSource tui(
     options.tui,
     options.rate_hz,
     kTitle,
     presentation,
     {
-      {mcl::ArmSide::Left, currentTargetPose(mcl::ArmSide::Left)},
-      {mcl::ArmSide::Right, currentTargetPose(mcl::ArmSide::Right)}
+      {mcl::ArmSide::Left, initial_left_fk},
+      {mcl::ArmSide::Right, initial_right_fk}
     },
     true);
   auto visualization_sink = mcl::createVisualizationSink(options.visualization, kProgramId);
@@ -179,6 +177,9 @@ int run(int argc, char ** argv)
 
   mcl::IkDebugFrame latest_frame;
   latest_frame.targets = tui.command().targets;
+  latest_frame.forward_kinematics = {
+    {mcl::ArmSide::Left, initial_left_fk},
+    {mcl::ArmSide::Right, initial_right_fk}};
   latest_frame.joint_names = joint_names;
   latest_frame.positions = positions;
   latest_frame.velocities = velocities;
@@ -248,6 +249,13 @@ int run(int argc, char ** argv)
         }
 
         latest_frame.targets = command.targets;
+        latest_frame.forward_kinematics = {
+          {mcl::ArmSide::Left, mcl::requirePose(
+              solution.kinematics_solution.solved_poses,
+              robot.left_end_effector_frame).pose},
+          {mcl::ArmSide::Right, mcl::requirePose(
+              solution.kinematics_solution.solved_poses,
+              robot.right_end_effector_frame).pose}};
         latest_frame.joint_names = joint_names;
         latest_frame.positions = positions;
         latest_frame.velocities = velocities;

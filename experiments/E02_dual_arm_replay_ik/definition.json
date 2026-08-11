@@ -1,0 +1,84 @@
+{
+  "schema_version": "experiment.v1",
+  "experiment_id": "E02",
+  "title": "PSI R1 dual-arm MCAP replay with MCC inverse kinematics",
+  "question": "Can the canonical dual-arm pose streams be replayed from the recorded PSI R1 state through MCC IK without rejected frames?",
+  "hypothesis": "All paired frames are accepted when the first recorded JointState initializes the robot and the recorded TCP targets are converted to end-effector targets.",
+  "independent_factors": [
+    "canonical_replay_input"
+  ],
+  "controlled_factors": {
+    "robot_model_locator": "products/synrobot/modules/common/robot_description/psi_r1/urdf/Psi_R1_rev1.urdf",
+    "robot_model_sha256": "f5f269da4cb8f60855b3d6c614809b0b091ce90205c4edf5df421fe456b9779b",
+    "left_pose_stream": "/mc/ik/target/left_pose",
+    "right_pose_stream": "/mc/ik/target/right_pose",
+    "initial_joint_state_stream": "/mc/ik/joint_states",
+    "timestamp_source": "header_stamp",
+    "pairing_policy": "nearest",
+    "nearest_tolerance_ms": 5.0,
+    "unmatched_policy": "drop_with_diagnostics",
+    "timestamp_projection": "preserve",
+    "state_policy": "previous_solution",
+    "servo_period_ms": 10.0,
+    "tcp_offset_m": {
+      "left": [0.0, 0.0, 0.1],
+      "right": [0.0, 0.0, 0.1]
+    },
+    "visualization_is_observational": true
+  },
+  "allowed_differences": [
+    "execution_mode",
+    "playback_rate",
+    "foxglove_host",
+    "foxglove_port",
+    "visualization_recording"
+  ],
+  "inputs": [
+    {
+      "input_id": "motion_control_psi_r1_20260801_101533_0",
+      "artifact": "inputs/motion_control_psi_r1_20260801_101533_0.json",
+      "required": true
+    }
+  ],
+  "arms": [
+    {
+      "arm_id": "mcc_red_only",
+      "method": "motion_control_core_grouped_inverse_kinematics",
+      "required": true
+    }
+  ],
+  "evaluation_windows": [
+    {
+      "window_id": "full_replay",
+      "description": "Every paired dual-arm frame in the canonical replay timeline."
+    }
+  ],
+  "metrics": {
+    "primary": [
+      "accepted_solve_ratio"
+    ],
+    "secondary": [
+      "paired_frame_count"
+    ],
+    "guardrail": [
+      "rejected_solve_count"
+    ],
+    "diagnostic": [
+      "deadline_miss_count",
+      "maximum_pair_delta_ns",
+      "unmatched_left_count",
+      "unmatched_right_count"
+    ]
+  },
+  "comparisons": [],
+  "failure_policy": {
+    "required_arm_failure_fails_run": true,
+    "preserve_partial_trace": true,
+    "any_rejected_solve_fails_run": true
+  },
+  "artifact_requirements": [
+    "manifest.json",
+    "status.json",
+    "trace.csv"
+  ]
+}

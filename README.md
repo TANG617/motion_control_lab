@@ -16,6 +16,8 @@ Motion Control Lab 是面向机器人遥操作 whole-body IK 的可复现实验�
 `RedOnly` profile；三层双臂入口使用独立 Red/Yellow/Green worker。它们复用 TUI、Viz 和
 wall-clock pacing；算法快照统一映射为
 `motion_control_viz::VisualizationFrame`。
+所有 IK app 的 Foxglove topic 与 FK 一致性要求由
+[Foxglove IK 可视化数据流合同](docs/foxglove_ik_visualization_contract.md)统一定义。
 该路径用于开发调试，不替代由 canonical timeline 驱动的可复现实验执行器。
 MCC builder、task 注册、typed handles、request 组装和状态更新直接位于各入口的
 `main.cpp`，便于逐入口阅读和调试；共享层不定义 solver backend。
@@ -130,9 +132,40 @@ cmake --build build/replay-ik --target mcl_dual_arm_replay_ik -j8
 
 `mcl_dual_arm_replay_ik` 支持 `batch|realtime`、`previous_solution|fixed_initial_state`
 以及独立的 `--servo-period-ms` 控制 horizon。servo period 不从播放 rate 推导，并写入
-manifest。macOS 上的 realtime 模式只记录 lateness/deadline miss，不声称 hard real-time。
+manifest。MCAP 输入默认读取 `/mc/ik/joint_states` 的第一帧，按 joint name 映射为初始
+position（初始 velocity 仍为零）；可用 `--initial-joint-state-stream` 选择其他 JointState
+topic。R1 target stream 的输入语义是 TCP pose；runner 使用左右各自的 `0.1 m` TCP offset
+转换为 end-effector target 后再构造 IK request，并在 manifest 中记录转换。macOS 上的
+realtime 模式只记录 lateness/deadline miss，不声称 hard real-time。
 该 runner 是 canonical evidence 路径；现有 `mcl_dual_arm_ik` 仍是 TUI/Viz 开发预览，
 继续使用 wall-clock interactive scheduler，二者不共享调度语义。
+
+不指定 `--output-dir` 时，runner 会在
+`experiments/E02_dual_arm_replay_ik/runs/` 下创建新的
+`<UTC timestamp>__<definition hash>` 目录。`--output-root` 可以只重定向 run 父目录，
+`--run-id` 可用于可控测试；`--output-dir` 保留为一次性调试的精确目录覆盖。
+
+需要实时可视化时，在已有构建参数上增加：
+
+```bash
+cmake -S . -B build/replay-ik-viz \
+  -DMCL_BUILD_SINGLE_ARM_IK=OFF \
+  -DMCL_BUILD_DUAL_ARM_IK=OFF \
+  -DMCL_BUILD_GROUPED_DUAL_ARM_IK=OFF \
+  -DMCL_BUILD_DUAL_ARM_REPLAY_IK=ON \
+  -DMCL_BUILD_DUAL_ARM_REPLAY_VISUALIZATION=ON \
+  -DCMAKE_PREFIX_PATH="/path/to/mcc-install;/path/to/eiq-install;/path/to/mcv-install"
+cmake --build build/replay-ik-viz --target mcl_dual_arm_replay_ik -j8
+```
+
+运行时加 `--visualize --execution-mode realtime`。Foxglove 连接
+`ws://127.0.0.1:8765` 后，runner 会先发布 MCAP 首帧对应的 robot joint state 和双臂
+输入 target，以及由初始 joint state 计算的双臂实际 FK，然后等待终端的裸空格键；只有按下空格后才建立 ReplayClock
+原点。`--visualize` 默认启用该 gate，自动运行可用 `--no-wait-for-space`。如需将可视化
+流一起收入 run，增加 `--record-visualization-mcap`。完整 E02 命令见
+[`experiments/E02_dual_arm_replay_ik/README.md`](experiments/E02_dual_arm_replay_ik/README.md)。
+五条固定 topic 见
+[Foxglove IK 可视化数据流合同](docs/foxglove_ik_visualization_contract.md)。
 
 手动运行 E01，并把证据写入 build tree：
 
@@ -281,12 +314,12 @@ adapters/interactive/     共享 CLI、TUI、wall-clock scheduler 和 Viz helper
 apps/common/              仅共享无 topology 决策的 IK 工具和 R1 被动配置
 apps/cartesian_planning/  JSON 驱动的纯 Cartesian MoveLine 规划、渲染和 Foxglove 回放
 apps/replay_plan/         不运行 solver 的 canonical timeline inspect/artifact 入口
-apps/dual_arm_replay_ik/  可选的 headless MCC 双臂 canonical replay runner
+apps/dual_arm_replay_ik/  MCC 双臂 canonical replay runner；可选 Foxglove 观察端
 apps/<entry>/             直接拥有 MCC topology、solve/worker loop、main、CMake 和 help test
-contracts/                definition、manifest、metric 合同
+contracts/                definition、manifest、metric 与 visualization 合同
 data/raw/                 原始数据占位；不得静默改写
 data/canonical/           规范数据占位
-experiments/              Experiment 实例、run 与 reviewed result
+experiments/              E01/E02 Experiment 实例、append-only run 与 reviewed result
 analyses/                 只消费已有证据的 Analysis
 docs/                     愿景、通用架构和项目实现映射
 third_party/placo/        仓库内直接构建和修改的 placo 源码

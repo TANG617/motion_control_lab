@@ -2,12 +2,15 @@
 
 #include "adapters/data/decoder/csv_pose_decoder.hpp"
 #include "adapters/data/decoder/decoder_registry.hpp"
+#include "adapters/data/decoder/ros2_joint_state_cdr_decoder.hpp"
 #include "adapters/data/decoder/ros2_pose_stamped_cdr_decoder.hpp"
 #include "adapters/data/source/csv_source.hpp"
 #include "adapters/data/source/mcap_source.hpp"
 #include "motion_control_lab/sha256.hpp"
 
+#include <algorithm>
 #include <cmath>
+#include <cctype>
 #include <fstream>
 #include <iomanip>
 #include <limits>
@@ -55,6 +58,35 @@ double parsePositiveDouble(const std::string & value, const std::string & option
     throw data::DataError(data::DataErrorCode::InvalidArgument, option + " must be finite and > 0");
   }
   return result;
+}
+
+std::uint16_t parsePort(const std::string & value, const std::string & option)
+{
+  std::size_t parsed = 0;
+  unsigned long result = 0;
+  try {
+    result = std::stoul(value, &parsed);
+  } catch (const std::exception &) {
+    throw data::DataError(data::DataErrorCode::InvalidArgument, option + " requires an integer");
+  }
+  if (parsed != value.size() || result == 0 || result > 65535) {
+    throw data::DataError(
+            data::DataErrorCode::InvalidArgument,
+            option + " must be in [1, 65535]");
+  }
+  return static_cast<std::uint16_t>(result);
+}
+
+void validateRunId(const std::string & value)
+{
+  if (value.empty() ||
+      !std::all_of(value.begin(), value.end(), [](unsigned char character) {
+        return std::isalnum(character) || character == '-' || character == '_' || character == '.';
+      })) {
+    throw data::DataError(
+            data::DataErrorCode::InvalidArgument,
+            "--run-id must contain only letters, digits, dot, underscore, or hyphen");
+  }
 }
 
 std::int64_t millisecondsToNanoseconds(const std::string & value, const std::string & option)
@@ -224,6 +256,8 @@ Json::Int64 asJsonInt64(std::int64_t value)
 ReplayOptions parseReplayOptions(int argc, char ** argv, bool require_urdf)
 {
   ReplayOptions result;
+  bool initial_joint_state_stream_set = false;
+  bool wait_for_space_set = false;
   for (int index = 1; index < argc; ++index) {
     const std::string argument = argv[index];
     auto requireValue = [&]() -> std::string {
@@ -246,6 +280,9 @@ ReplayOptions parseReplayOptions(int argc, char ** argv, bool require_urdf)
       result.left_stream = requireValue();
     } else if (argument == "--right-stream") {
       result.right_stream = requireValue();
+    } else if (argument == "--initial-joint-state-stream") {
+      result.initial_joint_state_stream = requireValue();
+      initial_joint_state_stream_set = true;
     } else if (argument == "--csv-mapping") {
       result.csv_mapping_path = std::filesystem::path{requireValue()};
     } else if (argument == "--timestamp-source") {
@@ -270,6 +307,26 @@ ReplayOptions parseReplayOptions(int argc, char ** argv, bool require_urdf)
       result.servo_period_ns = millisecondsToNanoseconds(requireValue(), argument);
     } else if (argument == "--output-dir") {
       result.output_dir = requireValue();
+      result.output_dir_explicit = true;
+    } else if (argument == "--output-root") {
+      result.output_root = std::filesystem::path{requireValue()};
+    } else if (argument == "--run-id") {
+      result.run_id = requireValue();
+      validateRunId(*result.run_id);
+    } else if (argument == "--visualize") {
+      result.visualize = true;
+    } else if (argument == "--viz-host") {
+      result.visualization_host = requireValue();
+    } else if (argument == "--viz-port") {
+      result.visualization_port = parsePort(requireValue(), argument);
+    } else if (argument == "--record-visualization-mcap") {
+      result.record_visualization_mcap = true;
+    } else if (argument == "--wait-for-space") {
+      result.wait_for_space = true;
+      wait_for_space_set = true;
+    } else if (argument == "--no-wait-for-space") {
+      result.wait_for_space = false;
+      wait_for_space_set = true;
     } else {
       throw data::DataError(data::DataErrorCode::InvalidArgument, "unknown option: " + argument);
     }
@@ -295,6 +352,15 @@ ReplayOptions parseReplayOptions(int argc, char ** argv, bool require_urdf)
             data::DataErrorCode::InvalidArgument,
             "--csv-mapping is only valid with --input-format csv");
   }
+  if (result.input_format == InputFormat::Csv && initial_joint_state_stream_set) {
+    throw data::DataError(
+            data::DataErrorCode::InvalidArgument,
+            "--initial-joint-state-stream is only valid with --input-format mcap");
+  }
+  if (require_urdf && result.input_format == InputFormat::Mcap &&
+      !initial_joint_state_stream_set) {
+    result.initial_joint_state_stream = "/mc/ik/joint_states";
+  }
   if (result.csv_mapping_path.has_value() &&
       !std::filesystem::is_regular_file(*result.csv_mapping_path)) {
     throw data::DataError(data::DataErrorCode::Io, "CSV mapping file does not exist");
@@ -310,6 +376,33 @@ ReplayOptions parseReplayOptions(int argc, char ** argv, bool require_urdf)
   if (result.output_dir.empty()) {
     throw data::DataError(data::DataErrorCode::InvalidArgument, "--output-dir must be non-empty");
   }
+  if (result.output_root.has_value() && result.output_root->empty()) {
+    throw data::DataError(data::DataErrorCode::InvalidArgument, "--output-root must be non-empty");
+  }
+  if (result.output_dir_explicit && result.output_root.has_value()) {
+    throw data::DataError(
+            data::DataErrorCode::InvalidArgument,
+            "--output-dir and --output-root are mutually exclusive");
+  }
+  if (result.output_dir_explicit && result.run_id.has_value()) {
+    throw data::DataError(
+            data::DataErrorCode::InvalidArgument,
+            "--run-id cannot be combined with --output-dir");
+  }
+  if (!require_urdf && (result.output_root.has_value() || result.run_id.has_value() ||
+      result.visualize || result.record_visualization_mcap || wait_for_space_set)) {
+    throw data::DataError(
+            data::DataErrorCode::InvalidArgument,
+            "experiment output and visualization options are only valid for the IK runner");
+  }
+  if (result.record_visualization_mcap && !result.visualize) {
+    throw data::DataError(
+            data::DataErrorCode::InvalidArgument,
+            "--record-visualization-mcap requires --visualize");
+  }
+  if (result.visualize && !wait_for_space_set) {
+    result.wait_for_space = true;
+  }
   return result;
 }
 
@@ -318,7 +411,19 @@ std::string replayHelp(const std::string & program, bool include_urdf)
   std::ostringstream output;
   output << "Usage: " << program << " [options]\n";
   if (include_urdf) {
-    output << "  --urdf <path>                    R1 URDF (required)\n";
+    output
+      << "  --urdf <path>                    R1 URDF (required)\n"
+      << "  --initial-joint-state-stream <name>\n"
+      << "                                   First MCAP JointState initializes the robot\n"
+      << "                                   (default /mc/ik/joint_states)\n"
+      << "  --output-root <path>             Parent of an auto-named append-only E02 run\n"
+      << "  --run-id <id>                    Override the auto-generated E02 run ID\n"
+      << "  --visualize                      Publish live Foxglove frames; waits by default\n"
+      << "  --viz-host <address>             Foxglove bind address (default 127.0.0.1)\n"
+      << "  --viz-port <port>                Foxglove port (default 8765)\n"
+      << "  --record-visualization-mcap      Save visualization.mcap in the run directory\n"
+      << "  --wait-for-space                 Wait for a raw space key before starting clock\n"
+      << "  --no-wait-for-space              Disable the wait implied by --visualize\n";
   }
   output
     << "  --input <path>                   MCAP or CSV input (required)\n"
@@ -336,7 +441,7 @@ std::string replayHelp(const std::string & program, bool include_urdf)
     << "  --playback-rate <rate>           Positive replay rate (default 1)\n"
     << "  --state-policy previous_solution|fixed_initial_state\n"
     << "  --servo-period-ms <ms>           Core control horizon (default 10)\n"
-    << "  --output-dir <path>              New artifact directory\n"
+    << "  --output-dir <path>              Exact new artifact directory (legacy/manual)\n"
     << "  --help                           Show this help\n";
   return output.str();
 }
@@ -365,6 +470,9 @@ LoadedReplay loadReplay(const ReplayOptions & options)
     left_decoder = decoder->id();
     right_decoder = decoder->id();
     registry.registerDecoder(std::move(decoder));
+    if (options.initial_joint_state_stream.has_value()) {
+      registry.registerDecoder(std::make_shared<data::Ros2JointStateCdrDecoder>());
+    }
   } else {
     source = std::make_unique<data::CsvSource>(
       options.input_path,
@@ -413,6 +521,21 @@ LoadedReplay loadReplay(const ReplayOptions & options)
   loaded.left_decoder = left.decoder_id;
   loaded.right_decoder = right.decoder_id;
   loaded.decoder_diagnostic_count = left.diagnostics.size() + right.diagnostics.size();
+  if (options.initial_joint_state_stream.has_value()) {
+    auto initial_cursor = source->select(
+      {*options.initial_joint_state_stream, std::nullopt, std::nullopt});
+    auto initial_states = registry.decode<data::StampedJointState>(
+      *initial_cursor, *options.initial_joint_state_stream);
+    if (initial_states.samples.empty()) {
+      throw data::DataError(
+              data::DataErrorCode::InvalidFormat,
+              "initial JointState stream contains no samples: " +
+              *options.initial_joint_state_stream);
+    }
+    loaded.initial_joint_state = std::move(initial_states.samples.front());
+    loaded.initial_joint_state_decoder = initial_states.decoder_id;
+    loaded.decoder_diagnostic_count += initial_states.diagnostics.size();
+  }
   loaded.timeline = data::makeDualArmTimeline(left, right, projection);
   return loaded;
 }

@@ -44,9 +44,6 @@ using mcl::toStdVector;
 
 constexpr const char * kProgramId = "mcl_grouped_dual_arm_ik";
 constexpr const char * kTitle = "Motion Control Grouped Dual-arm IK";
-constexpr const char *kJointStateChannel = "/mc/ik/joint_states";
-constexpr const char *kLeftTargetChannel = "/mc/ik/target/left_pose";
-constexpr const char *kRightTargetChannel = "/mc/ik/target/right_pose";
 constexpr const char * kLeftElbowFrame = "left_arm_link4";
 constexpr const char * kRightElbowFrame = "right_arm_link4";
 constexpr double kYellowCartesianWeight = 10.0;
@@ -513,8 +510,7 @@ int run(int argc, char ** argv)
   output_to_ui.publish(initial_output);
 
   const auto presentation = mcl::makeArmPresentation(
-    robot,
-    {kJointStateChannel, kLeftTargetChannel, kRightTargetChannel});
+    robot, mcl::foxgloveIkVisualizationChannels());
   mcl::TuiTeleopSource tui(
     options.tui,
     options.ui_rate_hz,
@@ -668,6 +664,9 @@ int run(int argc, char ** argv)
     frame.joint_names = joint_names;
     frame.positions = robot.default_positions;
     frame.velocities.assign(joint_names.size(), 0.0);
+    frame.forward_kinematics = {
+      {mcl::ArmSide::Left, initial_output.left_pose},
+      {mcl::ArmSide::Right, initial_output.right_pose}};
     frame.selected_side = mcl::parseArmSide(options.tui.side);
 
     while (!stop_controller.stopRequested()) {
@@ -700,6 +699,9 @@ int run(int argc, char ** argv)
         }
 
         frame.targets = command.targets;
+        frame.forward_kinematics = {
+          {mcl::ArmSide::Left, latest_output.left_pose},
+          {mcl::ArmSide::Right, latest_output.right_pose}};
         frame.positions = toStdVector(latest_output.state.positions);
         frame.velocities = toStdVector(latest_output.state.velocities);
         const auto red_stats = red_worker_diagnostics.snapshot();
@@ -748,6 +750,9 @@ int run(int argc, char ** argv)
       output_to_ui.readLatest(latest_output);
       frame.positions = toStdVector(latest_output.state.positions);
       frame.velocities = toStdVector(latest_output.state.velocities);
+      frame.forward_kinematics = {
+        {mcl::ArmSide::Left, latest_output.left_pose},
+        {mcl::ArmSide::Right, latest_output.right_pose}};
       frame.ik_status = "fault";
       frame.status =
         std::string{mcl::workerGroupName(recorded_fault->group)} + " " +

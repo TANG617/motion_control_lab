@@ -30,9 +30,6 @@ namespace mcl = motion_control_lab;
 
 constexpr const char * kProgramId = "mcl_single_arm_ik";
 constexpr const char * kTitle = "Motion Control Single-arm IK";
-constexpr const char * kJointStateChannel = "/mc/ik/joint_states";
-constexpr const char * kLeftTargetChannel = "/mc/ik/target/left_pose";
-constexpr const char * kRightTargetChannel = "/mc/ik/target/right_pose";
 
 int run(int argc, char ** argv)
 {
@@ -116,10 +113,10 @@ int run(int argc, char ** argv)
   mcl::requireOk(builder.finalize(solver), "Failed to finalize IK solver");
   mcl::requireOk(solver.beginRun(1), "Failed to begin grouped IK run");
 
-  auto currentTargetPose = [&]() {
+  auto currentTargetPose = [&](mcl::ArmSide side) {
     mcc::ForwardKinematicsRequest request;
     request.state = mcl::makeRobotState(positions, velocities);
-    request.frame_names = {controlled_frame};
+    request.frame_names = {mcl::frameForSide(robot, side)};
     request.reference_frame_name = robot.base_frame;
     mcc::ForwardKinematicsSolution solution;
     mcc::ForwardKinematicsDiagnostics diagnostics;
@@ -127,18 +124,22 @@ int run(int argc, char ** argv)
       solver.computeForwardKinematics(
         mcc::SolverGroup::Red, request, solution, diagnostics),
       "FK failed");
-    return mcl::requirePose(solution.poses, controlled_frame).pose;
+    return mcl::requirePose(solution.poses, mcl::frameForSide(robot, side)).pose;
   };
 
   const auto presentation = mcl::makeArmPresentation(
-    robot,
-    {kJointStateChannel, kLeftTargetChannel, kRightTargetChannel});
+    robot, mcl::foxgloveIkVisualizationChannels());
+  const auto initial_left_fk = currentTargetPose(mcl::ArmSide::Left);
+  const auto initial_right_fk = currentTargetPose(mcl::ArmSide::Right);
   mcl::TuiTeleopSource tui(
     options.tui,
     options.rate_hz,
     kTitle,
     presentation,
-    {{controlled_side, currentTargetPose()}},
+    {
+      {mcl::ArmSide::Left, initial_left_fk},
+      {mcl::ArmSide::Right, initial_right_fk}
+    },
     false);
   auto visualization_sink = mcl::createVisualizationSink(options.visualization, kProgramId);
 
@@ -149,6 +150,9 @@ int run(int argc, char ** argv)
 
   mcl::IkDebugFrame latest_frame;
   latest_frame.targets = tui.command().targets;
+  latest_frame.forward_kinematics = {
+    {mcl::ArmSide::Left, initial_left_fk},
+    {mcl::ArmSide::Right, initial_right_fk}};
   latest_frame.joint_names = joint_names;
   latest_frame.positions = positions;
   latest_frame.velocities = velocities;
@@ -165,7 +169,7 @@ int run(int argc, char ** argv)
         try {
           tui.setTargetPose(
             *reset_side,
-            currentTargetPose(),
+            currentTargetPose(*reset_side),
             std::string{"Reset "} + mcl::armSideName(*reset_side) +
             " target from current FK");
         } catch (const std::exception & error) {
@@ -212,6 +216,9 @@ int run(int argc, char ** argv)
         }
 
         latest_frame.targets = command.targets;
+        latest_frame.forward_kinematics = {
+          {mcl::ArmSide::Left, currentTargetPose(mcl::ArmSide::Left)},
+          {mcl::ArmSide::Right, currentTargetPose(mcl::ArmSide::Right)}};
         latest_frame.joint_names = joint_names;
         latest_frame.positions = positions;
         latest_frame.velocities = velocities;

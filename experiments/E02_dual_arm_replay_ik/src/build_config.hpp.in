@@ -1,0 +1,13 @@
+#pragma once
+
+#include <string_view>
+
+namespace motion_control_lab::e02::build_config
+{
+inline constexpr std::string_view kDefinitionPath = "@E02_DEFINITION@";
+inline constexpr std::string_view kDefaultOutputRoot = "@E02_DIRECTORY@/runs";
+inline constexpr std::string_view kDefinitionSha256 = "@E02_DEFINITION_SHA256@";
+inline constexpr std::string_view kSourceRevision = "@MCL_SOURCE_REVISION@";
+inline constexpr bool kSourceDirty = @MCL_SOURCE_DIRTY@;
+inline constexpr std::string_view kRuntime = "@MCL_RUNTIME_DESCRIPTION@";
+}  // namespace motion_control_lab::e02::build_config

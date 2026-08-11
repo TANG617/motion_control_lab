@@ -48,10 +48,17 @@ struct ArmTargetError
   double orientation_rad{0.0};
 };
 
+struct ArmForwardKinematics
+{
+  ArmSide side{ArmSide::Left};
+  Pose pose{Pose::Identity()};
+};
+
 struct ArmPresentation
 {
   ArmSide side{ArmSide::Left};
   std::string target_channel;
+  std::string forward_kinematics_channel;
   std::vector<std::size_t> joint_indices;
 };
 
@@ -86,6 +93,7 @@ struct TargetCommand
 struct IkDebugFrame
 {
   std::vector<ArmTarget> targets;
+  std::vector<ArmForwardKinematics> forward_kinematics;
   JointNames joint_names;
   std::vector<double> positions;
   std::vector<double> velocities;

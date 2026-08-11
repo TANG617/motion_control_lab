@@ -44,6 +44,18 @@ option(
   "Build the canonical, headless dual-arm replay IK runner"
   ON
 )
+option(
+  MCL_BUILD_DUAL_ARM_REPLAY_VISUALIZATION
+  "Build optional Foxglove live visualization into the dual-arm replay IK runner"
+  OFF
+)
+
+if(MCL_BUILD_DUAL_ARM_REPLAY_VISUALIZATION AND NOT MCL_BUILD_DUAL_ARM_REPLAY_IK)
+  message(
+    FATAL_ERROR
+    "MCL_BUILD_DUAL_ARM_REPLAY_VISUALIZATION requires MCL_BUILD_DUAL_ARM_REPLAY_IK=ON"
+  )
+endif()
 
 set(MCL_BUILD_ANY_INTERACTIVE_IK OFF)
 if(MCL_BUILD_SINGLE_ARM_IK OR MCL_BUILD_DUAL_ARM_IK OR MCL_BUILD_GROUPED_DUAL_ARM_IK)
@@ -64,7 +76,8 @@ if(MCL_BUILD_ANY_INTERACTIVE_IK OR MCL_BUILD_MCC_PLOTS OR MCL_BUILD_CARTESIAN_PL
   find_package(motion_control_core CONFIG REQUIRED)
 endif()
 
-if(MCL_BUILD_ANY_INTERACTIVE_IK OR MCL_BUILD_CARTESIAN_PLANNING)
+if(MCL_BUILD_ANY_INTERACTIVE_IK OR MCL_BUILD_CARTESIAN_PLANNING OR
+   MCL_BUILD_DUAL_ARM_REPLAY_VISUALIZATION)
   find_package(motion_control_viz 0.3 CONFIG REQUIRED)
 endif()
 
@@ -125,6 +138,7 @@ if(MCL_BUILD_ANY_INTERACTIVE_IK)
     mcl_interactive_support
     PUBLIC
       "${CMAKE_CURRENT_SOURCE_DIR}/adapters/interactive/src"
+      "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>"
   )
   target_link_libraries(
     mcl_interactive_support
@@ -289,6 +303,20 @@ set(
   "C++17;${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR};${CMAKE_CXX_COMPILER_ID}-${CMAKE_CXX_COMPILER_VERSION}"
 )
 
+set(E02_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/experiments/E02_dual_arm_replay_ik")
+set(E02_DEFINITION "${E02_DIRECTORY}/definition.json")
+file(SHA256 "${E02_DEFINITION}" E02_DEFINITION_SHA256)
+set_property(
+  DIRECTORY
+  APPEND
+  PROPERTY CMAKE_CONFIGURE_DEPENDS "${E02_DEFINITION}"
+)
+configure_file(
+  "${E02_DIRECTORY}/src/build_config.hpp.in"
+  "${CMAKE_CURRENT_BINARY_DIR}/generated/e02_build_config.hpp"
+  @ONLY
+)
+
 file(SHA256 "${E01_DEFINITION}" E01_DEFINITION_SHA256)
 file(SHA256 "${E01_MODEL}" E01_MODEL_SHA256)
 file(
@@ -360,6 +388,14 @@ install(
 if(BUILD_TESTING)
   find_package(Python3 REQUIRED COMPONENTS Interpreter)
 
+  add_test(
+    NAME contracts.foxglove_ik_visualization
+    COMMAND
+      "${Python3_EXECUTABLE}"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/validate_foxglove_ik_contract.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/contracts/visualization/foxglove_ik.v1.json"
+  )
+
   add_executable(
     test_data_pipeline
     tests/data_pipeline.cpp
@@ -418,6 +454,15 @@ if(BUILD_TESTING)
       "${CMAKE_CURRENT_SOURCE_DIR}/tests/validate_contracts.py"
       definition
       "${E01_DEFINITION}"
+  )
+
+  add_test(
+    NAME contracts.e02_definition
+    COMMAND
+      "${Python3_EXECUTABLE}"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/validate_contracts.py"
+      definition
+      "${E02_DEFINITION}"
   )
 
   add_test(

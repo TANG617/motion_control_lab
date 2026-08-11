@@ -2,6 +2,7 @@
 
 #include <Eigen/Geometry>
 
+#include <algorithm>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -27,26 +28,49 @@ motion_control::viz::VisualizationFrame makeIkVisualizationFrame(
   visualization.status = frame.status;
   visualization.paused = frame.paused;
 
-  visualization.poses.reserve(frame.targets.size());
-  for (const auto & target : frame.targets) {
-    const auto * arm = findArmPresentation(presentation, target.side);
-    if (arm == nullptr) {
+  visualization.poses.reserve(presentation.arms.size() * 2);
+  for (const auto & arm : presentation.arms) {
+    const auto target = std::find_if(
+      frame.targets.begin(), frame.targets.end(),
+      [&arm](const ArmTarget & value) { return value.side == arm.side; });
+    if (target == frame.targets.end()) {
       throw std::runtime_error(
-              std::string{"visualization presentation is missing the "} +
-              armSideName(target.side) + " arm");
+              std::string{"visualization frame is missing the "} +
+              armSideName(arm.side) + " target");
     }
-    const Eigen::Quaterniond orientation(target.target_pose.linear());
+    const Eigen::Quaterniond orientation(target->target_pose.linear());
     mcv::NamedPose pose;
-    pose.entity_id = std::string{armSideName(target.side)} + "_target";
-    pose.channel = arm->target_channel;
+    pose.entity_id = std::string{armSideName(arm.side)} + "_target";
+    pose.channel = arm.target_channel;
     pose.frame_id = presentation.base_frame_id;
     pose.pose.position_m = {
-      target.target_pose.translation().x(),
-      target.target_pose.translation().y(),
-      target.target_pose.translation().z()};
+      target->target_pose.translation().x(),
+      target->target_pose.translation().y(),
+      target->target_pose.translation().z()};
     pose.pose.orientation_xyzw = {
       orientation.x(), orientation.y(), orientation.z(), orientation.w()};
     visualization.poses.push_back(std::move(pose));
+
+    const auto fk = std::find_if(
+      frame.forward_kinematics.begin(), frame.forward_kinematics.end(),
+      [&arm](const ArmForwardKinematics & value) { return value.side == arm.side; });
+    if (fk == frame.forward_kinematics.end()) {
+      throw std::runtime_error(
+              std::string{"visualization frame is missing the "} +
+              armSideName(arm.side) + " FK output");
+    }
+    const Eigen::Quaterniond fk_orientation(fk->pose.linear());
+    mcv::NamedPose fk_pose;
+    fk_pose.entity_id = std::string{armSideName(arm.side)} + "_end_effector_fk";
+    fk_pose.channel = arm.forward_kinematics_channel;
+    fk_pose.frame_id = presentation.base_frame_id;
+    fk_pose.pose.position_m = {
+      fk->pose.translation().x(),
+      fk->pose.translation().y(),
+      fk->pose.translation().z()};
+    fk_pose.pose.orientation_xyzw = {
+      fk_orientation.x(), fk_orientation.y(), fk_orientation.z(), fk_orientation.w()};
+    visualization.poses.push_back(std::move(fk_pose));
   }
 
   visualization.joints = mcv::JointStateFrame{
