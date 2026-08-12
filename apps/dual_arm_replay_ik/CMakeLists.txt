@@ -7,7 +7,7 @@ target_link_libraries(
   mcl_dual_arm_replay_ik
   PRIVATE
     motion_control_lab::replay_support
-    motion_control_core::motion_control_core
+    motion_control_lab::replay_ik_engine
 )
 target_include_directories(
   mcl_dual_arm_replay_ik

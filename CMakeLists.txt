@@ -45,15 +45,21 @@ option(
   ON
 )
 option(
+  MCL_BUILD_E03_BATCH_REPLAY_IK
+  "Build the E03 PSI R1 motion-library batch replay IK runner"
+  ON
+)
+option(
   MCL_BUILD_DUAL_ARM_REPLAY_VISUALIZATION
   "Build optional Foxglove live visualization into the dual-arm replay IK runner"
   OFF
 )
 
-if(MCL_BUILD_DUAL_ARM_REPLAY_VISUALIZATION AND NOT MCL_BUILD_DUAL_ARM_REPLAY_IK)
+if(MCL_BUILD_DUAL_ARM_REPLAY_VISUALIZATION AND
+   NOT (MCL_BUILD_DUAL_ARM_REPLAY_IK OR MCL_BUILD_E03_BATCH_REPLAY_IK))
   message(
     FATAL_ERROR
-    "MCL_BUILD_DUAL_ARM_REPLAY_VISUALIZATION requires MCL_BUILD_DUAL_ARM_REPLAY_IK=ON"
+    "Replay visualization requires an enabled replay IK runner"
   )
 endif()
 
@@ -72,7 +78,7 @@ list(PREPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 include(cmake/Dependencies.cmake)
 
 if(MCL_BUILD_ANY_INTERACTIVE_IK OR MCL_BUILD_MCC_PLOTS OR MCL_BUILD_CARTESIAN_PLANNING OR
-   MCL_BUILD_DUAL_ARM_REPLAY_IK)
+   MCL_BUILD_DUAL_ARM_REPLAY_IK OR MCL_BUILD_E03_BATCH_REPLAY_IK)
   find_package(motion_control_core CONFIG REQUIRED)
 endif()
 
@@ -264,6 +270,24 @@ target_link_libraries(
   PUBLIC motion_control_lab::data motion_control_lab::run_artifacts jsoncpp_lib
 )
 
+if(MCL_BUILD_DUAL_ARM_REPLAY_IK OR MCL_BUILD_E03_BATCH_REPLAY_IK)
+  add_library(
+    mcl_replay_ik_engine
+    apps/dual_arm_replay_ik/replay_ik_engine.cpp
+  )
+  add_library(motion_control_lab::replay_ik_engine ALIAS mcl_replay_ik_engine)
+  target_include_directories(
+    mcl_replay_ik_engine
+    PUBLIC "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>"
+  )
+  target_link_libraries(
+    mcl_replay_ik_engine
+    PUBLIC
+      motion_control_lab::replay_support
+      motion_control_core::motion_control_core
+  )
+endif()
+
 add_subdirectory(apps/replay_plan)
 if(MCL_BUILD_DUAL_ARM_REPLAY_IK)
   add_subdirectory(apps/dual_arm_replay_ik)
@@ -316,6 +340,40 @@ configure_file(
   "${CMAKE_CURRENT_BINARY_DIR}/generated/e02_build_config.hpp"
   @ONLY
 )
+
+set(
+  E03_DIRECTORY
+  "${CMAKE_CURRENT_SOURCE_DIR}/experiments/E03_psi_r1_dual_arm_motion_library_replay_ik"
+)
+set(E03_DEFINITION "${E03_DIRECTORY}/definition.json")
+set(
+  E03_INPUT_CONTRACT
+  "${E03_DIRECTORY}/inputs/psi_r1_dual_arm_motion_library.v1.json"
+)
+get_filename_component(
+  MCL_WORKSPACE_DIRECTORY
+  "${CMAKE_CURRENT_SOURCE_DIR}/../.."
+  ABSOLUTE
+)
+set(
+  E03_DEFAULT_LIBRARY_DIRECTORY
+  "${MCL_WORKSPACE_DIRECTORY}/fixtures/datasets/psi_r1_dual_arm_motion_library"
+)
+file(SHA256 "${E03_DEFINITION}" E03_DEFINITION_SHA256)
+set_property(
+  DIRECTORY
+  APPEND
+  PROPERTY CMAKE_CONFIGURE_DEPENDS "${E03_DEFINITION}" "${E03_INPUT_CONTRACT}"
+)
+configure_file(
+  "${E03_DIRECTORY}/src/build_config.hpp.in"
+  "${CMAKE_CURRENT_BINARY_DIR}/generated/e03_build_config.hpp"
+  @ONLY
+)
+
+if(MCL_BUILD_E03_BATCH_REPLAY_IK)
+  add_subdirectory(experiments/E03_psi_r1_dual_arm_motion_library_replay_ik)
+endif()
 
 file(SHA256 "${E01_DEFINITION}" E01_DEFINITION_SHA256)
 file(SHA256 "${E01_MODEL}" E01_MODEL_SHA256)
@@ -463,6 +521,15 @@ if(BUILD_TESTING)
       "${CMAKE_CURRENT_SOURCE_DIR}/tests/validate_contracts.py"
       definition
       "${E02_DEFINITION}"
+  )
+
+  add_test(
+    NAME contracts.e03_definition
+    COMMAND
+      "${Python3_EXECUTABLE}"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/validate_contracts.py"
+      definition
+      "${E03_DEFINITION}"
   )
 
   add_test(

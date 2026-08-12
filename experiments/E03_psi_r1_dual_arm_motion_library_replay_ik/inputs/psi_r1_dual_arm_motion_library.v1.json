@@ -1,0 +1,40 @@
+{
+  "schema_version": "motion_library_contract.v1",
+  "library_id": "psi_r1_dual_arm_motion_library",
+  "default_locator": "fixtures/datasets/psi_r1_dual_arm_motion_library",
+  "selection": {
+    "recursive": false,
+    "file_pattern": "*.mcap",
+    "accept_symlinks": false,
+    "action_id_source": "file_stem",
+    "action_id_pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$",
+    "ordering": "filename_ascending_bytewise"
+  },
+  "required_streams": [
+    {
+      "topic": "/mc/ik/joint_states",
+      "semantic_type": "sensor_msgs/msg/JointState",
+      "role": "initial_state_and_input_evidence"
+    },
+    {
+      "topic": "/mc/ik/target/left_pose",
+      "semantic_type": "geometry_msgs/msg/PoseStamped",
+      "role": "left_tcp_target"
+    },
+    {
+      "topic": "/mc/ik/target/right_pose",
+      "semantic_type": "geometry_msgs/msg/PoseStamped",
+      "role": "right_tcp_target"
+    }
+  ],
+  "snapshot": {
+    "timing": "once_before_action_execution",
+    "fields": [
+      "file_name",
+      "size_bytes",
+      "sha256"
+    ],
+    "late_additions": "excluded",
+    "snapshotted_input_changes": "fail_action_as_input_changed"
+  }
+}

@@ -19,8 +19,9 @@ wall-clock pacing；算法快照统一映射为
 所有 IK app 的 Foxglove topic 与 FK 一致性要求由
 [Foxglove IK 可视化数据流合同](docs/foxglove_ik_visualization_contract.md)统一定义。
 该路径用于开发调试，不替代由 canonical timeline 驱动的可复现实验执行器。
-MCC builder、task 注册、typed handles、request 组装和状态更新直接位于各入口的
-`main.cpp`，便于逐入口阅读和调试；共享层不定义 solver backend。
+交互预览 app 的 MCC builder、task 注册、typed handles、request 组装和状态更新直接位于
+各入口的 `main.cpp`，便于逐入口阅读和调试。可复现 replay app 则复用固定策略的单动作
+engine，避免不同实验复制或漂移 solver 行为。
 
 E01 是基础设施 smoke test，只证明 placo C++ 求解链与证据落盘链能够跑通，不是
 算法性能结论。
@@ -166,6 +167,23 @@ cmake --build build/replay-ik-viz --target mcl_dual_arm_replay_ik -j8
 [`experiments/E02_dual_arm_replay_ik/README.md`](experiments/E02_dual_arm_replay_ik/README.md)。
 五条固定 topic 见
 [Foxglove IK 可视化数据流合同](docs/foxglove_ik_visualization_contract.md)。
+
+E03 将同一个固定 replay IK engine 应用于 PSI R1 双臂动作库。默认只扫描
+`/workspace/fixtures/datasets/psi_r1_dual_arm_motion_library/` 的直接 `*.mcap` 子项，按文件名
+排序并在运行前固化 size/SHA-256。每个动作从自己的首帧 JointState 独立初始化，首个错误后
+停止该动作，但批次继续执行后续动作；只有所有动作完成且没有 rejected solve 时批次才成功。
+
+```bash
+cmake --build /workspace/build/motion_control_lab --target mcl_e03_batch_replay_ik -j8
+/workspace/build/motion_control_lab/mcl_e03_batch_replay_ik \
+  --urdf /workspace/products/synrobot/modules/common/robot_description/psi_r1/urdf/Psi_R1_rev1.urdf
+```
+
+默认产物位于
+`experiments/E03_psi_r1_dual_arm_motion_library_replay_ik/runs/<run-id>/`。增加
+`--visualize --playback-rate <rate>` 后会用一个 Foxglove server 连续播放整个动作库，不等待
+空格，也不默认录制 visualization MCAP。完整合同和目录结构见
+[`experiments/E03_psi_r1_dual_arm_motion_library_replay_ik/README.md`](experiments/E03_psi_r1_dual_arm_motion_library_replay_ik/README.md)。
 
 手动运行 E01，并把证据写入 build tree：
 

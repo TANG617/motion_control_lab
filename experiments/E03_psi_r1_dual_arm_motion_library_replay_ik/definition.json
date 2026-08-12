@@ -1,0 +1,102 @@
+{
+  "schema_version": "experiment.v1",
+  "experiment_id": "E03",
+  "title": "PSI R1 dual-arm motion-library batch replay IK",
+  "question": "Which actions in the versioned PSI R1 dual-arm motion library can be replayed through the fixed MCC Red-only IK policy without rejected solves?",
+  "hypothesis": "Every conforming action is accepted when its own first recorded JointState initializes the robot and actions do not share solver state.",
+  "independent_factors": [
+    "motion_library_action"
+  ],
+  "controlled_factors": {
+    "robot_model_locator": "products/synrobot/modules/common/robot_description/psi_r1/urdf/Psi_R1_rev1.urdf",
+    "left_pose_stream": "/mc/ik/target/left_pose",
+    "right_pose_stream": "/mc/ik/target/right_pose",
+    "initial_joint_state_stream": "/mc/ik/joint_states",
+    "initial_joint_state_sample": 0,
+    "initial_velocity_source": "zero",
+    "timestamp_source": "header_stamp",
+    "pairing_policy": "nearest",
+    "nearest_tolerance_ms": 5.0,
+    "unmatched_policy": "error",
+    "timestamp_projection": "preserve",
+    "state_policy": "previous_solution",
+    "servo_period_ms": 10.0,
+    "action_order": "stable_filename_sort",
+    "action_concurrency": 1,
+    "action_failure_policy": "stop_on_first_error",
+    "batch_failure_policy": "continue_actions_then_fail_batch",
+    "tcp_offset_m": {
+      "left": [0.0, 0.0, 0.1],
+      "right": [0.0, 0.0, 0.1]
+    },
+    "visualization_is_observational": true
+  },
+  "allowed_differences": [
+    "motion_library_directory",
+    "output_root",
+    "run_id",
+    "foxglove_host",
+    "foxglove_port",
+    "visualization_enabled",
+    "visualization_playback_rate"
+  ],
+  "inputs": [
+    {
+      "input_id": "psi_r1_dual_arm_motion_library",
+      "artifact": "inputs/psi_r1_dual_arm_motion_library.v1.json",
+      "required": true
+    }
+  ],
+  "arms": [
+    {
+      "arm_id": "mcc_red_only",
+      "method": "motion_control_core_grouped_inverse_kinematics",
+      "required": true
+    }
+  ],
+  "evaluation_windows": [
+    {
+      "window_id": "per_action_prefix",
+      "description": "Each action from its first paired frame through completion or its first rejected solve."
+    }
+  ],
+  "metrics": {
+    "primary": [
+      "action_success_ratio"
+    ],
+    "secondary": [
+      "per_action_accepted_solve_ratio",
+      "aggregate_accepted_solve_ratio"
+    ],
+    "guardrail": [
+      "failed_action_count",
+      "rejected_solve_count"
+    ],
+    "diagnostic": [
+      "paired_frame_count",
+      "unmatched_left_count",
+      "unmatched_right_count",
+      "maximum_pair_delta_ns",
+      "first_failure_classification"
+    ]
+  },
+  "comparisons": [],
+  "failure_policy": {
+    "empty_motion_library_fails_run": true,
+    "input_change_fails_action": true,
+    "stop_action_on_first_error": true,
+    "continue_remaining_actions": true,
+    "any_failed_action_fails_run": true,
+    "any_rejected_solve_fails_run": true,
+    "preserve_partial_trace": true
+  },
+  "artifact_requirements": [
+    "manifest.json",
+    "definition/resolved.json",
+    "inputs/inventory.json",
+    "evaluation/action_summary.csv",
+    "evaluation/metrics.csv",
+    "evaluation/failures.json",
+    "evaluation/report.md"
+  ]
+}
