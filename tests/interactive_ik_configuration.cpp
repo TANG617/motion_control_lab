@@ -42,8 +42,8 @@ int main()
   char grouped_urdf_value[] = "/tmp/robot.urdf";
   char * grouped_argv[]{grouped_program, grouped_urdf_option, grouped_urdf_value};
   const auto grouped = motion_control_lab::parseGroupedInteractiveIkOptions(3, grouped_argv);
-  if (grouped.red_rate_hz != 100.0 || grouped.yellow_rate_hz != 50.0 ||
-      grouped.green_rate_hz != 10.0 || grouped.ui_rate_hz != 20.0 ||
+  if (grouped.red_rate_hz != 1000.0 || grouped.yellow_rate_hz != 100.0 ||
+      grouped.ui_rate_hz != 20.0 ||
       grouped.deadline_policy != motion_control_lab::DeadlinePolicy::Strict) {
     return EXIT_FAILURE;
   }
@@ -76,8 +76,38 @@ int main()
   }
 
   char red_option[] = "--red-rate";
-  char red_value[] = "100";
   char yellow_option[] = "--yellow-rate";
+  char valid_red_value[] = "800";
+  char valid_yellow_value[] = "80";
+  char * custom_grouped_argv[]{
+    grouped_program,
+    grouped_urdf_option,
+    grouped_urdf_value,
+    red_option,
+    valid_red_value,
+    yellow_option,
+    valid_yellow_value};
+  const auto custom = motion_control_lab::parseGroupedInteractiveIkOptions(
+    7, custom_grouped_argv);
+  if (custom.red_rate_hz != 800.0 || custom.yellow_rate_hz != 80.0) {
+    return EXIT_FAILURE;
+  }
+
+  char green_option[] = "--green-rate";
+  char green_value[] = "10";
+  char * removed_green_argv[]{
+    grouped_program,
+    grouped_urdf_option,
+    grouped_urdf_value,
+    green_option,
+    green_value};
+  try {
+    (void)motion_control_lab::parseGroupedInteractiveIkOptions(5, removed_green_argv);
+    return EXIT_FAILURE;
+  } catch (const std::runtime_error &) {
+  }
+
+  char red_value[] = "100";
   char yellow_value[] = "100";
   char * invalid_grouped_argv[]{
     grouped_program,

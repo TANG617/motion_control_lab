@@ -18,7 +18,7 @@ planned。
 | Temporal projector | `adapters/data/temporal/` 中的 timestamp selection、严格时间校验、immutable Timeline、projection 与 ReplayClock |
 | Semantic projector | `adapters/data/projection/dual_arm_timeline.*`；只消费两个 `TypedStream<StampedPose>` |
 | Replay plan | `mcl_replay_plan`；预加载输入并输出 timeline trace/manifest，不运行 solver |
-| MCC interactive apps | `apps/single_arm_ik/`、`apps/dual_arm_ik/` 使用 `RedOnly`；`apps/grouped_dual_arm_ik/` 固定使用 Red/Yellow/Green |
+| MCC interactive apps | `apps/single_arm_ik/`、`apps/dual_arm_ik/` 使用 `RedOnly`；`apps/grouped_dual_arm_ik/` 固定使用 Red/Yellow |
 | Cartesian planning preview | `apps/cartesian_planning/` 读取版本化 JSON，调用 Core MoveLine planner，输出 CSV/PNG 并循环发布 Foxglove；不加载 robot model 或调用 IK |
 | Interactive support | `adapters/interactive/` 提供 CLI、TUI、wall-clock scheduler、SPSC latest mailbox、periodic worker/Fault 和 Viz helpers |
 | IK visualization contract | `contracts/visualization/foxglove_ik.v1.json` + `foxglove_ik_v1.hpp` 固定五条 Foxglove topic，并要求 FK 与同帧 joint state 一致 |
@@ -68,12 +68,12 @@ Single/Dual/Grouped app main.cpp
 Grouped 入口的计算数据流为：
 
 ```text
-Green worker --soft proposal--> Yellow worker --soft proposal--> Red worker
-     ^ measured snapshot             ^ measured snapshot              |
-     +-------------------------------+--------------------------------+
-                                      latest Red authoritative state
+Yellow worker --soft proposal/coupling--> Red worker
+      ^                                      |
+      +--------------------------------------+
+               latest Red authoritative state
 
-UI thread --targets--> Red + Yellow
+UI thread --targets--> Red
 UI thread <--latest Red output-- Red
 ```
 
@@ -82,9 +82,10 @@ Starting/Running/Fault 属于 Lab 外层，不进入 MCC。Lab 的 deadline poli
 `strict` 和用于非实时主机交互调试的 `monitor`；后者保留统计并跳过过期 release，但不会放宽
 rejected attempt 或 worker exception。
 
-当前 grouped app 的 Yellow proposal 使用 Soft 双手 Cartesian task，并以更低权重对
-`left_arm_link4`/`right_arm_link4` 施加三轴 PositionTask，固定初始 X/Z、将左右 Y 分别向外偏置。
-这是应用层近似，不新增 MCC 单轴 task；Red 双手 task 与三组 joint limits 仍为 Hard。
+当前 grouped app 的 Red 使用双手 Hard position/orientation task。Yellow 使用固定 initial pose 的
+Soft posture task（weight 10）和 10 对 curated R1 link pair 的 Soft self-collision requirement
+（minimum/influence distance 0.02/0.07 m，gain 20 s^-1，weight 1）。Yellow→Red coupling weight
+为 1，两组 joint position/velocity limits 均为 Hard。collision margin 是诊断，不构成硬安全授权。
 
 单臂和双臂入口显式拥有不同的 task topology、solver config、typed handles 和状态更新，
 只共享参数解析、终端输入、wall-clock 调度、frame 映射和 sink 创建。正式实验的 `dt`

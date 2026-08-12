@@ -26,7 +26,7 @@ option(
 )
 option(
   MCL_BUILD_GROUPED_DUAL_ARM_IK
-  "Build the Red/Yellow/Green dual-arm IK application"
+  "Build the Red/Yellow dual-arm IK application"
   ON
 )
 option(

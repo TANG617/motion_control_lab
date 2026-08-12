@@ -38,9 +38,8 @@ struct InteractiveIkOptions
 struct GroupedInteractiveIkOptions
 {
   std::string urdf_path;
-  double red_rate_hz{100.0};
-  double yellow_rate_hz{50.0};
-  double green_rate_hz{10.0};
+  double red_rate_hz{1000.0};
+  double yellow_rate_hz{100.0};
   double ui_rate_hz{20.0};
   DeadlinePolicy deadline_policy{DeadlinePolicy::Strict};
   double duration_s{0.0};

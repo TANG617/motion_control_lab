@@ -142,9 +142,8 @@ void printGroupedInteractiveIkUsage(const char * program)
     << "  --urdf <path>       Robot URDF path (or $" << kUrdfEnvironmentVariable << ")\n"
     << "  --host <address>    WebSocket bind address (default: 127.0.0.1)\n"
     << "  --port <port>       WebSocket port (default: 8765)\n"
-    << "  --red-rate <hz>     Red servo rate/deadline (default: 100)\n"
-    << "  --yellow-rate <hz>  Yellow proposal rate/deadline (default: 50)\n"
-    << "  --green-rate <hz>   Green proposal rate/deadline (default: 10)\n"
+    << "  --red-rate <hz>     Red servo rate/deadline (default: 1000)\n"
+    << "  --yellow-rate <hz>  Yellow proposal rate/deadline (default: 100)\n"
     << "  --ui-rate <hz>      TUI and visualization rate (default: 20)\n"
     << "  --deadline-policy <strict|monitor>  Deadline handling (default: strict)\n"
     << "  --duration <sec>    Stop after seconds; 0 runs until Ctrl-C (default: 0)\n"
@@ -155,7 +154,7 @@ void printGroupedInteractiveIkUsage(const char * program)
     << "  --mcap <path>       Write MCAP from the UI thread when Foxglove is enabled\n"
     << "  --no-mcap           Disable MCAP output (default)\n"
     << "  --help              Show this help text\n\n"
-    << "Rates must satisfy red > yellow > green > 0. Each group period is its deadline.\n";
+    << "Rates must satisfy red > yellow > 0. Each group period is its deadline.\n";
 }
 
 GroupedInteractiveIkOptions parseGroupedInteractiveIkOptions(int argc, char ** argv)
@@ -188,8 +187,6 @@ GroupedInteractiveIkOptions parseGroupedInteractiveIkOptions(int argc, char ** a
       options.red_rate_hz = parsePositiveDouble("red rate", requireValue(arg));
     } else if (arg == "--yellow-rate") {
       options.yellow_rate_hz = parsePositiveDouble("yellow rate", requireValue(arg));
-    } else if (arg == "--green-rate") {
-      options.green_rate_hz = parsePositiveDouble("green rate", requireValue(arg));
     } else if (arg == "--ui-rate") {
       options.ui_rate_hz = parsePositiveDouble("UI rate", requireValue(arg));
     } else if (arg == "--deadline-policy") {
@@ -225,10 +222,8 @@ GroupedInteractiveIkOptions parseGroupedInteractiveIkOptions(int argc, char ** a
     }
   }
 
-  if (!(options.red_rate_hz > options.yellow_rate_hz &&
-      options.yellow_rate_hz > options.green_rate_hz))
-  {
-    throw std::runtime_error("rates must satisfy red > yellow > green > 0");
+  if (!(options.red_rate_hz > options.yellow_rate_hz)) {
+    throw std::runtime_error("rates must satisfy red > yellow > 0");
   }
   if (options.tui.max_step_m < options.tui.min_step_m) {
     throw std::runtime_error("--max-step-m must be greater than or equal to --min-step-m");
