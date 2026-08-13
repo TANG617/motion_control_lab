@@ -12,16 +12,17 @@ Motion Control Lab 是面向机器人遥操作 whole-body IK 的可复现实验�
 - `E01_placo_smoke` 实验及其合成二连杆 URDF；
 - 对实验定义、run manifest、artifact 哈希和 placo 求解结果的自动检查。
 
-仓库还提供可选的 MCC 交互预览运行时。单臂和双臂入口使用 grouped solver 的
-`RedOnly` profile；grouped 双臂入口使用独立 Red/Yellow worker。它们复用 TUI、Viz 和
-wall-clock pacing；算法快照统一映射为
+仓库还提供可选的 MCC 交互预览运行时。单臂入口使用 grouped solver 的 `RedOnly` profile；
+显式区分的双臂 ServoStep/TargetSolve 入口共享一个固定 topology 的 `KinematicsSolver`；grouped
+双臂入口使用独立 Red/Yellow worker。它们复用 TUI、Viz 和 wall-clock pacing；算法快照统一映射为
 `motion_control_viz::VisualizationFrame`。
 所有 IK app 的 Foxglove topic 与 FK 一致性要求由
 [Foxglove IK 可视化数据流合同](docs/foxglove_ik_visualization_contract.md)统一定义。
 该路径用于开发调试，不替代由 canonical timeline 驱动的可复现实验执行器。
-交互预览 app 的 MCC builder、task 注册、typed handles、request 组装和状态更新直接位于
-各入口的 `main.cpp`，便于逐入口阅读和调试。可复现 replay app 则复用固定策略的单动作
-engine，避免不同实验复制或漂移 solver 行为。
+单臂和 grouped 交互预览 app 直接拥有各自的 MCC topology；双臂 ServoStep/TargetSolve 的
+薄入口复用 `apps/common/dual_arm_ik_app.*`，确保除 solve-mode 合同外的任务、TUI 和 Viz
+行为一致。可复现 replay app 则复用固定策略的单动作 engine，避免不同实验复制或漂移
+solver 行为。
 
 E01 是基础设施 smoke test，只证明 placo C++ 求解链与证据落盘链能够跑通，不是
 算法性能结论。
@@ -124,7 +125,8 @@ canonical dual-arm CSV 使用 `timestamp_ns` 以及 `left_frame_id,left_x,...,le
 ```bash
 cmake -S . -B build/replay-ik \
   -DMCL_BUILD_SINGLE_ARM_IK=OFF \
-  -DMCL_BUILD_DUAL_ARM_IK=OFF \
+  -DMCL_BUILD_DUAL_ARM_IK_SERVO_STEP=OFF \
+  -DMCL_BUILD_DUAL_ARM_IK_TARGET_SOLVE=OFF \
   -DMCL_BUILD_GROUPED_DUAL_ARM_IK=OFF \
   -DMCL_BUILD_DUAL_ARM_REPLAY_IK=ON \
   -DCMAKE_PREFIX_PATH="/path/to/mcc-install;/path/to/eiq-install"
@@ -138,8 +140,9 @@ position（初始 velocity 仍为零）；可用 `--initial-joint-state-stream` 
 topic。R1 target stream 的输入语义是 TCP pose；runner 使用左右各自的 `0.1 m` TCP offset
 转换为 end-effector target 后再构造 IK request，并在 manifest 中记录转换。macOS 上的
 realtime 模式只记录 lateness/deadline miss，不声称 hard real-time。
-该 runner 是 canonical evidence 路径；现有 `mcl_dual_arm_ik` 仍是 TUI/Viz 开发预览，
-继续使用 wall-clock interactive scheduler，二者不共享调度语义。
+该 runner 是 canonical evidence 路径；`mcl_dual_arm_ik_servo_step` 和
+`mcl_dual_arm_ik_target_solve` 仍是 TUI/Viz 开发预览，继续使用 wall-clock interactive
+scheduler，二者不共享调度语义。
 
 不指定 `--output-dir` 时，runner 会在
 `experiments/E02_dual_arm_replay_ik/runs/` 下创建新的
@@ -151,7 +154,8 @@ realtime 模式只记录 lateness/deadline miss，不声称 hard real-time。
 ```bash
 cmake -S . -B build/replay-ik-viz \
   -DMCL_BUILD_SINGLE_ARM_IK=OFF \
-  -DMCL_BUILD_DUAL_ARM_IK=OFF \
+  -DMCL_BUILD_DUAL_ARM_IK_SERVO_STEP=OFF \
+  -DMCL_BUILD_DUAL_ARM_IK_TARGET_SOLVE=OFF \
   -DMCL_BUILD_GROUPED_DUAL_ARM_IK=OFF \
   -DMCL_BUILD_DUAL_ARM_REPLAY_IK=ON \
   -DMCL_BUILD_DUAL_ARM_REPLAY_VISUALIZATION=ON \
@@ -215,11 +219,13 @@ cmake --install /tmp/mcv_build
 
 cmake -S . -B build/mcc-preview \
   -DMCL_BUILD_SINGLE_ARM_IK=ON \
-  -DMCL_BUILD_DUAL_ARM_IK=ON \
+  -DMCL_BUILD_DUAL_ARM_IK_SERVO_STEP=ON \
+  -DMCL_BUILD_DUAL_ARM_IK_TARGET_SOLVE=ON \
   -DMCL_BUILD_GROUPED_DUAL_ARM_IK=ON \
   -DCMAKE_PREFIX_PATH="/tmp/mcc_install;/tmp/eiq_install;/tmp/mcv_install"
 cmake --build build/mcc-preview \
-  --target mcl_single_arm_ik mcl_dual_arm_ik mcl_grouped_dual_arm_ik -j8
+  --target mcl_single_arm_ik mcl_dual_arm_ik_servo_step \
+    mcl_dual_arm_ik_target_solve mcl_grouped_dual_arm_ik -j8
 ```
 
 每个入口可以独立配置。只构建单臂入口：
@@ -231,13 +237,15 @@ cmake -S . -B build/single-arm \
 cmake --build build/single-arm --target mcl_single_arm_ik -j8
 ```
 
-只构建双臂入口：
+只构建两个双臂入口：
 
 ```bash
 cmake -S . -B build/dual-arm \
-  -DMCL_BUILD_DUAL_ARM_IK=ON \
+  -DMCL_BUILD_DUAL_ARM_IK_SERVO_STEP=ON \
+  -DMCL_BUILD_DUAL_ARM_IK_TARGET_SOLVE=ON \
   -DCMAKE_PREFIX_PATH="/tmp/mcc_install;/tmp/eiq_install;/tmp/mcv_install"
-cmake --build build/dual-arm --target mcl_dual_arm_ik -j8
+cmake --build build/dual-arm \
+  --target mcl_dual_arm_ik_servo_step mcl_dual_arm_ik_target_solve -j8
 ```
 
 从交互终端运行：
@@ -245,13 +253,20 @@ cmake --build build/dual-arm --target mcl_dual_arm_ik -j8
 ```bash
 ./build/mcc-preview/mcl_single_arm_ik \
   --urdf /path/to/Psi_R1_rev1.urdf --rate 20
-./build/mcc-preview/mcl_dual_arm_ik \
-  --urdf /path/to/Psi_R1_rev1.urdf --rate 20 --mcap /new/run/path/preview.mcap
+./build/mcc-preview/mcl_dual_arm_ik_servo_step \
+  --urdf /path/to/Psi_R1_rev1.urdf --rate 20 --mcap /new/run/path/servo-step.mcap
+./build/mcc-preview/mcl_dual_arm_ik_target_solve \
+  --urdf /path/to/Psi_R1_rev1.urdf --rate 20 --mcap /new/run/path/target-solve.mcap
 ./build/mcc-preview/mcl_grouped_dual_arm_ik \
   --urdf /path/to/Psi_R1_rev1.urdf \
   --red-rate 1000 --yellow-rate 100 --ui-rate 20 \
   --deadline-policy monitor
 ```
+
+两个双臂入口共享双手 Hard position/orientation task、Hard joint-position limits、TUI 和 Viz。
+ServoStep 每次只执行一个 QP update，`--rate` 同时定义其正 `servo_period`，并启用 Hard
+joint-velocity limits。TargetSolve 使用 `servo_period=0`、最多 80 次迭代且不注册 rate limits；
+其 `--rate` 只控制交互求解和发布频率。两者显式使用相同的 ProxQP regularization `1e-4`。
 
 grouped 入口固定使用 `RedYellow` profile，要求 `red-rate > yellow-rate > 0`，默认分别为
 1000 Hz 和 100 Hz。每组 period 同时是该 worker 的 deadline。默认
@@ -266,12 +281,17 @@ rejected attempt 和 worker exception 在 monitor 模式下仍然触发 Fault。
 Yellow、Red 启动前会顺序预热一次；正式 run 中两者完全异步，不等待 source 的下一条
 结果。TUI、Viz 和 MCAP 只在 `ui-rate` 线程运行，不进入 Red solver 路径。
 
-Red 使用双手 Hard position/orientation task。Yellow 使用固定 R1 initial pose 的 Soft posture
-task（weight `10`），并对生产配置中筛选的 10 个 link pair 使用 Soft self-collision velocity
-damping：minimum distance `0.02 m`、influence distance `0.07 m`、gain `20 s^-1`、weight `1`。
-Yellow accepted proposal 通过 weight `1` 的内部 coupling 进入 Red。两组都显式使用 Hard joint
-position/velocity limits。self-collision 是运动优化目标，不是硬安全屏障；margin shortfall 不会自动
-拒绝 accepted solution，硬件 command authorization 仍由集成层负责。
+Red 使用双手 Scaled position/orientation task：每只手的 position/orientation 共享一个
+`progress_weight=100` 的 scale，左右手则独立退化；TUI 会报告两路 scale 的 full/degraded/stuck
+状态。Red 使用 `1e-6` 的 ProxQP convergence/infeasibility tolerance，并显式关闭 warm start；
+joint position/velocity limits 与 Cartesian scaled equalities 共用 app 的 `1e-4` accepted-violation
+合同。Yellow 的 warm-start 策略不变。Yellow 使用固定 R1
+initial pose 的 Soft posture task（weight `10`），并对生产配置中筛选的 10 个 link pair 使用 Soft
+self-collision velocity damping：minimum distance `0.02 m`、influence distance `0.07 m`、gain
+`20 s^-1`、weight `1`。Yellow accepted proposal 通过 weight `1` 的内部 coupling 进入 Red。两组
+都显式使用 Hard joint position/velocity limits，其中 joint position limit 使用 `1e-2 rad` 内部
+margin。self-collision 是运动优化目标，不是硬安全屏障；
+margin shortfall 不会自动拒绝 accepted solution，硬件 command authorization 仍由集成层负责。
 
 app 从 R1 URDF 所在 `robot_description/psi_r1/urdf` 布局推导 mesh package search root，并在
 启动时验证 `psi_r1/meshes`。collision diagnostics 仅在内部 warm-up 和测试中校验，不新增 TUI 或
@@ -299,7 +319,8 @@ FK/IK。多个 `segments` 表示同一次请求中的并行同步 frame move，�
 ```bash
 cmake -S . -B build/cartesian-planning \
   -DMCL_BUILD_SINGLE_ARM_IK=OFF \
-  -DMCL_BUILD_DUAL_ARM_IK=OFF \
+  -DMCL_BUILD_DUAL_ARM_IK_SERVO_STEP=OFF \
+  -DMCL_BUILD_DUAL_ARM_IK_TARGET_SOLVE=OFF \
   -DMCL_BUILD_GROUPED_DUAL_ARM_IK=OFF \
   -DMCL_BUILD_CARTESIAN_PLANNING=ON \
   -DCMAKE_PREFIX_PATH="/path/to/mcc-install;/path/to/eiq-install;/path/to/mcv-install"
@@ -335,11 +356,11 @@ MoveLine，不增加 circle、spline、blend 或 waypoint 拼接语义。
 adapters/execution/       通用 artifact store、manifest 与 SHA-256
 adapters/data/            ROS-free source、decoder、temporal/semantic projection 与 ReplayClock
 adapters/interactive/     共享 CLI、TUI、wall-clock scheduler 和 Viz helpers
-apps/common/              仅共享无 topology 决策的 IK 工具和 R1 被动配置
+apps/common/              共享 IK 工具、R1 被动配置和双臂两模式的固定 topology/交互 runner
 apps/cartesian_planning/  JSON 驱动的纯 Cartesian MoveLine 规划、渲染和 Foxglove 回放
 apps/replay_plan/         不运行 solver 的 canonical timeline inspect/artifact 入口
 apps/dual_arm_replay_ik/  MCC 双臂 canonical replay runner；可选 Foxglove 观察端
-apps/<entry>/             直接拥有 MCC topology、solve/worker loop、main、CMake 和 help test
+apps/<entry>/             独立 main、CMake 和 help test；按入口选择或直接拥有 solve topology
 contracts/                definition、manifest、metric 与 visualization 合同
 data/raw/                 原始数据占位；不得静默改写
 data/canonical/           规范数据占位

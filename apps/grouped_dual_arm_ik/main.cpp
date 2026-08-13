@@ -42,13 +42,16 @@ using mcl::toStdVector;
 constexpr const char * kProgramId = "mcl_grouped_dual_arm_ik";
 constexpr const char * kTitle = "Motion Control Grouped Dual-arm IK";
 constexpr double kMaximumAcceptedHardViolation = 1.0e-4;
-constexpr double kYellowPostureWeight = 10.0;
+constexpr double kJointPositionLimitMarginRad = 1.0e-2;
+constexpr double kCartesianProgressWeight = 10.0;
+constexpr double kRedProxQpAbsoluteTolerance = 1.0e-6;
+constexpr double kYellowPostureWeight = 100.0;
 constexpr double kYellowToRedCouplingWeight = 1.0;
 constexpr double kMinimumCollisionDistanceM = 0.02;
-constexpr double kCollisionInfluenceDistanceM = 0.07;
+constexpr double kCollisionInfluenceDistanceM = 0.3;
 constexpr double kCollisionDampingGainPerS = 20.0;
-constexpr double kCollisionWeight = 1.0;
-constexpr std::size_t kCollisionPairCount = 10;
+constexpr double kCollisionWeight = 100.0;
+constexpr std::size_t kCollisionPairCount = 5;
 
 bool operationSucceeded(const mcc::Status & status) { return status.ok(); }
 
@@ -67,6 +70,14 @@ struct StateSnapshot
   Eigen::VectorXd velocities;
 };
 
+struct TaskScaleSnapshot
+{
+  bool active{false};
+  double scale{1.0};
+  bool degraded{false};
+  bool stuck{false};
+};
+
 struct RedOutputSnapshot
 {
   std::uint64_t revision{0};
@@ -80,10 +91,14 @@ struct RedOutputSnapshot
   double left_orientation_error_rad{0.0};
   double right_position_error_m{0.0};
   double right_orientation_error_rad{0.0};
+  TaskScaleSnapshot left_scale;
+  TaskScaleSnapshot right_scale;
 };
 
 struct CartesianHandles
 {
+  mcc::GroupedTaskScaleGroupHandle left_scale;
+  mcc::GroupedTaskScaleGroupHandle right_scale;
   mcc::GroupedPositionTaskHandle left_position;
   mcc::GroupedOrientationTaskHandle left_orientation;
   mcc::GroupedPositionTaskHandle right_position;
@@ -154,43 +169,58 @@ mcc::SelfCollisionModelDescription collisionModelDescription(
   const std::filesystem::path & urdf_path)
 {
   mcc::SelfCollisionModelDescription description;
-  description.link_pairs = {{"hand2_link_base", "body_link4"}, {"hand2_link_base", "head_link2"},
-                            {"hand1_link_base", "body_link4"}, {"hand1_link_base", "head_link2"},
-                            {"left_arm_link2", "body_link4"},  {"right_arm_link2", "body_link4"},
-                            {"left_arm_link3", "body_link4"},  {"right_arm_link3", "body_link4"},
-                            {"left_arm_link4", "body_link4"},  {"right_arm_link4", "body_link4"}};
+  description.link_pairs = {
+      {"hand2_link_base", "body_link4"}, {"hand2_link_base", "hand1_link_base"},
+      {"hand1_link_base", "body_link4"}, 
+      {"left_arm_link4", "body_link4"},  {"right_arm_link4", "body_link4"}};
   description.mesh_search_paths = {collisionMeshSearchRoot(urdf_path).string()};
   return description;
 }
 
 CartesianHandles addCartesianTasks(
   mcc::GroupedKinematicsSolverBuilder & builder, mcc::SolverGroup group, const std::string & prefix,
-  const mcl::R1RobotConfig & robot, const mcc::RequirementEnforcement & position_enforcement,
-  const mcc::RequirementEnforcement & orientation_enforcement)
+  const mcl::R1RobotConfig & robot)
 {
   CartesianHandles handles;
-  mcc::PositionTaskConfig position;
-  position.enforcement = position_enforcement;
+
+  mcc::TaskScaleGroupConfig scale;
+  scale.progress_weight = kCartesianProgressWeight;
+  scale.name = prefix + "-left-cartesian-progress";
+  requireOk(
+    builder.addTaskScaleGroup(group, scale, handles.left_scale),
+    "Failed to register " + scale.name);
+  scale.name = prefix + "-right-cartesian-progress";
+  requireOk(
+    builder.addTaskScaleGroup(group, scale, handles.right_scale),
+    "Failed to register " + scale.name);
+
+  mcc::GroupedScaledTaskConfig position;
+  position.enforcement.feasibility_tolerance = kMaximumAcceptedHardViolation;
+  position.scale_group = handles.left_scale;
   position.name = prefix + "-left-position";
   requireOk(
-    builder.addPositionTask(group, robot.left_end_effector_frame, position, handles.left_position),
+    builder.addScaledPositionTask(
+      group, robot.left_end_effector_frame, position, handles.left_position),
     "Failed to register " + position.name);
+  position.scale_group = handles.right_scale;
   position.name = prefix + "-right-position";
   requireOk(
-    builder.addPositionTask(
+    builder.addScaledPositionTask(
       group, robot.right_end_effector_frame, position, handles.right_position),
     "Failed to register " + position.name);
 
-  mcc::OrientationTaskConfig orientation;
-  orientation.enforcement = orientation_enforcement;
+  mcc::GroupedScaledTaskConfig orientation;
+  orientation.enforcement.feasibility_tolerance = kMaximumAcceptedHardViolation;
+  orientation.scale_group = handles.left_scale;
   orientation.name = prefix + "-left-orientation";
   requireOk(
-    builder.addOrientationTask(
+    builder.addScaledOrientationTask(
       group, robot.left_end_effector_frame, orientation, handles.left_orientation),
     "Failed to register " + orientation.name);
+  orientation.scale_group = handles.right_scale;
   orientation.name = prefix + "-right-orientation";
   requireOk(
-    builder.addOrientationTask(
+    builder.addScaledOrientationTask(
       group, robot.right_end_effector_frame, orientation, handles.right_orientation),
     "Failed to register " + orientation.name);
   return handles;
@@ -199,14 +229,15 @@ CartesianHandles addCartesianTasks(
 void addExplicitLimits(mcc::GroupedKinematicsSolverBuilder & builder, mcc::SolverGroup group)
 {
   mcc::JointPositionLimitConfig position;
-  position.enforcement = mcc::HardEnforcement{};
+  position.margin = kJointPositionLimitMarginRad;
+  position.enforcement = mcc::HardEnforcement{kMaximumAcceptedHardViolation};
   mcc::GroupedJointPositionLimitHandle position_handle;
   requireOk(
     builder.addJointPositionLimits(group, position, position_handle),
     "Failed to register grouped joint-position limits");
 
   mcc::JointVelocityLimitConfig velocity;
-  velocity.enforcement = mcc::HardEnforcement{};
+  velocity.enforcement = mcc::HardEnforcement{kMaximumAcceptedHardViolation};
   mcc::GroupedJointVelocityLimitHandle velocity_handle;
   requireOk(
     builder.addJointVelocityLimits(group, velocity, velocity_handle),
@@ -261,7 +292,17 @@ std::string rejectedAttemptDetail(
            << requirement->unit << '"' << " requirement_source=\"" << requirement->source << '"';
   }
 
-  output << " position_errors=[";
+  output << " task_scales=[";
+  for (std::size_t index = 0; index < optimization.task_scales.size(); ++index) {
+    if (index != 0) {
+      output << ',';
+    }
+    const auto & scale = optimization.task_scales[index];
+    output << "{name=\"" << scale.name << "\",active=" << std::boolalpha << scale.active
+           << ",scale=" << scale.scale << ",degraded=" << scale.degraded << ",stuck=" << scale.stuck
+           << '}';
+  }
+  output << "] position_errors=[";
   for (std::size_t index = 0; index < kinematics.position_errors.size(); ++index) {
     if (index != 0) {
       output << ',';
@@ -288,7 +329,27 @@ std::string rejectedAttemptDetail(
   return output.str();
 }
 
-void fillRedErrors(
+const mcc::TaskScaleDiagnostic & requireTaskScaleDiagnostic(
+  const mcc::GroupedTaskScaleGroupHandle & handle,
+  const mcc::GroupedInverseKinematicsDiagnostics & diagnostics)
+{
+  for (const auto & scale : diagnostics.kinematics.optimization.task_scales) {
+    if (scale.handle.value == handle.value) {
+      return scale;
+    }
+  }
+  throw std::runtime_error(
+    "accepted Red solve is missing task-scale diagnostic for handle " +
+    std::to_string(handle.value));
+}
+
+TaskScaleSnapshot taskScaleSnapshot(const mcc::TaskScaleDiagnostic & diagnostic)
+{
+  return TaskScaleSnapshot{
+    diagnostic.active, diagnostic.scale, diagnostic.degraded, diagnostic.stuck};
+}
+
+void fillRedDiagnostics(
   const CartesianHandles & handles, const mcc::GroupedInverseKinematicsDiagnostics & diagnostics,
   RedOutputSnapshot & output)
 {
@@ -305,6 +366,57 @@ void fillRedErrors(
     } else if (error.handle.value == handles.right_orientation.value) {
       output.right_orientation_error_rad = error.norm_rad;
     }
+  }
+  output.left_scale =
+    taskScaleSnapshot(requireTaskScaleDiagnostic(handles.left_scale, diagnostics));
+  output.right_scale =
+    taskScaleSnapshot(requireTaskScaleDiagnostic(handles.right_scale, diagnostics));
+}
+
+const char * taskScaleClassification(const TaskScaleSnapshot & scale)
+{
+  if (!scale.active) {
+    return "inactive";
+  }
+  if (scale.stuck) {
+    return "stuck";
+  }
+  if (scale.degraded) {
+    return "degraded";
+  }
+  return "full";
+}
+
+std::string taskScaleStatus(const RedOutputSnapshot & output)
+{
+  std::ostringstream status;
+  status << std::fixed << std::setprecision(3) << "scale L=" << output.left_scale.scale << '('
+         << taskScaleClassification(output.left_scale) << ") R=" << output.right_scale.scale << '('
+         << taskScaleClassification(output.right_scale) << ')';
+  return status.str();
+}
+
+void fillSelfCollisionDebug(
+  const StateSnapshot & input_state, const mcc::SelfCollisionDiagnostics & diagnostics,
+  mcl::SelfCollisionDebug & output)
+{
+  output.label = "Yellow self-collision";
+  output.input_state_sequence = input_state.sequence;
+  output.minimum_distance_m = kMinimumCollisionDistanceM;
+  output.influence_distance_m = kCollisionInfluenceDistanceM;
+  output.minimum_distance_before_m = diagnostics.minimum_distance_before_m;
+  output.minimum_distance_after_m = diagnostics.minimum_distance_after_m;
+  output.margin_shortfall_m = diagnostics.margin_shortfall_m;
+  output.input_joint_positions = toStdVector(input_state.positions);
+  output.pairs.resize(diagnostics.pairs.size());
+  for (std::size_t index = 0; index < diagnostics.pairs.size(); ++index) {
+    const auto & source = diagnostics.pairs[index];
+    auto & destination = output.pairs[index];
+    destination.first_link = source.link_pair.first_link;
+    destination.second_link = source.link_pair.second_link;
+    destination.distance_before_m = source.distance_before_m;
+    destination.distance_after_m = source.distance_after_m;
+    destination.active = source.active;
   }
 }
 
@@ -358,16 +470,17 @@ int run(int argc, char ** argv)
     config->minimum_orientation_improvement_rad = 1.0e-8;
     config->maximum_accepted_hard_violation = kMaximumAcceptedHardViolation;
   }
+  // A target step changes the scaled-equality columns, so Red starts each 1 ms
+  // QP from a neutral guess and requests matching convergence/infeasibility
+  // accuracy from the ProxQP adapter.
+  solver_config.red.qp.proxqp.absolute_tolerance = kRedProxQpAbsoluteTolerance;
+  solver_config.red.qp.proxqp.warm_start_enabled = false;
 
   mcc::GroupedKinematicsSolverBuilder builder;
   requireOk(
     builder.configure(model, joint_names, solver_config), "Failed to configure grouped IK builder");
   GroupedHandles handles;
-  mcc::HardEnforcement red_cartesian_enforcement;
-  red_cartesian_enforcement.feasibility_tolerance = kMaximumAcceptedHardViolation;
-  handles.red = addCartesianTasks(
-    builder, mcc::SolverGroup::Red, "red", robot, red_cartesian_enforcement,
-    red_cartesian_enforcement);
+  handles.red = addCartesianTasks(builder, mcc::SolverGroup::Red, "red", robot);
   mcc::PostureTaskConfig yellow_posture;
   yellow_posture.name = "yellow-initial-posture";
   yellow_posture.enforcement = mcc::squaredL2Penalty(kYellowPostureWeight, 1);
@@ -407,6 +520,13 @@ int run(int argc, char ** argv)
   initial_target.left = requirePose(initial_fk.poses, robot.left_end_effector_frame).pose;
   initial_target.right = requirePose(initial_fk.poses, robot.right_end_effector_frame).pose;
 
+  RedOutputSnapshot initial_output;
+  initial_output.state = initial_state;
+  initial_output.left_pose = initial_target.left;
+  initial_output.right_pose = initial_target.right;
+  mcc::SelfCollisionDiagnostics initial_collision_diagnostics;
+  mcl::SelfCollisionDebug initial_collision_debug;
+
   // Warm all numerical workspaces and the coupling path before deadlines apply.
   requireOk(solver.beginRun(1), "Failed to begin warm-up run");
   {
@@ -421,16 +541,16 @@ int run(int argc, char ** argv)
       throw std::runtime_error(
         "Yellow warm-up failed: " + rejectedAttemptDetail(status, diagnostics));
     }
-    mcc::SelfCollisionDiagnostics collision_diagnostics;
     requireOk(
-      solver.getSelfCollisionDiagnostics(handles.yellow_collision, collision_diagnostics),
+      solver.getSelfCollisionDiagnostics(handles.yellow_collision, initial_collision_diagnostics),
       "Failed to query Yellow self-collision diagnostics after warm-up");
     if (
-      collision_diagnostics.pairs.size() != kCollisionPairCount ||
-      !std::isfinite(collision_diagnostics.minimum_distance_before_m) ||
-      !std::isfinite(collision_diagnostics.minimum_distance_after_m)) {
+      initial_collision_diagnostics.pairs.size() != kCollisionPairCount ||
+      !std::isfinite(initial_collision_diagnostics.minimum_distance_before_m) ||
+      !std::isfinite(initial_collision_diagnostics.minimum_distance_after_m)) {
       throw std::runtime_error("Yellow warm-up returned invalid self-collision diagnostics");
     }
+    fillSelfCollisionDebug(initial_state, initial_collision_diagnostics, initial_collision_debug);
 
     mcc::GroupedInverseKinematicsRequest red;
     initializeCartesianRequest(handles.red, robot.base_frame, red);
@@ -440,19 +560,21 @@ int run(int argc, char ** argv)
     if (!operationSucceeded(status) || !diagnostics.attempt_accepted) {
       throw std::runtime_error("Red warm-up failed: " + rejectedAttemptDetail(status, diagnostics));
     }
+    initial_output.solve_time_ms = diagnostics.kinematics.solve_time_ms;
+    initial_output.iterations = diagnostics.kinematics.iterations;
+    initial_output.converged = diagnostics.kinematics.converged;
+    fillRedDiagnostics(handles.red, diagnostics, initial_output);
   }
   requireOk(solver.beginRun(2), "Failed to begin timed grouped run");
 
-  RedOutputSnapshot initial_output;
-  initial_output.state = initial_state;
-  initial_output.left_pose = initial_target.left;
-  initial_output.right_pose = initial_target.right;
   mcl::LatestValueMailbox<TargetSnapshot> target_to_red(initial_target);
   mcl::LatestValueMailbox<StateSnapshot> state_to_yellow(initial_state);
   mcl::LatestValueMailbox<RedOutputSnapshot> output_to_ui(initial_output);
+  mcl::LatestValueMailbox<mcl::SelfCollisionDebug> collision_to_ui(initial_collision_debug);
   target_to_red.publish(initial_target);
   state_to_yellow.publish(initial_state);
   output_to_ui.publish(initial_output);
+  collision_to_ui.publish(initial_collision_debug);
 
   const auto presentation = mcl::makeArmPresentation(robot, mcl::foxgloveIkVisualizationChannels());
   mcl::TuiTeleopSource tui(
@@ -488,6 +610,8 @@ int run(int argc, char ** argv)
       request.reference_frame_name = robot.base_frame;
       mcc::GroupedInverseKinematicsSolution solution;
       mcc::GroupedInverseKinematicsDiagnostics diagnostics;
+      mcc::SelfCollisionDiagnostics collision_diagnostics = initial_collision_diagnostics;
+      mcl::SelfCollisionDebug collision_debug = initial_collision_debug;
       mcl::runPeriodicWorker(
         {mcl::WorkerGroup::Yellow, options.yellow_rate_hz, options.deadline_policy},
         stop_controller, fault, yellow_worker_diagnostics, [&](double, std::int64_t) {
@@ -495,6 +619,13 @@ int run(int argc, char ** argv)
           request.captured_state = capturedState(state);
           const auto status =
             solver.solveInverseKinematics(mcc::SolverGroup::Yellow, request, solution, diagnostics);
+          if (diagnostics.attempt_accepted) {
+            requireOk(
+              solver.getSelfCollisionDiagnostics(handles.yellow_collision, collision_diagnostics),
+              "Failed to query accepted Yellow self-collision diagnostics");
+            fillSelfCollisionDebug(state, collision_diagnostics, collision_debug);
+            collision_to_ui.publish(collision_debug);
+          }
           return mcl::WorkerIterationResult{
             diagnostics.attempt_accepted, diagnostics.attempt_revision,
             diagnostics.kinematics.solve_time_ms,
@@ -537,7 +668,7 @@ int run(int argc, char ** argv)
             output.solve_time_ms = diagnostics.kinematics.solve_time_ms;
             output.iterations = diagnostics.kinematics.iterations;
             output.converged = diagnostics.kinematics.converged;
-            fillRedErrors(handles.red, diagnostics, output);
+            fillRedDiagnostics(handles.red, diagnostics, output);
             output_to_ui.publish(output);
           }
           return mcl::WorkerIterationResult{
@@ -551,6 +682,7 @@ int run(int argc, char ** argv)
     mcl::InteractiveScheduler ui_scheduler({options.ui_rate_hz, options.duration_s});
     TargetSnapshot published_target = initial_target;
     RedOutputSnapshot latest_output = initial_output;
+    mcl::SelfCollisionDebug latest_collision_debug = initial_collision_debug;
     std::size_t publish_count = 0;
     std::int64_t last_sample_time_ns = 0;
     std::uint64_t last_emit_time_ns = 0;
@@ -562,6 +694,7 @@ int run(int argc, char ** argv)
       {mcl::ArmSide::Left, initial_output.left_pose},
       {mcl::ArmSide::Right, initial_output.right_pose}};
     frame.selected_side = mcl::parseArmSide(options.tui.side);
+    frame.self_collisions = {initial_collision_debug};
 
     while (!stop_controller.stopRequested()) {
       const auto schedule = ui_scheduler.next();
@@ -570,6 +703,7 @@ int run(int argc, char ** argv)
       }
       tui.poll();
       output_to_ui.readLatest(latest_output);
+      collision_to_ui.readLatest(latest_collision_debug);
       if (const auto reset_side = tui.consumeResetRequest()) {
         tui.setTargetPose(
           *reset_side,
@@ -597,13 +731,13 @@ int run(int argc, char ** argv)
         frame.velocities = toStdVector(latest_output.state.velocities);
         const auto red_stats = red_worker_diagnostics.snapshot();
         const auto yellow_stats = yellow_worker_diagnostics.snapshot();
-        frame.ik_status =
-          fault.triggered()
-            ? "fault"
-            : "running deadline_misses R=" + std::to_string(red_stats.deadline_miss_count) +
-                " Y=" + std::to_string(yellow_stats.deadline_miss_count) +
-                " skipped R=" + std::to_string(red_stats.skipped_release_count) +
-                " Y=" + std::to_string(yellow_stats.skipped_release_count);
+        frame.ik_status = fault.triggered()
+                            ? "fault " + taskScaleStatus(latest_output)
+                            : "running " + taskScaleStatus(latest_output) + " deadline_misses R=" +
+                                std::to_string(red_stats.deadline_miss_count) +
+                                " Y=" + std::to_string(yellow_stats.deadline_miss_count) +
+                                " skipped R=" + std::to_string(red_stats.skipped_release_count) +
+                                " Y=" + std::to_string(yellow_stats.skipped_release_count);
         frame.iterations = latest_output.iterations;
         frame.converged = latest_output.converged;
         frame.solve_time_ms = latest_output.solve_time_ms;
@@ -612,6 +746,7 @@ int run(int argc, char ** argv)
            latest_output.left_orientation_error_rad},
           {mcl::ArmSide::Right, latest_output.right_position_error_m,
            latest_output.right_orientation_error_rad}};
+        frame.self_collisions = {latest_collision_debug};
         frame.status = command.status +
                        " | skipped_releases R=" + std::to_string(red_stats.skipped_release_count) +
                        " Y=" + std::to_string(yellow_stats.skipped_release_count);

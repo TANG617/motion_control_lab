@@ -3,6 +3,7 @@
 #include <Eigen/Geometry>
 
 #include <cstddef>
+#include <cstdint>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -54,6 +55,28 @@ struct ArmForwardKinematics
   Pose pose{Pose::Identity()};
 };
 
+struct SelfCollisionPairDebug
+{
+  std::string first_link;
+  std::string second_link;
+  double distance_before_m{0.0};
+  double distance_after_m{0.0};
+  bool active{false};
+};
+
+struct SelfCollisionDebug
+{
+  std::string label{"self-collision"};
+  std::uint64_t input_state_sequence{0};
+  double minimum_distance_m{0.0};
+  double influence_distance_m{0.0};
+  double minimum_distance_before_m{0.0};
+  double minimum_distance_after_m{0.0};
+  double margin_shortfall_m{0.0};
+  std::vector<double> input_joint_positions;
+  std::vector<SelfCollisionPairDebug> pairs;
+};
+
 struct ArmPresentation
 {
   ArmSide side{ArmSide::Left};
@@ -102,6 +125,7 @@ struct IkDebugFrame
   bool converged{false};
   double solve_time_ms{0.0};
   std::vector<ArmTargetError> target_errors;
+  std::vector<SelfCollisionDebug> self_collisions;
   std::string status{"Ready"};
   bool paused{false};
   ArmSide selected_side{ArmSide::Left};

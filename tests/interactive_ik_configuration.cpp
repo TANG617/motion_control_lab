@@ -1,3 +1,4 @@
+#include "dual_arm_ik_app.hpp"
 #include "ik_app_utils.hpp"
 #include "r1_robot_config.hpp"
 
@@ -7,12 +8,41 @@
 #include "runtime/interactive_types.hpp"
 #include "sinks/ik_visualization.hpp"
 
+#include <cmath>
 #include <cstdlib>
 #include <stdexcept>
 #include <string>
 
 int main()
 {
+  namespace mcc = motion_control::core;
+
+  const auto servo_step = motion_control_lab::makeDualArmIkSolverSetup(
+    mcc::IkSolveMode::ServoStep, 50.0);
+  if (servo_step.solver_config.mode != mcc::IkSolveMode::ServoStep ||
+      std::abs(servo_step.solver_config.servo_period - 0.02) > 1.0e-12 ||
+      servo_step.solver_config.joint_limit_policy !=
+      mcc::KinematicsJointLimitPolicy::ExplicitRequirements ||
+      servo_step.solver_config.qp.backend != mcc::QpBackend::ProxQp ||
+      std::abs(servo_step.solver_config.qp.regularization - 1.0e-4) > 1.0e-12 ||
+      servo_step.solver_config.maximum_iterations != 1 ||
+      !servo_step.register_joint_velocity_limits) {
+    return EXIT_FAILURE;
+  }
+
+  const auto target_solve = motion_control_lab::makeDualArmIkSolverSetup(
+    mcc::IkSolveMode::TargetSolve, 50.0);
+  if (target_solve.solver_config.mode != mcc::IkSolveMode::TargetSolve ||
+      target_solve.solver_config.servo_period != 0.0 ||
+      target_solve.solver_config.joint_limit_policy !=
+      mcc::KinematicsJointLimitPolicy::ExplicitRequirements ||
+      target_solve.solver_config.qp.backend != mcc::QpBackend::ProxQp ||
+      std::abs(target_solve.solver_config.qp.regularization - 1.0e-4) > 1.0e-12 ||
+      target_solve.solver_config.maximum_iterations != 80 ||
+      target_solve.register_joint_velocity_limits) {
+    return EXIT_FAILURE;
+  }
+
   char program[] = "mcl_single_arm_ik";
   char urdf_option[] = "--urdf";
   char urdf_value[] = "/tmp/robot.urdf";
@@ -43,7 +73,7 @@ int main()
   char * grouped_argv[]{grouped_program, grouped_urdf_option, grouped_urdf_value};
   const auto grouped = motion_control_lab::parseGroupedInteractiveIkOptions(3, grouped_argv);
   if (grouped.red_rate_hz != 1000.0 || grouped.yellow_rate_hz != 100.0 ||
-      grouped.ui_rate_hz != 20.0 ||
+      grouped.ui_rate_hz != 100.0 ||
       grouped.deadline_policy != motion_control_lab::DeadlinePolicy::Strict) {
     return EXIT_FAILURE;
   }

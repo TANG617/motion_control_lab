@@ -13,9 +13,9 @@ namespace motion_control_lab
 struct TuiTeleopOptions
 {
   std::string side{"left"};
-  double step_m{0.01};
+  double step_m{0.005};
   double min_step_m{0.001};
-  double max_step_m{0.1};
+  double max_step_m{0.5};
   double rotation_step_deg{5.0};
 };
 
@@ -29,7 +29,7 @@ struct VisualizationSinkOptions
 struct InteractiveIkOptions
 {
   std::string urdf_path;
-  double rate_hz{20.0};
+  double rate_hz{100.0};
   double duration_s{0.0};
   TuiTeleopOptions tui;
   VisualizationSinkOptions visualization;
@@ -40,7 +40,7 @@ struct GroupedInteractiveIkOptions
   std::string urdf_path;
   double red_rate_hz{1000.0};
   double yellow_rate_hz{100.0};
-  double ui_rate_hz{20.0};
+  double ui_rate_hz{100.0};
   DeadlinePolicy deadline_policy{DeadlinePolicy::Strict};
   double duration_s{0.0};
   TuiTeleopOptions tui;

@@ -201,6 +201,57 @@ void addLine(std::ostringstream & screen, int row, int col, const std::string & 
          << fitLine(text, width - col);
 }
 
+std::vector<std::string> jointPositionLines(
+  const JointNames & joint_names, const std::vector<double> & positions,
+  const std::string & first_prefix, int width)
+{
+  std::vector<std::string> lines;
+  std::string line = first_prefix;
+  const std::string continuation{"  "};
+  for (std::size_t index = 0; index < positions.size(); ++index) {
+    std::ostringstream token;
+    token << (index < joint_names.size() ? joint_names[index] : "joint_" + std::to_string(index))
+          << '=' << std::fixed << std::setprecision(3) << positions[index];
+    const std::string value = token.str();
+    const std::size_t separator = line == first_prefix || line == continuation ? 0U : 1U;
+    if (
+      separator != 0U && width > 0 &&
+      line.size() + separator + value.size() > static_cast<std::size_t>(width)) {
+      lines.push_back(line);
+      line = continuation + value;
+    } else {
+      if (separator != 0U) {
+        line.push_back(' ');
+      }
+      line += value;
+    }
+  }
+  if (line != first_prefix || positions.empty()) {
+    lines.push_back(line);
+  }
+  return lines;
+}
+
+double collisionPairDistance(const SelfCollisionPairDebug & pair)
+{
+  return std::min(pair.distance_before_m, pair.distance_after_m);
+}
+
+const char * collisionPairState(
+  const SelfCollisionPairDebug & pair, const SelfCollisionDebug & collision)
+{
+  if (pair.distance_before_m < 0.0 || pair.distance_after_m < 0.0) {
+    return "COLLISION";
+  }
+  if (pair.distance_after_m < collision.minimum_distance_m) {
+    return "SHORTFALL";
+  }
+  if (pair.active) {
+    return "ACTIVE";
+  }
+  return "NEAR";
+}
+
 }  // namespace
 
 TerminalSession::TerminalSession()
@@ -405,6 +456,140 @@ void TuiTeleopSource::render(
   const auto [height, width] = terminal_.size();
   std::ostringstream screen;
   screen << "\033[H\033[2J";
+
+  if (!frame.self_collisions.empty()) {
+    addLine(screen, 0, 0, title_, width);
+    addLine(
+      screen, 1, 0,
+      "side=" + std::string{armSideName(command_.selected_side)} + "  " + sink_status +
+        "  mode=" + (command_.paused ? "PAUSED" : "PUBLISHING") +
+        "  rate=" + std::to_string(static_cast<int>(rate_hz_)) + " Hz" +
+        "  publish_ticks=" + std::to_string(publish_count),
+      width);
+    addLine(
+      screen, 2, 0,
+      "targets: L=" + targetTopicForSide(presentation_, ArmSide::Left) +
+        " R=" + targetTopicForSide(presentation_, ArmSide::Right),
+      width);
+    {
+      std::ostringstream line;
+      line << "step=" << std::fixed << std::setprecision(4) << step_m_
+           << " m  rot_axis=tcp_" << selectedRotationAxis(rotation_axis_index_)
+           << "  rot_step=" << std::setprecision(2) << options_.rotation_step_deg << " deg";
+      addLine(screen, 3, 0, line.str(), width);
+    }
+    addLine(
+      screen, 4, 0,
+      "target left : " +
+        formatPose(findTarget(command_.targets, ArmSide::Left), presentation_.base_frame_id),
+      width);
+    addLine(
+      screen, 5, 0,
+      "target right: " +
+        formatPose(findTarget(command_.targets, ArmSide::Right), presentation_.base_frame_id),
+      width);
+    {
+      std::ostringstream line;
+      line << "IK: " << frame.ik_status << "  iterations=" << frame.iterations
+           << "  converged=" << std::boolalpha << frame.converged
+           << "  solve_ms=" << std::fixed << std::setprecision(3) << frame.solve_time_ms;
+      addLine(screen, 6, 0, line.str(), width);
+    }
+    int row = 7;
+    for (const auto side : {ArmSide::Left, ArmSide::Right}) {
+      const auto * error = findError(frame.target_errors, side);
+      if (error == nullptr) {
+        continue;
+      }
+      std::ostringstream line;
+      line << "error " << armSideName(side) << ": position=" << std::fixed
+           << std::setprecision(6) << error->position_m << " m  orientation="
+           << error->orientation_rad << " rad";
+      addLine(screen, row++, 0, line.str(), width);
+    }
+
+    const auto & collision = frame.self_collisions.front();
+    std::size_t active_count = 0;
+    std::size_t penetrating_before_count = 0;
+    std::size_t penetrating_after_count = 0;
+    std::vector<const SelfCollisionPairDebug *> relevant_pairs;
+    relevant_pairs.reserve(collision.pairs.size());
+    for (const auto & pair : collision.pairs) {
+      active_count += pair.active ? 1U : 0U;
+      penetrating_before_count += pair.distance_before_m < 0.0 ? 1U : 0U;
+      penetrating_after_count += pair.distance_after_m < 0.0 ? 1U : 0U;
+      if (pair.active || pair.distance_after_m < collision.influence_distance_m) {
+        relevant_pairs.push_back(&pair);
+      }
+    }
+    std::sort(
+      relevant_pairs.begin(), relevant_pairs.end(),
+      [](const auto * left, const auto * right) {
+        return collisionPairDistance(*left) < collisionPairDistance(*right);
+      });
+    if (relevant_pairs.empty() && !collision.pairs.empty()) {
+      relevant_pairs.push_back(&*std::min_element(
+        collision.pairs.begin(), collision.pairs.end(), [](const auto & left, const auto & right) {
+          return collisionPairDistance(left) < collisionPairDistance(right);
+        }));
+    }
+    {
+      std::ostringstream line;
+      line << collision.label << ": input_seq=" << collision.input_state_sequence
+           << " active=" << active_count << '/' << collision.pairs.size()
+           << " penetrating(before/after)=" << penetrating_before_count << '/'
+           << penetrating_after_count;
+      addLine(screen, row++, 0, line.str(), width);
+    }
+    {
+      std::ostringstream line;
+      line << "distance: min_before=" << std::fixed << std::setprecision(4)
+           << collision.minimum_distance_before_m
+           << " m  min_after=" << collision.minimum_distance_after_m << " m";
+      addLine(screen, row++, 0, line.str(), width);
+    }
+    {
+      std::ostringstream line;
+      line << "threshold: safe=" << std::fixed << std::setprecision(4)
+           << collision.minimum_distance_m << " m  influence=" << collision.influence_distance_m
+           << " m  shortfall=" << collision.margin_shortfall_m << " m";
+      addLine(screen, row++, 0, line.str(), width);
+    }
+
+    const auto q_lines = jointPositionLines(
+      frame.joint_names, collision.input_joint_positions, "all q (before): ", width);
+    for (const auto & line : q_lines) {
+      if (row >= height - 1) {
+        break;
+      }
+      addLine(screen, row++, 0, line, width);
+    }
+
+    std::size_t shown_pair_count = 0;
+    for (const auto * pair : relevant_pairs) {
+      if (row >= height - 2) {
+        break;
+      }
+      std::ostringstream line;
+      line << "collision[" << collisionPairState(*pair, collision) << "] " << pair->first_link
+           << " <-> " << pair->second_link << " before=" << std::showpos << std::fixed
+           << std::setprecision(4) << pair->distance_before_m
+           << " after=" << pair->distance_after_m << " m";
+      addLine(screen, row++, 0, line.str(), width);
+      ++shown_pair_count;
+    }
+    if (shown_pair_count < relevant_pairs.size() && row < height - 1) {
+      addLine(
+        screen, row, 0,
+        "... " + std::to_string(relevant_pairs.size() - shown_pair_count) +
+          " additional active/near collision pairs not shown",
+        width);
+    }
+
+    addLine(screen, std::max(0, height - 1), 0, "status: " + command_.status, width);
+    terminal_.write(screen.str());
+    return;
+  }
 
   addLine(screen, 0, 0, title_, width);
   addLine(

@@ -18,7 +18,7 @@ planned。
 | Temporal projector | `adapters/data/temporal/` 中的 timestamp selection、严格时间校验、immutable Timeline、projection 与 ReplayClock |
 | Semantic projector | `adapters/data/projection/dual_arm_timeline.*`；只消费两个 `TypedStream<StampedPose>` |
 | Replay plan | `mcl_replay_plan`；预加载输入并输出 timeline trace/manifest，不运行 solver |
-| MCC interactive apps | `apps/single_arm_ik/`、`apps/dual_arm_ik/` 使用 `RedOnly`；`apps/grouped_dual_arm_ik/` 固定使用 Red/Yellow |
+| MCC interactive apps | `apps/single_arm_ik/` 使用 `RedOnly`；`apps/dual_arm_ik_servo_step/`、`apps/dual_arm_ik_target_solve/` 复用一个固定 topology 的 `KinematicsSolver`；`apps/grouped_dual_arm_ik/` 固定使用 Red/Yellow |
 | Cartesian planning preview | `apps/cartesian_planning/` 读取版本化 JSON，调用 Core MoveLine planner，输出 CSV/PNG 并循环发布 Foxglove；不加载 robot model 或调用 IK |
 | Interactive support | `adapters/interactive/` 提供 CLI、TUI、wall-clock scheduler、SPSC latest mailbox、periodic worker/Fault 和 Viz helpers |
 | IK visualization contract | `contracts/visualization/foxglove_ik.v1.json` + `foxglove_ik_v1.hpp` 固定五条 Foxglove topic，并要求 FK 与同帧 joint state 一致 |

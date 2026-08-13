@@ -20,8 +20,13 @@ option(
   ON
 )
 option(
-  MCL_BUILD_DUAL_ARM_IK
-  "Build the dual-arm interactive IK application"
+  MCL_BUILD_DUAL_ARM_IK_SERVO_STEP
+  "Build the dual-arm ServoStep interactive IK application"
+  ON
+)
+option(
+  MCL_BUILD_DUAL_ARM_IK_TARGET_SOLVE
+  "Build the dual-arm TargetSolve interactive IK application"
   ON
 )
 option(
@@ -64,7 +69,8 @@ if(MCL_BUILD_DUAL_ARM_REPLAY_VISUALIZATION AND
 endif()
 
 set(MCL_BUILD_ANY_INTERACTIVE_IK OFF)
-if(MCL_BUILD_SINGLE_ARM_IK OR MCL_BUILD_DUAL_ARM_IK OR MCL_BUILD_GROUPED_DUAL_ARM_IK)
+if(MCL_BUILD_SINGLE_ARM_IK OR MCL_BUILD_DUAL_ARM_IK_SERVO_STEP OR
+   MCL_BUILD_DUAL_ARM_IK_TARGET_SOLVE OR MCL_BUILD_GROUPED_DUAL_ARM_IK)
   set(MCL_BUILD_ANY_INTERACTIVE_IK ON)
 endif()
 
@@ -174,8 +180,11 @@ if(MCL_BUILD_ANY_INTERACTIVE_IK)
   if(MCL_BUILD_SINGLE_ARM_IK)
     add_subdirectory(apps/single_arm_ik)
   endif()
-  if(MCL_BUILD_DUAL_ARM_IK)
-    add_subdirectory(apps/dual_arm_ik)
+  if(MCL_BUILD_DUAL_ARM_IK_SERVO_STEP)
+    add_subdirectory(apps/dual_arm_ik_servo_step)
+  endif()
+  if(MCL_BUILD_DUAL_ARM_IK_TARGET_SOLVE)
+    add_subdirectory(apps/dual_arm_ik_target_solve)
   endif()
   if(MCL_BUILD_GROUPED_DUAL_ARM_IK)
     add_subdirectory(apps/grouped_dual_arm_ik)

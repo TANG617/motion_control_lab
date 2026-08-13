@@ -1,5 +1,6 @@
 add_library(
   mcl_app_common
+  dual_arm_ik_app.cpp
   ik_app_utils.cpp
   r1_robot_config.cpp
 )
