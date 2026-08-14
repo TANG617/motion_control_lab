@@ -1,35 +1,26 @@
-# E01：PlaCo C++ 基础 Smoke Test
+# E01：PlaCo C++ R1 Smoke
 
-## 目的
+E01 使用 vendored PlaCo C++ 核心和固定模型
+`/workspace/models/r1.cos.urdf`，验证 R1 左臂位置 IK 与实验 evidence 链路。
+它和 E04 使用完全相同的按名称映射初态、目标态、`left_arm_ee_link`
+位置目标、100 次迭代上限与 `1e-5 m` 收敛阈值；目标位置由声明的目标关节状态
+做 FK 得到。
 
-E01 验证以下最小链路：
+R1 URDF 含 HTTPS mesh。E01 以
+`RobotWrapper::IGNORE_COLLISIONS | RobotWrapper::IGNORE_GEOMETRY` 加载模型，
+因此 smoke 不下载几何资源，也不改变 PlaCo 原有 `IGNORE_COLLISIONS` 的含义。
 
-1. 从固定源码版本构建 placo C++ 核心；
-2. 读取仓库内的二连杆 URDF；
-3. 固定 floating base 并创建末端位置 task；
-4. 运行 IK，将末端位置误差降到声明阈值以内；
-5. 保存完整 run manifest、输入副本、逐步 trace、tidy metrics 和报告；
-6. 重新计算 artifact SHA-256，验证证据包完整。
+研究问题、输入、arm、控制条件、指标、guardrail 和 artifact contract 均固定在
+[`definition.json`](definition.json) 中。运行会保存原始 URDF 副本、模型哈希、
+依赖源码指纹、逐迭代 trace、status、tidy metrics、report 和带 artifact 哈希的
+manifest。
 
-它是依赖和实验框架的 qualification，不回答 task 取舍、业务机器人效果或 placo
-性能优劣。
+PlaCo 固定为 `v0.9.23` 对应提交
+`e6c288604639d67b979a16cb2ad26913413c8e3a`，源码是
+`third_party/placo/` 下不含嵌套 Git 的普通文件。完整来源和 Lab 补丁见
+[`MOTION_CONTROL_LAB.md`](../../third_party/placo/MOTION_CONTROL_LAB.md)。
 
-## 固定声明
-
-研究问题、输入、arm、控制条件、指标和失败策略均在
-[`definition.json`](definition.json) 中。执行器只接受这份固定声明；修改声明或
-URDF 后必须重新运行 CMake，使构建中记录的输入 hash 同步更新。
-
-placo 当前固定为 `v0.9.23` 对应提交
-`e6c288604639d67b979a16cb2ad26913413c8e3a`。
-源码以普通文件保存在仓库根目录的 `third_party/placo/`，不是 submodule。
-为兼容当前 Homebrew Pinocchio 4 / Eigen 5，vendored 源码包含只涉及上游 API
-重命名的最小修改，不改变 IK 求解逻辑。每次 run 还会记录实际参与构建的 placo
-C++ 源码内容指纹，修改源码后不会继续伪装成未修改的上游版本。
-
-## 运行
-
-从仓库根目录执行：
+从仓库根目录构建和运行：
 
 ```bash
 cmake --preset dev
@@ -37,29 +28,22 @@ cmake --build --preset dev --target e01_placo_smoke -j8
 ./build/dev/e01_placo_smoke
 ```
 
-运行目录遵循：
+默认 evidence 目录为：
 
 ```text
 runs/<run-id>/
   manifest.json
   definition/resolved.json
-  inputs/synthetic_two_link/
-    canonical_copy.urdf
-    metadata.json
-  arms/placo_v0_9_23/synthetic_two_link/
-    trace.csv
-    status.json
-  evaluation/
-    metrics.csv
-    report.md
+  inputs/psi_r1_cos/{canonical_copy.urdf,metadata.json}
+  arms/placo_v0_9_23/psi_r1_cos/{trace.csv,status.json}
+  evaluation/{metrics.csv,report.md}
 ```
 
 自动验证：
 
 ```bash
-ctest --preset dev --output-on-failure
+ctest --preset dev --output-on-failure -R 'contracts.e01_definition|contracts.r1_smoke_pair|experiments.e01_placo_smoke'
 ```
 
-只有 manifest 状态为 `completed`、末端误差达到声明阈值、关节限位 guardrail
-通过且全部 artifact 哈希一致时，测试才通过。Smoke test 产生的耗时只用于确认
-采集链有效，不构成性能 Benchmark。
+只有求解收敛、关节限位和有限值 guardrail 通过，且 evidence bundle 满足
+definition 的 artifact contract 时测试才通过。耗时数据只验证采集链，不构成性能结论。

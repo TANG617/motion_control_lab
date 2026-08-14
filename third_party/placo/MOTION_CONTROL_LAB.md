@@ -20,6 +20,9 @@ The imported source contains these deliberate integration changes:
 2. The Eigen lookup does not constrain the major version.
 3. Pinocchio `Frame::parentJoint` replaces the removed `Frame::parent` API.
 4. Eigen 5's `Eigen::placeholders::all` replaces `Eigen::all`.
+5. `RobotWrapper::IGNORE_GEOMETRY` allows model-only IK to skip unavailable
+   mesh resources without changing the existing `IGNORE_COLLISIONS` behavior;
+   the flag is also exposed by the Python enum binding.
 
 These changes are committed as normal repository files, so further PlaCo
 experiments can edit `third_party/placo/` directly and review the resulting

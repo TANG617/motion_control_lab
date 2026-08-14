@@ -55,6 +55,11 @@ option(
   ON
 )
 option(
+  MCL_BUILD_E04_OPENSOT_SMOKE
+  "Build the isolated ROS2 OpenSoT R1 smoke experiment"
+  OFF
+)
+option(
   MCL_BUILD_DUAL_ARM_REPLAY_VISUALIZATION
   "Build optional Foxglove live visualization into the dual-arm replay IK runner"
   OFF
@@ -82,6 +87,10 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 list(PREPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
 include(cmake/Dependencies.cmake)
+
+if(MCL_BUILD_E04_OPENSOT_SMOKE)
+  include(cmake/OpenSoTExternal.cmake)
+endif()
 
 if(MCL_BUILD_ANY_INTERACTIVE_IK OR MCL_BUILD_MCC_PLOTS OR MCL_BUILD_CARTESIAN_PLANNING OR
    MCL_BUILD_DUAL_ARM_REPLAY_IK OR MCL_BUILD_E03_BATCH_REPLAY_IK)
@@ -327,7 +336,7 @@ endif()
 
 set(E01_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/experiments/E01_placo_smoke")
 set(E01_DEFINITION "${E01_DIRECTORY}/definition.json")
-set(E01_MODEL "${E01_DIRECTORY}/model/two_link.urdf")
+set(E01_MODEL "/workspace/models/r1.cos.urdf")
 set(MCL_PLACO_UPSTREAM_REVISION "e6c288604639d67b979a16cb2ad26913413c8e3a")
 set(
   MCL_RUNTIME_DESCRIPTION
@@ -430,6 +439,11 @@ add_executable(
   e01_placo_smoke
   experiments/E01_placo_smoke/src/main.cpp
 )
+if(APPLE)
+  set_target_properties(e01_placo_smoke PROPERTIES INSTALL_RPATH "@loader_path/../lib")
+else()
+  set_target_properties(e01_placo_smoke PROPERTIES INSTALL_RPATH "$ORIGIN/../${CMAKE_INSTALL_LIBDIR}")
+endif()
 target_include_directories(
   e01_placo_smoke
   PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated"
@@ -442,11 +456,116 @@ target_link_libraries(
 )
 
 set(MCL_INSTALL_RUNTIME_TARGETS e01_placo_smoke)
+if(MCL_BUILD_E04_OPENSOT_SMOKE)
+  set(E04_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/experiments/E04_opensot_smoke")
+  set(E04_DEFINITION "${E04_DIRECTORY}/definition.json")
+  set(E04_MODEL "/workspace/models/r1.cos.urdf")
+  set(MCL_OPENSOT_UPSTREAM_REVISION "f1d8c733bcff49ed5b213191ac85a0629bb97d43")
+  set(
+    E04_RUNTIME_DESCRIPTION
+    "C++17-Lab/C++20-OpenSoT;${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR};${CMAKE_CXX_COMPILER_ID}-${CMAKE_CXX_COMPILER_VERSION};ROS2-Jazzy"
+  )
+
+  file(SHA256 "${E04_DEFINITION}" E04_DEFINITION_SHA256)
+  file(SHA256 "${E04_MODEL}" E04_MODEL_SHA256)
+  file(
+    GLOB_RECURSE MCL_OPENSOT_BUILD_INPUTS
+    CONFIGURE_DEPENDS
+    LIST_DIRECTORIES false
+    RELATIVE "${MCL_OPENSOT_SOURCE_DIR}"
+    "${MCL_OPENSOT_SOURCE_DIR}/*"
+  )
+  # The provenance note records this digest and is therefore not part of the
+  # digest input. All imported source, licenses, build files, and local patches are.
+  list(REMOVE_ITEM MCL_OPENSOT_BUILD_INPUTS "MOTION_CONTROL_LAB.md")
+  list(SORT MCL_OPENSOT_BUILD_INPUTS)
+  set(MCL_OPENSOT_FINGERPRINT_INPUT "")
+  foreach(MCL_OPENSOT_BUILD_INPUT IN LISTS MCL_OPENSOT_BUILD_INPUTS)
+    file(
+      SHA256
+      "${MCL_OPENSOT_SOURCE_DIR}/${MCL_OPENSOT_BUILD_INPUT}"
+      MCL_OPENSOT_BUILD_INPUT_SHA256
+    )
+    string(
+      APPEND MCL_OPENSOT_FINGERPRINT_INPUT
+      "${MCL_OPENSOT_BUILD_INPUT}:${MCL_OPENSOT_BUILD_INPUT_SHA256}\n"
+    )
+  endforeach()
+  string(
+    SHA256
+    MCL_OPENSOT_SOURCE_SHA256
+    "${MCL_OPENSOT_FINGERPRINT_INPUT}"
+  )
+  set(
+    MCL_OPENSOT_REVISION
+    "upstream:${MCL_OPENSOT_UPSTREAM_REVISION};source-sha256:${MCL_OPENSOT_SOURCE_SHA256}"
+  )
+  set_property(
+    DIRECTORY
+    APPEND
+    PROPERTY CMAKE_CONFIGURE_DEPENDS "${E04_DEFINITION}" "${E04_MODEL}"
+  )
+  configure_file(
+    "${E04_DIRECTORY}/src/build_config.hpp.in"
+    "${CMAKE_CURRENT_BINARY_DIR}/generated/e04_build_config.hpp"
+    @ONLY
+  )
+
+  add_executable(
+    e04_opensot_smoke
+    experiments/E04_opensot_smoke/src/main.cpp
+  )
+  add_dependencies(e04_opensot_smoke mcl_opensot_external)
+  target_include_directories(
+    e04_opensot_smoke
+    PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated"
+  )
+  target_link_libraries(
+    e04_opensot_smoke
+    PRIVATE
+      mcl_opensot_bridge
+      motion_control_lab::run_artifacts
+  )
+  if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    target_link_options(
+      e04_opensot_smoke
+      PRIVATE
+        "LINKER:-rpath-link,${MCL_OPENSOT_EXTERNAL_INSTALL_DIR}/lib"
+        "LINKER:-rpath-link,${MCL_OPENSOT_DEPENDENCY_PREFIX}/lib"
+        "LINKER:-rpath-link,${MCL_OPENSOT_ROS_PREFIX}/lib"
+    )
+  endif()
+  set_target_properties(
+    e04_opensot_smoke
+    PROPERTIES
+      BUILD_RPATH
+        "${MCL_OPENSOT_EXTERNAL_INSTALL_DIR}/lib;${MCL_OPENSOT_DEPENDENCY_PREFIX}/lib;/opt/openrobots/lib;${MCL_OPENSOT_ROS_PREFIX}/lib"
+      INSTALL_RPATH "$ORIGIN/../${CMAKE_INSTALL_LIBDIR}/motion-control-lab/opensot"
+  )
+  list(APPEND MCL_INSTALL_RUNTIME_TARGETS e04_opensot_smoke)
+
+  install(
+    DIRECTORY "${MCL_OPENSOT_EXTERNAL_INSTALL_DIR}/lib/"
+    DESTINATION "${CMAKE_INSTALL_LIBDIR}/motion-control-lab/opensot"
+    OPTIONAL
+    FILES_MATCHING
+      PATTERN "cmake" EXCLUDE
+      PATTERN "libmcl_opensot_bridge.so*"
+      PATTERN "libOpenSoT.so*"
+      PATTERN "libOpenSotBackEndOSQP.so*"
+  )
+endif()
+
 if(MCL_BUILD_MCC_PLOTS)
   list(APPEND MCL_INSTALL_RUNTIME_TARGETS motion_control_lab_plot_core_planning)
 endif()
 install(
   TARGETS ${MCL_INSTALL_RUNTIME_TARGETS}
+  RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+)
+install(
+  TARGETS libplaco
+  LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
   RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
 )
 
@@ -539,6 +658,29 @@ if(BUILD_TESTING)
       "${E03_DEFINITION}"
   )
 
+  set(E04_DEFINITION_FOR_CONTRACT
+      "${CMAKE_CURRENT_SOURCE_DIR}/experiments/E04_opensot_smoke/definition.json")
+  add_test(
+    NAME contracts.e04_definition
+    COMMAND
+      "${Python3_EXECUTABLE}"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/validate_contracts.py"
+      definition
+      "${E04_DEFINITION_FOR_CONTRACT}"
+  )
+  add_test(
+    NAME contracts.r1_smoke_pair
+    COMMAND
+      "${Python3_EXECUTABLE}"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/validate_r1_smoke_pair.py"
+      "${E01_DEFINITION}"
+      "${E04_DEFINITION_FOR_CONTRACT}"
+  )
+  set_tests_properties(
+    contracts.r1_smoke_pair
+    PROPERTIES DEPENDS "contracts.e01_definition;contracts.e04_definition"
+  )
+
   add_test(
     NAME experiments.e01_placo_smoke
     COMMAND
@@ -550,6 +692,29 @@ if(BUILD_TESTING)
   )
   set_tests_properties(
     experiments.e01_placo_smoke
-    PROPERTIES DEPENDS contracts.e01_definition
+    PROPERTIES
+      DEPENDS "contracts.e01_definition;contracts.r1_smoke_pair"
+      ENVIRONMENT_MODIFICATION
+        "LD_LIBRARY_PATH=path_list_prepend:$<TARGET_FILE_DIR:libplaco>"
   )
+
+  if(MCL_BUILD_E04_OPENSOT_SMOKE)
+    add_test(
+      NAME experiments.e04_opensot_smoke
+      COMMAND
+        "${Python3_EXECUTABLE}"
+        "${CMAKE_CURRENT_SOURCE_DIR}/tests/run_e04_smoke.py"
+        --executable "$<TARGET_FILE:e04_opensot_smoke>"
+        --definition "${E04_DEFINITION}"
+        --work-root "${CMAKE_CURRENT_BINARY_DIR}/test-runs"
+        --ros-setup "${MCL_OPENSOT_ROS_PREFIX}/setup.bash"
+        --library-path "${MCL_OPENSOT_RUNTIME_LIBRARY_PATH}"
+    )
+    set_tests_properties(
+      experiments.e04_opensot_smoke
+      PROPERTIES
+        DEPENDS "contracts.e04_definition;contracts.r1_smoke_pair"
+        TIMEOUT 120
+    )
+  endif()
 endif()

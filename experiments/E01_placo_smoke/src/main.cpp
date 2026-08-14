@@ -20,6 +20,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 namespace
 {
@@ -114,25 +115,53 @@ void validate_definition(const Json::Value& definition)
   }
 
   const auto& factors = definition["controlled_factors"];
-  if (!factors["target_position_m"].isArray() || factors["target_position_m"].size() != 3 ||
+  if (!factors["controlled_joint_names"].isArray() ||
+      factors["controlled_joint_names"].empty() ||
       !factors["initial_joints_rad"].isObject() ||
+      !factors["goal_joints_rad"].isObject() ||
       factors["maximum_iterations"].asInt() <= 0 ||
       factors["position_tolerance_m"].asDouble() <= 0.0)
   {
     throw std::runtime_error("E01 controlled factors are incomplete or invalid");
   }
+  for (const auto& joint : factors["controlled_joint_names"])
+  {
+    const std::string name = joint.asString();
+    if (name.empty() || !factors["initial_joints_rad"].isMember(name) ||
+        !factors["goal_joints_rad"].isMember(name))
+    {
+      throw std::runtime_error("E01 joint maps do not cover every controlled joint");
+    }
+  }
 }
 
-Eigen::Vector3d target_from_definition(const Json::Value& definition)
+std::vector<std::string> controlled_joint_names(const Json::Value& definition)
 {
-  const auto& target = definition["controlled_factors"]["target_position_m"];
-  return {target[0].asDouble(), target[1].asDouble(), target[2].asDouble()};
+  std::vector<std::string> names;
+  for (const auto& joint : definition["controlled_factors"]["controlled_joint_names"])
+  {
+    names.push_back(joint.asString());
+  }
+  return names;
 }
 
-int count_joint_limit_violations(placo::model::RobotWrapper& robot)
+void set_named_joints(
+  placo::model::RobotWrapper& robot,
+  const Json::Value& positions,
+  const std::vector<std::string>& joints)
+{
+  for (const auto& joint : joints)
+  {
+    robot.set_joint(joint, positions[joint].asDouble());
+  }
+}
+
+int count_joint_limit_violations(
+  placo::model::RobotWrapper& robot,
+  const std::vector<std::string>& joints)
 {
   int violations = 0;
-  for (const std::string joint : {"joint1", "joint2"})
+  for (const auto& joint : joints)
   {
     const auto [lower, upper] = robot.get_joint_limits(joint);
     const auto value = robot.get_joint(joint);
@@ -147,7 +176,7 @@ int count_joint_limit_violations(placo::model::RobotWrapper& robot)
 SolveResult run_solver(const Json::Value& definition, const fs::path& model_path)
 {
   const auto& factors = definition["controlled_factors"];
-  const Eigen::Vector3d target = target_from_definition(definition);
+  const auto joints = controlled_joint_names(definition);
   const int maximum_iterations = factors["maximum_iterations"].asInt();
   const double tolerance_m = factors["position_tolerance_m"].asDouble();
   const double regularization_weight = factors["regularization_weight"].asDouble();
@@ -155,9 +184,15 @@ SolveResult run_solver(const Json::Value& definition, const fs::path& model_path
 
   placo::model::RobotWrapper robot(
     model_path.string(),
-    placo::model::RobotWrapper::IGNORE_COLLISIONS);
-  robot.set_joint("joint1", factors["initial_joints_rad"]["joint1"].asDouble());
-  robot.set_joint("joint2", factors["initial_joints_rad"]["joint2"].asDouble());
+    placo::model::RobotWrapper::IGNORE_COLLISIONS |
+      placo::model::RobotWrapper::IGNORE_GEOMETRY);
+  robot.reset();
+  set_named_joints(robot, factors["goal_joints_rad"], joints);
+  robot.update_kinematics();
+  const Eigen::Vector3d target = robot.get_T_world_frame(frame).translation();
+
+  robot.reset();
+  set_named_joints(robot, factors["initial_joints_rad"], joints);
   robot.update_kinematics();
 
   placo::kinematics::KinematicsSolver solver(robot);
@@ -174,15 +209,24 @@ SolveResult run_solver(const Json::Value& definition, const fs::path& model_path
   std::ostringstream trace;
   trace << std::setprecision(17);
   trace << "iteration,target_x_m,target_y_m,target_z_m,achieved_x_m,achieved_y_m,"
-           "achieved_z_m,position_error_m,solve_time_us,joint1_rad,joint2_rad\n";
+           "achieved_z_m,position_error_m,solve_time_us";
+  for (const auto& joint : joints)
+  {
+    trace << ',' << joint << "_rad";
+  }
+  trace << '\n';
   trace << 0 << ',' << target.x() << ',' << target.y() << ',' << target.z() << ','
         << initial_position.x() << ',' << initial_position.y() << ',' << initial_position.z() << ','
-        << result.initial_error_m << ',' << 0.0 << ',' << robot.get_joint("joint1") << ','
-        << robot.get_joint("joint2") << '\n';
+        << result.initial_error_m << ',' << 0.0;
+  for (const auto& joint : joints)
+  {
+    trace << ',' << robot.get_joint(joint);
+  }
+  trace << '\n';
 
   double total_solve_time_us = 0.0;
   double current_error_m = result.initial_error_m;
-  result.joint_limit_violation_count += count_joint_limit_violations(robot);
+  result.joint_limit_violation_count += count_joint_limit_violations(robot, joints);
 
   for (int iteration = 1;
        iteration <= maximum_iterations && current_error_m > tolerance_m;
@@ -210,12 +254,16 @@ SolveResult run_solver(const Json::Value& definition, const fs::path& model_path
     total_solve_time_us += solve_time_us;
     result.max_solve_time_us = std::max(result.max_solve_time_us, solve_time_us);
     result.iterations = iteration;
-    result.joint_limit_violation_count += count_joint_limit_violations(robot);
+    result.joint_limit_violation_count += count_joint_limit_violations(robot, joints);
 
     trace << iteration << ',' << target.x() << ',' << target.y() << ',' << target.z() << ','
           << achieved.x() << ',' << achieved.y() << ',' << achieved.z() << ',' << current_error_m
-          << ',' << solve_time_us << ',' << robot.get_joint("joint1") << ','
-          << robot.get_joint("joint2") << '\n';
+          << ',' << solve_time_us;
+    for (const auto& joint : joints)
+    {
+      trace << ',' << robot.get_joint(joint);
+    }
+    trace << '\n';
   }
 
   result.final_error_m = current_error_m;
@@ -242,7 +290,7 @@ std::string make_metrics_csv(const std::string& run_id, const SolveResult& resul
                        const std::string& role,
                        int sample_count,
                        const std::string& notes) {
-    metrics << run_id << ",synthetic_two_link,placo_v0_9_23,full_solve," << metric_id
+    metrics << run_id << ",psi_r1_cos,placo_v0_9_23,full_solve," << metric_id
             << ",v1," << value << ',' << unit << ',' << direction << ',' << role
             << ",available," << sample_count << ',' << notes << '\n';
   };
@@ -341,7 +389,7 @@ int main(int argc, char** argv)
     metadata.definition_locator = "experiments/E01_placo_smoke/definition.json";
     metadata.definition_sha256 = definition_sha256;
     metadata.resolved_definition = definition;
-    metadata.input_locator = "experiments/E01_placo_smoke/model/two_link.urdf";
+    metadata.input_locator = model_path.string();
     metadata.input_sha256 = model_sha256;
     metadata.source_revision =
       std::string(motion_control_lab::e01::build_config::kSourceRevision);
@@ -354,17 +402,17 @@ int main(int argc, char** argv)
     artifacts = std::make_unique<RunArtifacts>(options.output_root, std::move(metadata));
     artifacts->write_text("definition/resolved.json", motion_control_lab::json_to_string(definition));
     artifacts->write_text(
-      "inputs/synthetic_two_link/canonical_copy.urdf",
+      "inputs/psi_r1_cos/canonical_copy.urdf",
       read_text_file(model_path));
 
     Json::Value input_metadata(Json::objectValue);
     input_metadata["schema_version"] = "input_metadata.v1";
-    input_metadata["input_id"] = "synthetic_two_link";
-    input_metadata["source_locator"] = "experiments/E01_placo_smoke/model/two_link.urdf";
+    input_metadata["input_id"] = "psi_r1_cos";
+    input_metadata["source_locator"] = model_path.string();
     input_metadata["sha256"] = model_sha256;
-    input_metadata["kind"] = "synthetic_smoke_fixture";
+    input_metadata["kind"] = "robot_urdf";
     artifacts->write_text(
-      "inputs/synthetic_two_link/metadata.json",
+      "inputs/psi_r1_cos/metadata.json",
       motion_control_lab::json_to_string(input_metadata));
 
     const SolveResult result = run_solver(definition, model_path);
@@ -372,10 +420,10 @@ int main(int argc, char** argv)
       definition["controlled_factors"]["position_tolerance_m"].asDouble();
 
     artifacts->write_text(
-      "arms/placo_v0_9_23/synthetic_two_link/trace.csv",
+      "arms/placo_v0_9_23/psi_r1_cos/trace.csv",
       result.trace_csv);
     artifacts->write_text(
-      "arms/placo_v0_9_23/synthetic_two_link/status.json",
+      "arms/placo_v0_9_23/psi_r1_cos/status.json",
       motion_control_lab::json_to_string(make_arm_status(result, tolerance_m)));
     artifacts->write_text("evaluation/metrics.csv", make_metrics_csv(run_id, result));
     artifacts->write_text("evaluation/report.md", make_report(result, tolerance_m));

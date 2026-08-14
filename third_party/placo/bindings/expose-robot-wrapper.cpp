@@ -146,6 +146,7 @@ void exposeRobotWrapper()
   enum_<RobotWrapper::Flags>("Flags")
       .value("collision_as_visual", RobotWrapper::Flags::COLLISION_AS_VISUAL)
       .value("ignore_collisions", RobotWrapper::Flags::IGNORE_COLLISIONS)
+      .value("ignore_geometry", RobotWrapper::Flags::IGNORE_GEOMETRY)
       .value("mjcf", RobotWrapper::Flags::MJCF);
 
   class__<RobotWrapper::State>("RobotWrapper_State")

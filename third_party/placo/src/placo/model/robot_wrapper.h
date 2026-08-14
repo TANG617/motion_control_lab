@@ -36,7 +36,12 @@ public:
     /**
      * @brief Use MuJoCo MJCF parser instead of URDF
      */
-    MJCF = 4
+    MJCF = 4,
+
+    /**
+     * @brief Do not load collision or visual geometry. The kinematic and dynamic model is still loaded.
+     */
+    IGNORE_GEOMETRY = 8
   };
 
   /**

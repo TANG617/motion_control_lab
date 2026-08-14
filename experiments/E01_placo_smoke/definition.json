@@ -1,35 +1,97 @@
 {
   "schema_version": "experiment.v1",
   "experiment_id": "E01",
-  "title": "PlaCo C++ kinematics smoke test",
-  "question": "Can the pinned PlaCo C++ source load a fixed-base robot model and solve a reachable end-effector position task in the native lab runtime?",
-  "hypothesis": "The required PlaCo arm completes without a runtime error and reduces the final end-effector position error below 1e-5 m within 25 solver iterations.",
+  "title": "PlaCo C++ R1 kinematics smoke test",
+  "question": "Can the pinned PlaCo C++ source load the fixed R1 model and solve the declared reachable left-arm position task in the native Lab runtime?",
+  "hypothesis": "PlaCo completes without a runtime error and reduces the left-arm end-effector position error below 1e-5 m within 100 solver iterations.",
   "independent_factors": [
     "solver_implementation"
   ],
   "controlled_factors": {
-    "robot_model": "model/two_link.urdf",
-    "end_effector_frame": "tool0",
-    "initial_joints_rad": {
-      "joint1": 0.25,
-      "joint2": -0.5
-    },
-    "target_position_m": [
-      1.4,
-      0.4,
-      0.0
+    "robot_model": "/workspace/models/r1.cos.urdf",
+    "base_frame": "world",
+    "end_effector_frame": "left_arm_ee_link",
+    "controlled_joint_names": [
+      "head_yaw_joint",
+      "head_pitch_joint",
+      "torso_yaw_joint",
+      "torso_pitch_joint",
+      "knee_pitch_joint",
+      "ankle_pitch_joint",
+      "left_arm_joint1",
+      "left_arm_joint2",
+      "left_arm_joint3",
+      "left_arm_joint4",
+      "left_arm_joint5",
+      "left_arm_joint6",
+      "left_arm_joint7",
+      "right_arm_joint1",
+      "right_arm_joint2",
+      "right_arm_joint3",
+      "right_arm_joint4",
+      "right_arm_joint5",
+      "right_arm_joint6",
+      "right_arm_joint7"
     ],
-    "maximum_iterations": 25,
+    "initial_joints_rad": {
+      "head_yaw_joint": 0.0,
+      "head_pitch_joint": 0.31,
+      "torso_yaw_joint": 0.0,
+      "torso_pitch_joint": 0.5,
+      "knee_pitch_joint": 0.5,
+      "ankle_pitch_joint": -0.5,
+      "left_arm_joint1": 0.9,
+      "left_arm_joint2": -1.38,
+      "left_arm_joint3": -1.57,
+      "left_arm_joint4": -1.4,
+      "left_arm_joint5": -0.45,
+      "left_arm_joint6": 0.0,
+      "left_arm_joint7": 0.0,
+      "right_arm_joint1": -0.9,
+      "right_arm_joint2": 1.38,
+      "right_arm_joint3": 1.57,
+      "right_arm_joint4": 1.4,
+      "right_arm_joint5": 0.45,
+      "right_arm_joint6": 0.0,
+      "right_arm_joint7": 0.0
+    },
+    "goal_joints_rad": {
+      "head_yaw_joint": 0.0,
+      "head_pitch_joint": 0.31,
+      "torso_yaw_joint": 0.0,
+      "torso_pitch_joint": 0.5,
+      "knee_pitch_joint": 0.5,
+      "ankle_pitch_joint": -0.5,
+      "left_arm_joint1": 0.9,
+      "left_arm_joint2": -1.18,
+      "left_arm_joint3": -1.57,
+      "left_arm_joint4": -1.15,
+      "left_arm_joint5": -0.45,
+      "left_arm_joint6": 0.0,
+      "left_arm_joint7": 0.0,
+      "right_arm_joint1": -0.9,
+      "right_arm_joint2": 1.38,
+      "right_arm_joint3": 1.57,
+      "right_arm_joint4": 1.4,
+      "right_arm_joint5": 0.45,
+      "right_arm_joint6": 0.0,
+      "right_arm_joint7": 0.0
+    },
+    "maximum_iterations": 100,
     "position_tolerance_m": 1e-5,
     "regularization_weight": 1e-6,
     "floating_base_masked": true,
-    "joint_limits_enabled": true
+    "joint_limits_enabled": true,
+    "unlisted_joints": "neutral"
   },
-  "allowed_differences": [],
+  "allowed_differences": [
+    "solver_native_regularization",
+    "solver_native_step_policy"
+  ],
   "inputs": [
     {
-      "input_id": "synthetic_two_link",
-      "artifact": "model/two_link.urdf",
+      "input_id": "psi_r1_cos",
+      "artifact": "/workspace/models/r1.cos.urdf",
       "required": true
     }
   ],
@@ -43,7 +105,7 @@
   "evaluation_windows": [
     {
       "window_id": "full_solve",
-      "description": "All solver iterations from the declared initial state to termination."
+      "description": "All solver iterations from the declared initial R1 state to termination."
     }
   ],
   "metrics": {
@@ -62,7 +124,12 @@
       "max_solve_time_us"
     ]
   },
-  "comparisons": [],
+  "comparisons": [
+    {
+      "experiment_id": "E04",
+      "relationship": "same_r1_position_task"
+    }
+  ],
   "failure_policy": {
     "required_arm_failure_fails_run": true,
     "preserve_partial_trace": true,
@@ -70,11 +137,11 @@
   },
   "artifact_requirements": [
     "manifest.json",
-    "inputs/synthetic_two_link/canonical_copy.urdf",
-    "arms/placo_v0_9_23/synthetic_two_link/trace.csv",
-    "arms/placo_v0_9_23/synthetic_two_link/status.json",
+    "inputs/psi_r1_cos/canonical_copy.urdf",
+    "inputs/psi_r1_cos/metadata.json",
+    "arms/placo_v0_9_23/psi_r1_cos/trace.csv",
+    "arms/placo_v0_9_23/psi_r1_cos/status.json",
     "evaluation/metrics.csv",
     "evaluation/report.md"
   ]
 }
-

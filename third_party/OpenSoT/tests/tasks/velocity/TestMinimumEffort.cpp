@@ -1,0 +1,125 @@
+#include <gtest/gtest.h>
+#include <OpenSoT/tasks/velocity/MinimumEffort.h>
+#include <memory>
+#include <xbot2_interface/xbotinterface2.h>
+#include <OpenSoT/solvers/eHQP.h>
+#include "../../common.h"
+
+
+namespace {
+
+class testMinimumEffortTask: public TestBase
+{
+
+protected:
+    testMinimumEffortTask() : TestBase("coman_floating_base")
+    {
+
+
+    }
+
+    virtual ~testMinimumEffortTask() {
+
+    }
+
+    virtual void SetUp() {
+
+    }
+
+    virtual void TearDown() {
+
+    }
+
+};
+
+TEST_F(testMinimumEffortTask, testMinimumEffortTask_)
+{
+    // setting initial position with bent legs
+    Eigen::VectorXd q_whole = _model_ptr->getNeutralQ();
+    double angle = 45;
+    q_whole[_model_ptr->getQIndex("RShSag")] = -angle*M_PI/180.0;
+    q_whole[_model_ptr->getQIndex("RShLat")] = 0.0*M_PI/180.0;
+    q_whole[_model_ptr->getQIndex("RElbj")] = -angle*M_PI/180.0;
+    q_whole[_model_ptr->getQIndex("LShSag")] = -angle*M_PI/180.0;
+    q_whole[_model_ptr->getQIndex("LShLat")] = 0.0*M_PI/180.0;
+    q_whole[_model_ptr->getQIndex("LElbj")] = -angle*M_PI/180.0;
+
+    _model_ptr->setJointPosition(q_whole);
+    _model_ptr->update();
+
+    OpenSoT::tasks::velocity::MinimumEffort::Ptr minimumEffort;
+    minimumEffort.reset(new OpenSoT::tasks::velocity::MinimumEffort(*_model_ptr));
+    minimumEffort->update();
+
+
+    OpenSoT::Solver<Eigen::MatrixXd, Eigen::VectorXd>::Stack stack;
+    stack.push_back(minimumEffort);
+
+    OpenSoT::solvers::eHQP solver(stack);
+
+    EXPECT_EQ(minimumEffort->getA().rows(), _model_ptr->getNv());
+    EXPECT_EQ(minimumEffort->getb().size(), _model_ptr->getNv());
+
+    EXPECT_TRUE(minimumEffort->getWeight().rows() == _model_ptr->getNv());
+    EXPECT_TRUE(minimumEffort->getWeight().cols() == _model_ptr->getNv());
+
+    EXPECT_TRUE(minimumEffort->getConstraints().size() == 0);
+
+    double K = 1.;//0.8;
+    minimumEffort->setLambda(K);
+    EXPECT_DOUBLE_EQ(minimumEffort->getLambda(), K);
+
+    Eigen::MatrixXd W(_model_ptr->getNv(), _model_ptr->getNv());
+    W.setIdentity();
+    minimumEffort->setW(1e-5*W);
+
+    _model_ptr->setJointPosition(q_whole);
+    _model_ptr->update();
+
+
+    Eigen::VectorXd tau_g;
+    _model_ptr->computeGravityCompensation(tau_g);
+
+    double initial_effort = tau_g.transpose()*minimumEffort->getW()*tau_g;
+    std::cout<<"Initial Effort: "<<initial_effort<<std::endl;
+
+    double initial_effort2 = minimumEffort->computeEffort();
+    std::cout<<"Initial Effort2: "<<initial_effort2<<std::endl;
+
+    Eigen::VectorXd dq(_model_ptr->getNv());
+    dq.setZero();
+    for(unsigned int i = 0; i < 1250; ++i)
+    {
+
+
+        _model_ptr->setJointPosition(q_whole);
+        _model_ptr->update();
+
+        minimumEffort->update();
+        double old_effort = minimumEffort->computeEffort();
+
+
+        solver.solve(dq);
+
+
+        q_whole = _model_ptr->sum(q_whole, dq);
+
+        minimumEffort->update();
+        EXPECT_LE(minimumEffort->computeEffort(), old_effort);
+        std::cout << "Effort at step" << i << ": " << minimumEffort->computeEffort() << std::endl;
+    }
+    _model_ptr->setJointPosition(q_whole);
+    _model_ptr->update();
+
+    _model_ptr->computeGravityCompensation(tau_g);
+
+    double final_effort = tau_g.transpose()*minimumEffort->getW()*tau_g;
+    EXPECT_LT(final_effort, initial_effort);
+}
+
+}
+
+int main(int argc, char **argv) {
+  ::testing::InitGoogleTest(&argc, argv);
+  return RUN_ALL_TESTS();
+}

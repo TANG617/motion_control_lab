@@ -116,7 +116,10 @@ def validate_definition(path: pathlib.Path) -> dict[str, Any]:
             {"input_id", "artifact", "required"} <= item.keys(),
             f"{path}: incomplete input declaration",
         )
-        artifact = _safe_child(path.parent, item["artifact"])
+        artifact_path = pathlib.Path(item["artifact"])
+        artifact = artifact_path if artifact_path.is_absolute() else _safe_child(
+            path.parent, item["artifact"]
+        )
         _require(artifact.is_file(), f"{path}: missing input artifact {item['artifact']}")
 
     for arm in arms:
@@ -217,4 +220,3 @@ if __name__ == "__main__":
     except (OSError, ValueError, json.JSONDecodeError) as error:
         print(f"contract validation failed: {error}", file=sys.stderr)
         raise SystemExit(1)
-

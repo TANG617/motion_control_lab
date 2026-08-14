@@ -1,0 +1,150 @@
+{
+  "schema_version": "experiment.v1",
+  "experiment_id": "E04",
+  "title": "OpenSoT ROS2 C++ R1 kinematics smoke test",
+  "question": "Can the pinned OpenSoT ROS2 source solve the same reachable R1 left-arm position task through the isolated Lab bridge?",
+  "hypothesis": "OpenSoT iHQP with OSQP completes without a runtime error and reduces the left-arm end-effector position error below 1e-5 m within 100 solver iterations.",
+  "independent_factors": [
+    "solver_implementation"
+  ],
+  "controlled_factors": {
+    "robot_model": "/workspace/models/r1.cos.urdf",
+    "base_frame": "world",
+    "end_effector_frame": "left_arm_ee_link",
+    "controlled_joint_names": [
+      "head_yaw_joint",
+      "head_pitch_joint",
+      "torso_yaw_joint",
+      "torso_pitch_joint",
+      "knee_pitch_joint",
+      "ankle_pitch_joint",
+      "left_arm_joint1",
+      "left_arm_joint2",
+      "left_arm_joint3",
+      "left_arm_joint4",
+      "left_arm_joint5",
+      "left_arm_joint6",
+      "left_arm_joint7",
+      "right_arm_joint1",
+      "right_arm_joint2",
+      "right_arm_joint3",
+      "right_arm_joint4",
+      "right_arm_joint5",
+      "right_arm_joint6",
+      "right_arm_joint7"
+    ],
+    "initial_joints_rad": {
+      "head_yaw_joint": 0.0,
+      "head_pitch_joint": 0.31,
+      "torso_yaw_joint": 0.0,
+      "torso_pitch_joint": 0.5,
+      "knee_pitch_joint": 0.5,
+      "ankle_pitch_joint": -0.5,
+      "left_arm_joint1": 0.9,
+      "left_arm_joint2": -1.38,
+      "left_arm_joint3": -1.57,
+      "left_arm_joint4": -1.4,
+      "left_arm_joint5": -0.45,
+      "left_arm_joint6": 0.0,
+      "left_arm_joint7": 0.0,
+      "right_arm_joint1": -0.9,
+      "right_arm_joint2": 1.38,
+      "right_arm_joint3": 1.57,
+      "right_arm_joint4": 1.4,
+      "right_arm_joint5": 0.45,
+      "right_arm_joint6": 0.0,
+      "right_arm_joint7": 0.0
+    },
+    "goal_joints_rad": {
+      "head_yaw_joint": 0.0,
+      "head_pitch_joint": 0.31,
+      "torso_yaw_joint": 0.0,
+      "torso_pitch_joint": 0.5,
+      "knee_pitch_joint": 0.5,
+      "ankle_pitch_joint": -0.5,
+      "left_arm_joint1": 0.9,
+      "left_arm_joint2": -1.18,
+      "left_arm_joint3": -1.57,
+      "left_arm_joint4": -1.15,
+      "left_arm_joint5": -0.45,
+      "left_arm_joint6": 0.0,
+      "left_arm_joint7": 0.0,
+      "right_arm_joint1": -0.9,
+      "right_arm_joint2": 1.38,
+      "right_arm_joint3": 1.57,
+      "right_arm_joint4": 1.4,
+      "right_arm_joint5": 0.45,
+      "right_arm_joint6": 0.0,
+      "right_arm_joint7": 0.0
+    },
+    "maximum_iterations": 100,
+    "position_tolerance_m": 1e-5,
+    "cartesian_lambda": 0.2,
+    "postural_lambda": 0.01,
+    "regularization": 1e-5,
+    "velocity_limit_period_s": 1.0,
+    "joint_limits_enabled": true,
+    "velocity_limits_enabled": true,
+    "unlisted_joints": "neutral"
+  },
+  "allowed_differences": [
+    "solver_native_regularization",
+    "solver_native_step_policy"
+  ],
+  "inputs": [
+    {
+      "input_id": "psi_r1_cos",
+      "artifact": "/workspace/models/r1.cos.urdf",
+      "required": true
+    }
+  ],
+  "arms": [
+    {
+      "arm_id": "opensot_v4_0_1_ros2_osqp",
+      "method": "opensot_cartesian_postural_ihqp_osqp",
+      "required": true
+    }
+  ],
+  "evaluation_windows": [
+    {
+      "window_id": "full_solve",
+      "description": "All solver iterations from the declared initial R1 state to termination."
+    }
+  ],
+  "metrics": {
+    "primary": [
+      "final_position_error_m"
+    ],
+    "secondary": [
+      "iteration_count"
+    ],
+    "guardrail": [
+      "joint_limit_violation_count"
+    ],
+    "diagnostic": [
+      "initial_position_error_m",
+      "mean_solve_time_us",
+      "max_solve_time_us"
+    ]
+  },
+  "comparisons": [
+    {
+      "experiment_id": "E01",
+      "relationship": "same_r1_position_task"
+    }
+  ],
+  "failure_policy": {
+    "required_arm_failure_fails_run": true,
+    "preserve_partial_trace": true,
+    "non_finite_output_fails_arm": true
+  },
+  "artifact_requirements": [
+    "manifest.json",
+    "inputs/psi_r1_cos/canonical_copy.urdf",
+    "inputs/psi_r1_cos/metadata.json",
+    "arms/opensot_v4_0_1_ros2_osqp/psi_r1_cos/trace.csv",
+    "arms/opensot_v4_0_1_ros2_osqp/psi_r1_cos/status.json",
+    "evaluation/metrics.csv",
+    "evaluation/report.md"
+  ]
+}

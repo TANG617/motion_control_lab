@@ -1,0 +1,140 @@
+include(ExternalProject)
+
+set(
+  MCL_OPENSOT_SOURCE_DIR
+  "${PROJECT_SOURCE_DIR}/third_party/OpenSoT"
+  CACHE PATH
+  "Vendored OpenSoT source directory"
+)
+set(
+  MCL_OPENSOT_DEPENDENCY_PREFIX
+  "/opt/motion-control-lab/opensot-deps"
+  CACHE PATH
+  "System prefix containing the pinned matlogger2 and xbot2_interface builds"
+)
+set(
+  MCL_OPENSOT_ROS_PREFIX
+  "/opt/ros/jazzy"
+  CACHE PATH
+  "ROS2 prefix used only by the nested OpenSoT build"
+)
+
+foreach(MCL_OPENSOT_REQUIRED_FILE IN ITEMS
+    "${MCL_OPENSOT_SOURCE_DIR}/CMakeLists.txt"
+    "${MCL_OPENSOT_SOURCE_DIR}/mcl_bridge/CMakeLists.txt"
+    "${MCL_OPENSOT_SOURCE_DIR}/mcl_bridge/include/mcl_opensot_bridge.h")
+  if(NOT EXISTS "${MCL_OPENSOT_REQUIRED_FILE}")
+    message(FATAL_ERROR "OpenSoT source input is missing: ${MCL_OPENSOT_REQUIRED_FILE}")
+  endif()
+endforeach()
+
+foreach(MCL_OPENSOT_REQUIRED_PACKAGE IN ITEMS
+    "${MCL_OPENSOT_DEPENDENCY_PREFIX}/lib/cmake/matlogger2/matlogger2Config.cmake"
+    "${MCL_OPENSOT_DEPENDENCY_PREFIX}/lib/cmake/xbot2_interface/xbot2_interfaceConfig.cmake")
+  if(NOT EXISTS "${MCL_OPENSOT_REQUIRED_PACKAGE}")
+    message(
+      FATAL_ERROR
+      "OpenSoT system dependency is missing: ${MCL_OPENSOT_REQUIRED_PACKAGE}. "
+      "Install the pinned dependencies documented in third_party/OpenSoT/MOTION_CONTROL_LAB.md."
+    )
+  endif()
+endforeach()
+
+set(
+  MCL_OPENSOT_EXTERNAL_ROOT
+  "${CMAKE_CURRENT_BINARY_DIR}/third_party/opensot"
+)
+set(MCL_OPENSOT_EXTERNAL_BINARY_DIR "${MCL_OPENSOT_EXTERNAL_ROOT}/build")
+set(MCL_OPENSOT_EXTERNAL_INSTALL_DIR "${MCL_OPENSOT_EXTERNAL_ROOT}/install")
+set(MCL_OPENSOT_BRIDGE_LIBRARY
+    "${MCL_OPENSOT_EXTERNAL_INSTALL_DIR}/lib/libmcl_opensot_bridge.so")
+set(
+  MCL_OPENSOT_NESTED_PREFIX_PATH
+  "${MCL_OPENSOT_DEPENDENCY_PREFIX}|${MCL_OPENSOT_ROS_PREFIX}|/opt/openrobots"
+)
+
+file(
+  GLOB MCL_OPENSOT_AMENT_PACKAGE_DIRECTORIES
+  LIST_DIRECTORIES true
+  "${MCL_OPENSOT_ROS_PREFIX}/lib/python*/site-packages/ament_package"
+)
+list(LENGTH MCL_OPENSOT_AMENT_PACKAGE_DIRECTORIES MCL_OPENSOT_AMENT_PACKAGE_COUNT)
+if(NOT MCL_OPENSOT_AMENT_PACKAGE_COUNT EQUAL 1)
+  message(
+    FATAL_ERROR
+    "Expected exactly one Jazzy ament_package installation under ${MCL_OPENSOT_ROS_PREFIX}"
+  )
+endif()
+list(GET MCL_OPENSOT_AMENT_PACKAGE_DIRECTORIES 0 MCL_OPENSOT_AMENT_PACKAGE_DIRECTORY)
+get_filename_component(
+  MCL_OPENSOT_ROS_PYTHON_PATH
+  "${MCL_OPENSOT_AMENT_PACKAGE_DIRECTORY}"
+  DIRECTORY
+)
+set(
+  MCL_OPENSOT_NESTED_PYTHON_PATH
+  "/opt/openrobots/lib/python3.12/site-packages:${MCL_OPENSOT_ROS_PYTHON_PATH}"
+)
+
+set(
+  MCL_OPENSOT_CONFIGURE_ARGUMENTS
+  "-DCMAKE_BUILD_TYPE:STRING=${CMAKE_BUILD_TYPE}"
+  "-DCMAKE_INSTALL_PREFIX:PATH=<INSTALL_DIR>"
+  "-DCMAKE_INSTALL_LIBDIR:STRING=lib"
+  "-DCMAKE_PREFIX_PATH:PATH=${MCL_OPENSOT_NESTED_PREFIX_PATH}"
+  "-DOPENSOT_BUILD_DOCUMENTATION:BOOL=OFF"
+  "-DOPENSOT_BUILD_PYTHON_BINDINGS:BOOL=OFF"
+  "-DOPENSOT_BUILD_MCL_BRIDGE:BOOL=ON"
+  "-DOPENSOT_COMPILE_EXAMPLES:BOOL=OFF"
+  "-DOPENSOT_COMPILE_TESTS:BOOL=OFF"
+  "-DOPENSOT_COMPILE_COLLISION:BOOL=ON"
+  "-DOPENSOT_COMPILE_OSQP_BACKEND:BOOL=ON"
+)
+
+ExternalProject_Add(
+  mcl_opensot_external
+  PREFIX "${MCL_OPENSOT_EXTERNAL_ROOT}"
+  SOURCE_DIR "${MCL_OPENSOT_SOURCE_DIR}"
+  BINARY_DIR "${MCL_OPENSOT_EXTERNAL_BINARY_DIR}"
+  INSTALL_DIR "${MCL_OPENSOT_EXTERNAL_INSTALL_DIR}"
+  DOWNLOAD_COMMAND ""
+  UPDATE_COMMAND ""
+  PATCH_COMMAND ""
+  BUILD_ALWAYS 1
+  LIST_SEPARATOR |
+  CONFIGURE_COMMAND
+    "${CMAKE_COMMAND}" -E env
+      "PYTHONPATH=${MCL_OPENSOT_NESTED_PYTHON_PATH}"
+      "AMENT_PREFIX_PATH=${MCL_OPENSOT_ROS_PREFIX}"
+    "${CMAKE_COMMAND}" -S <SOURCE_DIR> -B <BINARY_DIR>
+      ${MCL_OPENSOT_CONFIGURE_ARGUMENTS}
+  BUILD_COMMAND
+    "${CMAKE_COMMAND}" -E env
+      "PYTHONPATH=${MCL_OPENSOT_NESTED_PYTHON_PATH}"
+      "AMENT_PREFIX_PATH=${MCL_OPENSOT_ROS_PREFIX}"
+    "${CMAKE_COMMAND}" --build <BINARY_DIR> --config "${CMAKE_BUILD_TYPE}"
+  INSTALL_COMMAND
+    "${CMAKE_COMMAND}" -E env
+      "PYTHONPATH=${MCL_OPENSOT_NESTED_PYTHON_PATH}"
+      "AMENT_PREFIX_PATH=${MCL_OPENSOT_ROS_PREFIX}"
+    "${CMAKE_COMMAND}" --build <BINARY_DIR> --target install --config "${CMAKE_BUILD_TYPE}"
+  BUILD_BYPRODUCTS
+    "${MCL_OPENSOT_BRIDGE_LIBRARY}"
+    "${MCL_OPENSOT_EXTERNAL_INSTALL_DIR}/lib/libOpenSoT.so"
+    "${MCL_OPENSOT_EXTERNAL_INSTALL_DIR}/lib/libOpenSotBackEndOSQP.so"
+)
+
+add_library(mcl_opensot_bridge SHARED IMPORTED GLOBAL)
+set_target_properties(
+  mcl_opensot_bridge
+  PROPERTIES
+    IMPORTED_LOCATION "${MCL_OPENSOT_BRIDGE_LIBRARY}"
+    INTERFACE_INCLUDE_DIRECTORIES
+      "${MCL_OPENSOT_SOURCE_DIR}/mcl_bridge/include"
+)
+add_dependencies(mcl_opensot_bridge mcl_opensot_external)
+
+set(
+  MCL_OPENSOT_RUNTIME_LIBRARY_PATH
+  "${MCL_OPENSOT_EXTERNAL_INSTALL_DIR}/lib:${MCL_OPENSOT_DEPENDENCY_PREFIX}/lib:/opt/openrobots/lib:${MCL_OPENSOT_ROS_PREFIX}/lib"
+)

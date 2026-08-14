@@ -11,7 +11,7 @@ planned。
 | Canonical data | `data/canonical/`；MCAP/CSV 现在经相同 typed contracts 与 timeline 消费，正式 dataset promotion 仍 planned |
 | Definition format | `contracts/definitions/experiment.v1.schema.json` + 每个实验的 `definition.json` |
 | Definition validator | `tests/validate_contracts.py definition` |
-| Experiment executor | `e01_placo_smoke`；E02 由 `mcl_dual_arm_replay_ik` 执行 PSI R1 双臂 canonical replay |
+| Experiment executor | `e01_placo_smoke` 与可选 `e04_opensot_smoke` 执行同一 R1 左臂位置任务；E02 由 `mcl_dual_arm_replay_ik` 执行 PSI R1 双臂 canonical replay |
 | Execution adapter | `adapters/execution/` 中的 append-only artifact store、manifest writer 与通用 dependency provenance |
 | Physical source | `adapters/data/source/` 中平级的 `McapSource` / `CsvSource`；只处理物理格式 |
 | Typed decoder | `adapters/data/decoder/` 中的 registry、ROS2 CDR Pose/JointState 和 CSV mapping decoder |
@@ -24,8 +24,8 @@ planned。
 | IK visualization contract | `contracts/visualization/foxglove_ik.v1.json` + `foxglove_ik_v1.hpp` 固定五条 Foxglove topic，并要求 FK 与同帧 joint state 一致 |
 | Solver A/B runner | planned；需要时由正式 Experiment 的 canonical timeline 单独设计，不预留交互 backend 接口 |
 | Interactive preview | 独立 app topology + 共享 interactive support；E02 的 Foxglove sink 是只观察 canonical replay 的可选输出，不替换 ReplayClock |
-| Solver source | `third_party/placo/` 中的普通 vendored 源码；直接参与主工程构建 |
-| Metric evaluator | E01 执行器内的最小 metric evaluator；领域公共 evaluator planned |
+| Solver source | `third_party/placo/` 直接参与主工程构建；`third_party/OpenSoT/` 只在 E04 开启时通过隔离的 external project 构建 |
+| Metric evaluator | E01/E04 执行器内的最小 metric evaluator；领域公共 evaluator planned |
 | Manifest contract | `contracts/manifests/run_manifest.v1.schema.json` |
 | Metric row contract | `contracts/metrics/metric_row.v1.schema.json` |
 | Artifact root | `experiments/<experiment>/runs/<run-id>/` |
@@ -37,10 +37,13 @@ planned。
 ## 当前数据流
 
 ```text
-E01 definition + synthetic URDF
+E01 / E04 definition + /workspace/models/r1.cos.urdf
+            |
+            +--> vendored PlaCo C++ source
+            +--> isolated OpenSoT C++20 bridge (optional)
             |
             v
- vendored placo C++ source + source fingerprint
+ solver source fingerprint + shared model hash
             |
             v
  append-only experiment run
@@ -50,9 +53,9 @@ E01 definition + synthetic URDF
  contract and hash validation
 ```
 
-E01 使用合成模型，只用于验证依赖、求解器 API 和证据链。真实 MCAP、
-canonical CSV 和业务机器人模型接入后，应建立新的输入合同和实验，而不是把
-E01 的 fixture 扩展成业务 benchmark。
+E01/E04 使用同一个固定 R1 模型和按名称映射的关节状态，只用于验证依赖、
+求解器 API 和证据链。两者的 solver-native regularization 与 step policy 是显式允许差异；
+它们不是性能 benchmark。
 
 MCC 交互预览采用另一条非证据主链：
 
@@ -123,5 +126,5 @@ sleep。E02 的可选 Foxglove sink 在等待阶段先发布初始帧，空格 g
 clock 原点，因此人工等待不计入 lateness。Viz 只消费 solver 输出，不推进 timeline 或修改
 算法 `dt`。现有 interactive preview 仍使用 TUI/Viz 和 interactive scheduler，服务人工调试，
 不是 canonical replay 或证据执行器。所有 IK preview/replay 的 topic 与 FK 数据一致性遵循
-[`foxglove_ik_visualization_contract.md`](./foxglove_ik_visualization_contract.md)。E01 的合成
-PlaCo smoke 语义和输入保持不变。
+[`foxglove_ik_visualization_contract.md`](./foxglove_ik_visualization_contract.md)。E01/E04 的
+R1 smoke 语义和输入由 pair contract 固定。

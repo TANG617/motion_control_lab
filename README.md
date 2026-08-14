@@ -9,8 +9,9 @@ Motion Control Lab 是面向机器人遥操作 whole-body IK 的可复现实验�
 - 仓库内可直接修改的固定版本 placo C++ 源码；
 - Experiment、run manifest 与 tidy metric 的首版合同；
 - append-only run artifact store；
-- `E01_placo_smoke` 实验及其合成二连杆 URDF；
-- 对实验定义、run manifest、artifact 哈希和 placo 求解结果的自动检查。
+- `E01_placo_smoke` 的 PlaCo R1 IK smoke；
+- 可选、隔离构建的 `E04_opensot_smoke` OpenSoT ROS2 R1 IK smoke；
+- 对实验定义、共享 R1 输入、run manifest、artifact 哈希和求解结果的自动检查。
 
 仓库还提供可选的 MCC 交互预览运行时。单臂入口使用 grouped solver 的 `RedOnly` profile；
 显式区分的双臂 ServoStep/TargetSolve 入口共享一个固定 topology 的 `KinematicsSolver`；grouped
@@ -24,8 +25,8 @@ Motion Control Lab 是面向机器人遥操作 whole-body IK 的可复现实验�
 行为一致。可复现 replay app 则复用固定策略的单动作 engine，避免不同实验复制或漂移
 solver 行为。
 
-E01 是基础设施 smoke test，只证明 placo C++ 求解链与证据落盘链能够跑通，不是
-算法性能结论。
+E01 和 E04 都固定使用 `/workspace/models/r1.cos.urdf` 及同一左臂可达位置任务，
+分别验证 PlaCo 和 OpenSoT 求解链与证据落盘链，不构成算法性能结论。
 
 ## 环境要求
 
@@ -38,6 +39,9 @@ brew install cmake pinocchio
 placo 源码已经保存在 `third_party/placo/`，配置时不下载 placo。Pinocchio 使用本机安装，
 jsoncpp 首次配置时按固定版本下载到 CMake build tree。若 `CMAKE_PREFIX_PATH` 中已有
 eiquadprog package，Lab 会复用它；否则 standalone PlaCo 实验按固定版本构建 static fallback。
+OpenSoT 源码位于 `third_party/OpenSoT/`，默认不开启；只有显式设置
+`MCL_BUILD_E04_OPENSOT_SMOKE=ON` 时才在独立嵌套工程中使用 ROS Jazzy、XBot2、
+MoveIt 和 C++20 构建，Lab 目标继续保持 C++17。
 
 ## 构建与测试
 
@@ -198,6 +202,15 @@ cmake --build /workspace/build/motion_control_lab --target mcl_e03_batch_replay_
 不指定 `--output-root` 时，run 会写入
 `experiments/E01_placo_smoke/runs/`。每次执行创建新的
 `<UTC timestamp>__<definition hash>` 目录，拒绝覆盖已有 run。
+
+手动构建和运行 E04：
+
+```bash
+source /opt/ros/jazzy/setup.bash
+cmake -S . -B build/opensot -DMCL_BUILD_E04_OPENSOT_SMOKE=ON
+cmake --build build/opensot --target e04_opensot_smoke -j8
+ctest --test-dir build/opensot --output-on-failure -R 'contracts.r1_smoke_pair|experiments.e04_opensot_smoke'
+```
 
 ## 可选 MCC 交互预览
 
@@ -364,7 +377,7 @@ apps/<entry>/             独立 main、CMake 和 help test；按入口选择或
 contracts/                definition、manifest、metric 与 visualization 合同
 data/raw/                 原始数据占位；不得静默改写
 data/canonical/           规范数据占位
-experiments/              E01/E02 Experiment 实例、append-only run 与 reviewed result
+experiments/              E01-E04 Experiment 实例、append-only run 与 reviewed result
 analyses/                 只消费已有证据的 Analysis
 docs/                     愿景、通用架构和项目实现映射
 third_party/placo/        仓库内直接构建和修改的 placo 源码

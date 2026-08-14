@@ -51,8 +51,11 @@ RobotWrapper::RobotWrapper(std::string model_directory, int flags, std::string u
     else
     {
       pinocchio::urdf::buildModelFromXML(urdf_content, root_joint, model);
-      std::istringstream stream(urdf_content);
-      pinocchio::urdf::buildGeom(model, stream, pinocchio::COLLISION, collision_model, model_directory);
+      if (!(flags & IGNORE_GEOMETRY))
+      {
+        std::istringstream stream(urdf_content);
+        pinocchio::urdf::buildGeom(model, stream, pinocchio::COLLISION, collision_model, model_directory);
+      }
     }
   }
   else
@@ -61,16 +64,22 @@ RobotWrapper::RobotWrapper(std::string model_directory, int flags, std::string u
     {
       std::cout << "Loading model: " << urdf_filename << std::endl;
       pinocchio::mjcf::buildModel(urdf_filename, root_joint, model);
-      pinocchio::mjcf::buildGeom(model, urdf_filename, pinocchio::COLLISION, collision_model);
+      if (!(flags & IGNORE_GEOMETRY))
+      {
+        pinocchio::mjcf::buildGeom(model, urdf_filename, pinocchio::COLLISION, collision_model);
+      }
     }
     else
     {
       pinocchio::urdf::buildModel(urdf_filename, root_joint, model);
-      pinocchio::urdf::buildGeom(model, urdf_filename, pinocchio::COLLISION, collision_model, model_directory);
+      if (!(flags & IGNORE_GEOMETRY))
+      {
+        pinocchio::urdf::buildGeom(model, urdf_filename, pinocchio::COLLISION, collision_model, model_directory);
+      }
     }
   }
 
-  if (flags & COLLISION_AS_VISUAL)
+  if (!(flags & IGNORE_GEOMETRY) && (flags & COLLISION_AS_VISUAL))
   {
     if (urdf_content != "")
     {
@@ -91,7 +100,7 @@ RobotWrapper::RobotWrapper(std::string model_directory, int flags, std::string u
       }
     }
   }
-  else
+  else if (!(flags & IGNORE_GEOMETRY))
   {
     if (urdf_content != "")
     {
@@ -114,7 +123,7 @@ RobotWrapper::RobotWrapper(std::string model_directory, int flags, std::string u
   }
 
   // Load collisions pairs
-  if (!(flags & IGNORE_COLLISIONS))
+  if (!(flags & IGNORE_GEOMETRY) && !(flags & IGNORE_COLLISIONS))
   {
     if (tools::file_exists(model_directory + "/collisions.json"))
     {
@@ -144,8 +153,9 @@ RobotWrapper::RobotWrapper(std::string model_directory, int flags, std::string u
   pinocchio::computeAllTerms(model, *data, state.q, state.qd);
   update_kinematics();
 
-  auto collisions = self_collisions();
-  if (collisions.size() > 0)
+  const auto collisions =
+    (flags & IGNORE_GEOMETRY) ? std::vector<Collision>{} : self_collisions();
+  if (!collisions.empty())
   {
     std::cerr << "WARNING: Robot has the following self collisions in neutral position:" << std::endl;
 
