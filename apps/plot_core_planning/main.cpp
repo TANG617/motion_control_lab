@@ -1,6 +1,8 @@
 #include "matplotlibcpp.h"
 
-#include "motion_control_core/motion_control_core.hpp"
+#include "motion_control_core/planning/cartesian_planner.hpp"
+#include "motion_control_core/planning/joint_planner.hpp"
+#include "r1_robot_config.hpp"
 
 #include <Eigen/Geometry>
 
@@ -10,7 +12,6 @@
 #include <map>
 #include <stdexcept>
 #include <string>
-#include <system_error>
 #include <vector>
 
 namespace
@@ -27,26 +28,27 @@ mcc::Pose makePose(const Eigen::Vector3d & translation, double yaw)
   return pose;
 }
 
-mcc::CartesianMoveLineRequest makeCartesianRequest()
+mcc::CartesianLineRequest makeCartesianRequest()
 {
-  mcc::CartesianMoveLineRequest request;
-  request.reference_frame_name = "world";
+  const auto & robot = motion_control_lab::r1RobotConfig();
+  mcc::CartesianLineRequest request;
+  request.reference_frame_name = robot.base_frame;
   request.sample_period = 0.01;
   request.path_limits.max_velocity = 0.2;
   request.path_limits.max_acceleration = 0.6;
   request.path_limits.max_jerk = 2.0;
 
   request.segments.push_back(
-    mcc::CartesianMoveLineSegment{
-      "left_tcp",
+    mcc::CartesianLineSegment{
+      robot.left_end_effector_frame,
       makePose(Eigen::Vector3d{0.40, 0.20, 0.80}, 0.0),
       mcc::Twist::Zero(),
       mcc::SpatialAcceleration::Zero(),
       makePose(Eigen::Vector3d{0.55, 0.28, 0.86}, 0.45),
       0.5});
   request.segments.push_back(
-    mcc::CartesianMoveLineSegment{
-      "right_tcp",
+    mcc::CartesianLineSegment{
+      robot.right_end_effector_frame,
       makePose(Eigen::Vector3d{0.40, -0.20, 0.80}, 0.0),
       mcc::Twist::Zero(),
       mcc::SpatialAcceleration::Zero(),
@@ -58,15 +60,11 @@ mcc::CartesianMoveLineRequest makeCartesianRequest()
 
 mcc::JointTrajectoryRequest makeJointRequest()
 {
+  const auto & robot = motion_control_lab::r1RobotConfig();
   mcc::JointTrajectoryRequest request;
-  request.joint_names = {
-    "left_arm_joint1",
-    "left_arm_joint2",
-    "left_arm_joint3",
-    "left_arm_joint4",
-    "left_arm_joint5",
-    "left_arm_joint6",
-    "left_arm_joint7"};
+  for (const auto index : robot.left_arm_joint_indices) {
+    request.joint_names.push_back(robot.joint_names.at(index));
+  }
 
   request.current.positions = {0.90, -1.38, -1.57, -1.40, -0.45, 0.00, 0.00};
   request.current.velocities.assign(request.joint_names.size(), 0.0);
@@ -85,16 +83,16 @@ mcc::JointTrajectoryRequest makeJointRequest()
   return request;
 }
 
-void requireOk(const mcc::Status & status, const std::string & action)
+void requireOk(const mcc::Status & status, const std::string &)
 {
   if (!status.ok()) {
-    throw std::runtime_error(action + " failed: " + status.message);
+    throw std::runtime_error(status.message);
   }
 }
 
 mcc::CartesianTrajectory sampleCartesianTrajectory()
 {
-  mcc::CartesianMoveLinePlanner planner;
+  mcc::CartesianPlanner planner;
   mcc::CartesianTrajectory trajectory;
   mcc::PlanningDiagnostics diagnostics;
   requireOk(
@@ -105,11 +103,11 @@ mcc::CartesianTrajectory sampleCartesianTrajectory()
 
 mcc::JointTrajectory sampleJointTrajectory()
 {
-  mcc::JointTrajectoryPlannerConfig config;
+  mcc::JointPlannerConfig config;
   config.algorithm = mcc::JointTrajectoryAlgorithm::JerkLimited;
   config.synchronization = mcc::TrajectorySynchronization::Phase;
 
-  mcc::JointTrajectoryPlanner planner(config);
+  mcc::JointPlanner planner(config);
   mcc::JointTrajectory trajectory;
   mcc::PlanningDiagnostics diagnostics;
   requireOk(
@@ -135,10 +133,7 @@ void saveCartesianPlot(
   plt::figure();
   plt::figure_size(1000, 700);
   for (const auto & entry : x_by_frame) {
-    const auto y = y_by_frame.find(entry.first);
-    if (y != y_by_frame.end()) {
-      plt::named_plot(entry.first, entry.second, y->second);
-    }
+    plt::named_plot(entry.first, entry.second, y_by_frame.at(entry.first));
   }
   plt::title("Cartesian move-line XY path");
   plt::xlabel("x [m]");
@@ -155,18 +150,12 @@ void saveJointPlot(
   const mcc::JointTrajectory & trajectory,
   const std::filesystem::path & path)
 {
-  if (trajectory.samples.empty()) {
-    throw std::runtime_error("joint trajectory has no samples");
-  }
-
   std::vector<double> time;
   std::vector<std::vector<double>> positions(trajectory.joint_names.size());
   for (const auto & sample : trajectory.samples) {
     time.push_back(sample.time_from_start);
     for (std::size_t index = 0; index < sample.positions.size(); ++index) {
-      if (index < positions.size()) {
-        positions[index].push_back(sample.positions[index]);
-      }
+      positions.at(index).push_back(sample.positions.at(index));
     }
   }
 
@@ -214,39 +203,25 @@ std::filesystem::path parseOutputDir(int argc, char ** argv)
 
 void ensureOutputDir(const std::filesystem::path & output_dir)
 {
-  std::error_code error;
-  std::filesystem::create_directories(output_dir, error);
-  if (error) {
-    throw std::runtime_error(
-      "failed to create output directory " + output_dir.string() + ": " +
-      error.message());
-  }
-  if (!std::filesystem::is_directory(output_dir)) {
-    throw std::runtime_error("output path is not a directory: " + output_dir.string());
-  }
+  std::filesystem::create_directories(output_dir);
 }
 
 }  // namespace
 
 int main(int argc, char ** argv)
 {
-  try {
-    const auto output_dir = parseOutputDir(argc, argv);
-    ensureOutputDir(output_dir);
+  const auto output_dir = parseOutputDir(argc, argv);
+  ensureOutputDir(output_dir);
 
-    plt::backend("Agg");
+  plt::backend("Agg");
 
-    const auto cartesian_path = output_dir / "cartesian_move_line_planning.png";
-    const auto joint_path = output_dir / "joint_trajectory_planning.png";
+  const auto cartesian_path = output_dir / "cartesian_move_line_planning.png";
+  const auto joint_path = output_dir / "joint_trajectory_planning.png";
 
-    saveCartesianPlot(sampleCartesianTrajectory(), cartesian_path);
-    saveJointPlot(sampleJointTrajectory(), joint_path);
+  saveCartesianPlot(sampleCartesianTrajectory(), cartesian_path);
+  saveJointPlot(sampleJointTrajectory(), joint_path);
 
-    std::cout << "Wrote " << std::filesystem::absolute(cartesian_path) << '\n';
-    std::cout << "Wrote " << std::filesystem::absolute(joint_path) << '\n';
-    return EXIT_SUCCESS;
-  } catch (const std::exception & error) {
-    std::cerr << "motion_control_lab_plot_core_planning: " << error.what() << '\n';
-    return EXIT_FAILURE;
-  }
+  std::cout << "Wrote " << std::filesystem::absolute(cartesian_path) << '\n';
+  std::cout << "Wrote " << std::filesystem::absolute(joint_path) << '\n';
+  return EXIT_SUCCESS;
 }

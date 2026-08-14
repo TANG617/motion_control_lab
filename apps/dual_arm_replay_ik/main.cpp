@@ -237,7 +237,7 @@ int run(int argc, char ** argv)
   };
 
   replay::ReplayIkExecutionConfig execution_config;
-  execution_config.stop_on_first_error = false;
+  execution_config.stop_on_first_error = true;
   execution_config.before_replay = ensureOutputDirectory;
 #if MCL_WITH_REPLAY_VISUALIZATION
   std::unique_ptr<mcv::FoxgloveFrameSink> visualization_sink;
@@ -322,7 +322,7 @@ int run(int argc, char ** argv)
   manifest["target_pose"]["input_semantics"] = "tcp";
   manifest["target_pose"]["solver_semantics"] = "end_effector";
   manifest["target_pose"]["conversion"] = "end_effector_target=tcp_target*tcp_offset.inverse()";
-  const auto & robot = replay::r1ReplayIkContract();
+  const auto & robot = mcl::r1RobotConfig();
   manifest["target_pose"]["tcp_offsets"]["left"] = isometryJson(robot.left_tcp_offset);
   manifest["target_pose"]["tcp_offsets"]["right"] = isometryJson(robot.right_tcp_offset);
   manifest["initial_state"]["source"] = result.loaded.initial_joint_state.has_value()
@@ -379,10 +379,5 @@ int run(int argc, char ** argv)
 
 int main(int argc, char ** argv)
 {
-  try {
-    return run(argc, argv);
-  } catch (const std::exception & error) {
-    std::cerr << "mcl_dual_arm_replay_ik: " << error.what() << '\n';
-    return EXIT_FAILURE;
-  }
+  return run(argc, argv);
 }

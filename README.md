@@ -14,16 +14,15 @@ Motion Control Lab 是面向机器人遥操作 whole-body IK 的可复现实验�
 - 对实验定义、共享 R1 输入、run manifest、artifact 哈希和求解结果的自动检查。
 
 仓库还提供可选的 MCC 交互预览运行时。单臂入口使用 grouped solver 的 `RedOnly` profile；
-显式区分的双臂 ServoStep/TargetSolve 入口共享一个固定 topology 的 `KinematicsSolver`；grouped
-双臂入口使用独立 Red/Yellow worker。它们复用 TUI、Viz 和 wall-clock pacing；算法快照统一映射为
-`motion_control_viz::VisualizationFrame`。
+显式区分的双臂 ServoStep/TargetSolve 入口各自拥有完整的 `KinematicsSolver` topology 和求解
+配置；grouped 双臂入口使用独立 Red/Yellow worker。它们只复用 R1 固定参数、TUI/Viz 初始化和
+wall-clock pacing；算法快照统一映射为 `motion_control_viz::VisualizationFrame`。
 所有 IK app 的 Foxglove topic 与 FK 一致性要求由
 [Foxglove IK 可视化数据流合同](docs/foxglove_ik_visualization_contract.md)统一定义。
 该路径用于开发调试，不替代由 canonical timeline 驱动的可复现实验执行器。
-单臂和 grouped 交互预览 app 直接拥有各自的 MCC topology；双臂 ServoStep/TargetSolve 的
-薄入口复用 `apps/common/dual_arm_ik_app.*`，确保除 solve-mode 合同外的任务、TUI 和 Viz
-行为一致。可复现 replay app 则复用固定策略的单动作 engine，避免不同实验复制或漂移
-solver 行为。
+每个交互 app 直接拥有自己的 MCC topology、任务和 solver 配置；即使配置相同，也在各自目录
+中显式保留。`apps/common/` 不承载 solver 或任务语义。可复现 replay app 的 engine 也由该 app
+目录自行拥有，实验入口只调用这一明确的 replay 能力。
 
 E01 和 E04 都固定使用 `/workspace/models/r1.cos.urdf` 及同一左臂可达位置任务，
 分别验证 PlaCo 和 OpenSoT 求解链与证据落盘链，不构成算法性能结论。
@@ -36,8 +35,9 @@ E01 和 E04 都固定使用 `/workspace/models/r1.cos.urdf` 及同一左臂可�
 brew install cmake pinocchio
 ```
 
-placo 源码已经保存在 `third_party/placo/`，配置时不下载 placo。Pinocchio 使用本机安装，
-jsoncpp 首次配置时按固定版本下载到 CMake build tree。若 `CMAKE_PREFIX_PATH` 中已有
+placo 与 FTXUI 源码已经分别保存在 `third_party/placo/` 和 `third_party/ftxui/`，配置时不下载
+这两个依赖。Pinocchio 使用本机安装，jsoncpp 首次配置时按固定版本下载到 CMake build tree。
+若 `CMAKE_PREFIX_PATH` 中已有
 eiquadprog package，Lab 会复用它；否则 standalone PlaCo 实验按固定版本构建 static fallback。
 OpenSoT 源码位于 `third_party/OpenSoT/`，默认不开启；只有显式设置
 `MCL_BUILD_E04_OPENSOT_SMOKE=ON` 时才在独立嵌套工程中使用 ROS Jazzy、XBot2、
@@ -276,7 +276,13 @@ cmake --build build/dual-arm \
   --deadline-policy monitor
 ```
 
-两个双臂入口共享双手 Hard position/orientation task、Hard joint-position limits、TUI 和 Viz。
+四个交互入口复用同一个数据驱动 TUI，不需要 app 级布局配置。`1..5`、`F1..F5` 或
+`Tab` 在 Overview、Solver/QP、Joints、Runtime 和 Events 间切换；
+`PageUp/PageDown/Home/End` 滚动当前页面，`h` 打开完整快捷键帮助。TUI 根据收到的
+solver、worker 和 collision 快照自动显示相应面板，并根据终端宽度自动分栏或改用纵向布局。
+
+两个双臂入口分别定义同值的双手 Hard position/orientation task 和 Hard joint-position limits；
+这种重复用于保持 app 独立，不抽取到 `common`。它们只共享 TUI/Viz 初始化与 R1 固定参数。
 ServoStep 每次只执行一个 QP update，`--rate` 同时定义其正 `servo_period`，并启用 Hard
 joint-velocity limits。TargetSolve 使用 `servo_period=0`、最多 80 次迭代且不注册 rate limits；
 其 `--rate` 只控制交互求解和发布频率。两者显式使用相同的 ProxQP regularization `1e-4`。
@@ -306,9 +312,9 @@ self-collision velocity damping：minimum distance `0.02 m`、influence distance
 margin。self-collision 是运动优化目标，不是硬安全屏障；
 margin shortfall 不会自动拒绝 accepted solution，硬件 command authorization 仍由集成层负责。
 
-app 从 R1 URDF 所在 `robot_description/psi_r1/urdf` 布局推导 mesh package search root，并在
-启动时验证 `psi_r1/meshes`。collision diagnostics 仅在内部 warm-up 和测试中校验，不新增 TUI 或
-Foxglove schema。
+app 从 R1 URDF 所在 `robot_description/psi_r1/urdf` 布局推导 mesh package search root，并直接
+交给模型加载器。调试入口不预先校验 mesh 目录或 collision diagnostics 形状；底层错误直接退出，
+不新增 TUI 或 Foxglove schema。
 
 也可以设置 `MOTION_CONTROL_URDF`，省略每次运行的 `--urdf`。
 
@@ -324,7 +330,7 @@ matplotlib。
 ## 笛卡尔 MoveLine 规划预览
 
 `mcl_cartesian_planning` 是独立于 IK app 的 JSON 驱动预览入口。它只调用
-`motion_control::core::CartesianMoveLinePlanner`，不读取 URDF、不创建 RobotModel，也不调用
+`motion_control::core::CartesianPlanner`，不读取 URDF、不创建 RobotModel，也不调用
 FK/IK。多个 `segments` 表示同一次请求中的并行同步 frame move，不是连续路点。
 
 先安装启用了 Foxglove 的 `motion_control_viz >= 0.3` 和 `motion_control_core`，然后单独构建：
@@ -369,8 +375,9 @@ MoveLine，不增加 circle、spline、blend 或 waypoint 拼接语义。
 adapters/execution/       通用 artifact store、manifest 与 SHA-256
 adapters/data/            ROS-free source、decoder、temporal/semantic projection 与 ReplayClock
 adapters/interactive/     共享 CLI、TUI、wall-clock scheduler 和 Viz helpers
-apps/common/              共享 IK 工具、R1 被动配置和双臂两模式的固定 topology/交互 runner
+apps/common/              R1 固定参数、公共 TUI/presentation 初始化和无语义机械转换；不含 solver/task
 apps/cartesian_planning/  JSON 驱动的纯 Cartesian MoveLine 规划、渲染和 Foxglove 回放
+apps/plot_core_planning/  可选的 Core planning API matplotlib smoke app
 apps/replay_plan/         不运行 solver 的 canonical timeline inspect/artifact 入口
 apps/dual_arm_replay_ik/  MCC 双臂 canonical replay runner；可选 Foxglove 观察端
 apps/<entry>/             独立 main、CMake 和 help test；按入口选择或直接拥有 solve topology
@@ -381,6 +388,8 @@ experiments/              E01-E04 Experiment 实例、append-only run 与 review
 analyses/                 只消费已有证据的 Analysis
 docs/                     愿景、通用架构和项目实现映射
 third_party/placo/        仓库内直接构建和修改的 placo 源码
+third_party/OpenSoT/      固定 ros2 快照；仅供隔离的 E04 external build 使用
+third_party/ftxui/         固定版本、无嵌套 Git 仓库的交互 TUI 源码
 tests/                    合同与端到端检查
 ```
 
@@ -403,3 +412,10 @@ Eigen 5 所需的 API 兼容修改。完整来源和修改清单见
 `environment.dependencies.placo`；兼容字段 `environment.placo_revision` 仍保留。
 升级上游版本或修改算法后必须创建新的 run，
 不能复用旧证据。
+
+## FTXUI 源码策略
+
+交互 IK 控制台使用仓库内的 FTXUI `v7.0.3` 源码，来源和归档 SHA-256 记录在
+[`third_party/ftxui/MOTION_CONTROL_LAB.md`](third_party/ftxui/MOTION_CONTROL_LAB.md)。
+该目录不是 Git submodule，也不包含嵌套 `.git`。CMake 只在至少一个 interactive IK app
+启用时构建 FTXUI；canonical replay/headless 配置不依赖或构建 TUI。

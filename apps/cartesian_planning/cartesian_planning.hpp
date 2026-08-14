@@ -1,6 +1,6 @@
 #pragma once
 
-#include <motion_control_core/motion_control_core.hpp>
+#include <motion_control_core/planning/cartesian_planner.hpp>
 #include <motion_control_viz/frame.hpp>
 
 #include <cstdint>
@@ -37,7 +37,7 @@ void printUsage(const char * program);
 
 AppOptions parseAppOptions(int argc, char ** argv);
 
-motion_control::core::CartesianMoveLineRequest loadRequest(
+motion_control::core::CartesianLineRequest loadRequest(
   const std::filesystem::path & path);
 
 OutputPaths prepareOutputPaths(
@@ -53,7 +53,7 @@ void renderTrajectoryPlots(
   const motion_control::core::CartesianTrajectory & trajectory);
 
 std::vector<motion_control::viz::LineStrip3d> makeStaticScene(
-  const motion_control::core::CartesianMoveLineRequest & request);
+  const motion_control::core::CartesianLineRequest & request);
 
 motion_control::viz::VisualizationFrame makePlaybackFrame(
   const motion_control::core::CartesianTrajectorySample & sample,
@@ -65,7 +65,7 @@ motion_control::viz::VisualizationFrame makePlaybackFrame(
 
 void playTrajectory(
   const AppOptions & options,
-  const motion_control::core::CartesianMoveLineRequest & request,
+  const motion_control::core::CartesianLineRequest & request,
   const motion_control::core::CartesianTrajectory & trajectory);
 
 }  // namespace motion_control_lab::cartesian_planning

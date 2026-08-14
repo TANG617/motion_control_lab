@@ -18,9 +18,9 @@ planned。
 | Temporal projector | `adapters/data/temporal/` 中的 timestamp selection、严格时间校验、immutable Timeline、projection 与 ReplayClock |
 | Semantic projector | `adapters/data/projection/dual_arm_timeline.*`；只消费两个 `TypedStream<StampedPose>` |
 | Replay plan | `mcl_replay_plan`；预加载输入并输出 timeline trace/manifest，不运行 solver |
-| MCC interactive apps | `apps/single_arm_ik/` 使用 `RedOnly`；`apps/dual_arm_ik_servo_step/`、`apps/dual_arm_ik_target_solve/` 复用一个固定 topology 的 `KinematicsSolver`；`apps/grouped_dual_arm_ik/` 固定使用 Red/Yellow |
-| Cartesian planning preview | `apps/cartesian_planning/` 读取版本化 JSON，调用 Core MoveLine planner，输出 CSV/PNG 并循环发布 Foxglove；不加载 robot model 或调用 IK |
-| Interactive support | `adapters/interactive/` 提供 CLI、TUI、wall-clock scheduler、SPSC latest mailbox、periodic worker/Fault 和 Viz helpers |
+| MCC interactive apps | `apps/single_arm_ik/` 使用 `RedOnly`；`apps/dual_arm_ik_servo_step/`、`apps/dual_arm_ik_target_solve/` 各自拥有完整的 `KinematicsSolver` topology 和配置；`apps/grouped_dual_arm_ik/` 固定使用 Red/Yellow |
+| Cartesian planning preview | `apps/cartesian_planning/` 读取版本化 JSON，调用 Core `CartesianPlanner`，输出 CSV/PNG 并循环发布 Foxglove；不加载 robot model 或调用 IK |
+| Interactive support | `adapters/interactive/` 提供 CLI、基于 vendored FTXUI 的 TUI、wall-clock scheduler、SPSC latest mailbox、periodic worker/Fault 和 Viz helpers |
 | IK visualization contract | `contracts/visualization/foxglove_ik.v1.json` + `foxglove_ik_v1.hpp` 固定五条 Foxglove topic，并要求 FK 与同帧 joint state 一致 |
 | Solver A/B runner | planned；需要时由正式 Experiment 的 canonical timeline 单独设计，不预留交互 backend 接口 |
 | Interactive preview | 独立 app topology + 共享 interactive support；E02 的 Foxglove sink 是只观察 canonical replay 的可选输出，不替换 ReplayClock |
@@ -90,8 +90,8 @@ Soft posture task（weight 10）和 10 对 curated R1 link pair 的 Soft self-co
 （minimum/influence distance 0.02/0.07 m，gain 20 s^-1，weight 1）。Yellow→Red coupling weight
 为 1，两组 joint position/velocity limits 均为 Hard。collision margin 是诊断，不构成硬安全授权。
 
-单臂和双臂入口显式拥有不同的 task topology、solver config、typed handles 和状态更新，
-只共享参数解析、终端输入、wall-clock 调度、frame 映射和 sink 创建。正式实验的 `dt`
+每个 app 显式拥有自己的 task topology、solver config、typed handles 和状态更新；相同配置也不
+跨 app 合并。它们只共享 R1 固定参数、终端/TUI 初始化、wall-clock 调度、frame 映射和 sink 创建。正式实验的 `dt`
 必须来自 canonical 时间轴，不能复用交互 scheduler；未来若实现 PlaCo/MCC A/B，应从
 正式 Experiment 的真实需求重新设计，而不是让交互入口提前承担 backend-neutral 合同。
 

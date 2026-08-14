@@ -1,4 +1,5 @@
 #include "ik_app_utils.hpp"
+#include "r1_interactive_config.hpp"
 #include "r1_robot_config.hpp"
 
 #include "config/interactive_ik_options.hpp"
@@ -15,7 +16,6 @@
 #include <algorithm>
 #include <cstdint>
 #include <cstdlib>
-#include <filesystem>
 #include <iostream>
 #include <memory>
 #include <stdexcept>
@@ -31,13 +31,16 @@ namespace mcl = motion_control_lab;
 constexpr const char * kProgramId = "mcl_single_arm_ik";
 constexpr const char * kTitle = "Motion Control Single-arm IK";
 
+void throwIfError(const mcc::Status & status)
+{
+  if (!status.ok()) {
+    throw std::runtime_error(status.message);
+  }
+}
+
 int run(int argc, char ** argv)
 {
   const auto options = mcl::parseInteractiveIkOptions(argc, argv);
-  if (!std::filesystem::exists(options.urdf_path)) {
-    throw std::runtime_error("URDF does not exist: " + options.urdf_path);
-  }
-
   const auto & robot = mcl::r1RobotConfig();
   const auto controlled_side = mcl::parseArmSide(options.tui.side);
   const std::string & controlled_frame = mcl::frameForSide(robot, controlled_side);
@@ -51,7 +54,7 @@ int run(int argc, char ** argv)
   model_description.joint_names = joint_names;
 
   std::shared_ptr<const mcc::RobotModel> model;
-  mcl::requireOk(mcc::RobotModel::load(model_description, model), "Failed to load robot model");
+  throwIfError(mcc::RobotModel::load(model_description, model));
 
   mcc::KinematicsSolverConfig solver_config;
   solver_config.mode = mcc::IkSolveMode::ServoStep;
@@ -70,48 +73,39 @@ int run(int argc, char ** argv)
   grouped_config.profile = mcc::GroupedSolverProfile::RedOnly;
   grouped_config.red = solver_config;
   mcc::GroupedKinematicsSolverBuilder builder;
-  mcl::requireOk(
-    builder.configure(model, joint_names, grouped_config),
-    "Failed to configure IK builder");
+  throwIfError(builder.configure(model, joint_names, grouped_config));
 
   mcc::PositionTaskConfig position_task_config;
   position_task_config.name = std::string{mcl::armSideName(controlled_side)} + "-position";
   position_task_config.enforcement = mcc::HardEnforcement{};
   mcc::GroupedPositionTaskHandle position_task;
-  mcl::requireOk(
-    builder.addPositionTask(
-      mcc::SolverGroup::Red, controlled_frame, position_task_config, position_task),
-    "Failed to register position task");
+  throwIfError(builder.addPositionTask(
+    mcc::SolverGroup::Red, controlled_frame, position_task_config, position_task));
 
   mcc::OrientationTaskConfig orientation_task_config;
   orientation_task_config.name =
     std::string{mcl::armSideName(controlled_side)} + "-orientation";
   orientation_task_config.enforcement = mcc::HardEnforcement{};
   mcc::GroupedOrientationTaskHandle orientation_task;
-  mcl::requireOk(
-    builder.addOrientationTask(
-      mcc::SolverGroup::Red, controlled_frame, orientation_task_config, orientation_task),
-    "Failed to register orientation task");
+  throwIfError(builder.addOrientationTask(
+    mcc::SolverGroup::Red, controlled_frame, orientation_task_config, orientation_task));
 
   mcc::JointPositionLimitConfig joint_limit_config;
   joint_limit_config.margin = 0.0;
   joint_limit_config.enforcement = mcc::HardEnforcement{};
   mcc::GroupedJointPositionLimitHandle joint_limits;
-  mcl::requireOk(
-    builder.addJointPositionLimits(mcc::SolverGroup::Red, joint_limit_config, joint_limits),
-    "Failed to register joint-position limits");
+  throwIfError(builder.addJointPositionLimits(
+    mcc::SolverGroup::Red, joint_limit_config, joint_limits));
 
   mcc::JointVelocityLimitConfig velocity_limit_config;
   velocity_limit_config.enforcement = mcc::HardEnforcement{};
   mcc::GroupedJointVelocityLimitHandle velocity_limits;
-  mcl::requireOk(
-    builder.addJointVelocityLimits(
-      mcc::SolverGroup::Red, velocity_limit_config, velocity_limits),
-    "Failed to register joint-velocity limits");
+  throwIfError(builder.addJointVelocityLimits(
+    mcc::SolverGroup::Red, velocity_limit_config, velocity_limits));
 
   mcc::GroupedKinematicsSolver solver;
-  mcl::requireOk(builder.finalize(solver), "Failed to finalize IK solver");
-  mcl::requireOk(solver.beginRun(1), "Failed to begin grouped IK run");
+  throwIfError(builder.finalize(solver));
+  throwIfError(solver.beginRun(1));
 
   auto currentTargetPose = [&](mcl::ArmSide side) {
     mcc::ForwardKinematicsRequest request;
@@ -120,11 +114,9 @@ int run(int argc, char ** argv)
     request.reference_frame_name = robot.base_frame;
     mcc::ForwardKinematicsSolution solution;
     mcc::ForwardKinematicsDiagnostics diagnostics;
-    mcl::requireOk(
-      solver.computeForwardKinematics(
-        mcc::SolverGroup::Red, request, solution, diagnostics),
-      "FK failed");
-    return mcl::requirePose(solution.poses, mcl::frameForSide(robot, side)).pose;
+    throwIfError(solver.computeForwardKinematics(
+      mcc::SolverGroup::Red, request, solution, diagnostics));
+    return solution.poses.at(0).pose;
   };
 
   const auto presentation = mcl::makeArmPresentation(
@@ -158,23 +150,16 @@ int run(int argc, char ** argv)
   latest_frame.velocities = velocities;
   latest_frame.selected_side = controlled_side;
 
-  bool sink_open = false;
-  try {
-    visualization_sink->open({"interactive-preview", kProgramId});
-    sink_open = true;
+  visualization_sink->open({"interactive-preview", kProgramId});
 
-    while (const auto schedule = scheduler.next()) {
+  while (const auto schedule = scheduler.next()) {
       tui.poll();
       if (const auto reset_side = tui.consumeResetRequest()) {
-        try {
-          tui.setTargetPose(
-            *reset_side,
-            currentTargetPose(*reset_side),
-            std::string{"Reset "} + mcl::armSideName(*reset_side) +
-            " target from current FK");
-        } catch (const std::exception & error) {
-          tui.setStatus("Reset failed: " + std::string{error.what()});
-        }
+        tui.setTargetPose(
+          *reset_side,
+          currentTargetPose(*reset_side),
+          std::string{"Reset "} + mcl::armSideName(*reset_side) +
+          " target from current FK");
       }
 
       const auto & command = tui.command();
@@ -183,7 +168,8 @@ int run(int argc, char ** argv)
       }
 
       if (schedule->update_due && !command.paused) {
-        const auto & target = mcl::requireTarget(command.targets, controlled_side);
+        const auto & target = command.targets.at(
+          controlled_side == mcl::ArmSide::Left ? 0 : 1);
         mcc::GroupedInverseKinematicsRequest request;
         request.reference_frame_name = robot.base_frame;
         request.captured_state.state = mcl::makeRobotState(positions, velocities);
@@ -199,17 +185,9 @@ int run(int argc, char ** argv)
         mcc::GroupedInverseKinematicsDiagnostics diagnostics;
         const auto status = solver.solveInverseKinematics(
           mcc::SolverGroup::Red, request, solution, diagnostics);
-        if (!status.ok() || !diagnostics.attempt_accepted) {
-          throw std::runtime_error(
-                  "Red IK rejected attempt " + std::to_string(diagnostics.attempt_revision) +
-                  ": " + (status.message.empty() ? "solver failure" : status.message));
-        }
-        const auto expected_joint_count = static_cast<Eigen::Index>(joint_names.size());
-        if (solution.kinematics_solution.joint_positions.size() != expected_joint_count) {
-          throw std::runtime_error("accepted Red IK result has invalid joint-position count");
-        }
-        if (solution.kinematics_solution.joint_velocities.size() != expected_joint_count) {
-          throw std::runtime_error("accepted Red IK result has invalid joint-velocity count");
+        throwIfError(status);
+        if (!diagnostics.attempt_accepted) {
+          throw std::runtime_error("Red IK attempt rejected");
         }
         positions = mcl::toStdVector(solution.kinematics_solution.joint_positions);
         velocities = mcl::toStdVector(solution.kinematics_solution.joint_velocities);
@@ -225,6 +203,14 @@ int run(int argc, char ** argv)
         latest_frame.iterations = diagnostics.kinematics.iterations;
         latest_frame.converged = diagnostics.kinematics.converged;
         latest_frame.solve_time_ms = diagnostics.kinematics.solve_time_ms;
+        if (latest_frame.solvers.empty()) {
+          latest_frame.solvers.push_back(mcl::makeSolverDebug(
+            "Red", diagnostics, solution.kinematics_solution.disposition));
+        } else {
+          mcl::updateSolverDebug(
+            latest_frame.solvers.front(), diagnostics,
+            solution.kinematics_solution.disposition);
+        }
         latest_frame.target_errors.clear();
         mcl::ArmTargetError target_error;
         target_error.side = controlled_side;
@@ -246,44 +232,28 @@ int run(int argc, char ** argv)
         if (has_error) {
           latest_frame.target_errors.push_back(target_error);
         }
-        latest_frame.status = command.status;
+        latest_frame.status = "Red IK accepted";
         latest_frame.paused = command.paused;
         latest_frame.selected_side = command.selected_side;
 
-        try {
-          visualization_sink->write(mcl::makeIkVisualizationFrame(
-            latest_frame,
-            presentation,
-            publish_count,
-            schedule->sample_time_ns,
-            schedule->emit_time_ns));
-        } catch (const std::exception & error) {
-          tui.setStatus(error.what());
-          latest_frame.status = error.what();
-        }
+        visualization_sink->write(mcl::makeIkVisualizationFrame(
+          latest_frame,
+          presentation,
+          publish_count,
+          schedule->sample_time_ns,
+          schedule->emit_time_ns));
         ++publish_count;
       }
 
       if (schedule->draw_due) {
-        latest_frame.status = tui.command().status;
         latest_frame.paused = tui.command().paused;
         tui.render(latest_frame, publish_count, visualization_sink->status());
       }
       scheduler.sleep();
     }
 
-    visualization_sink->flush();
-    visualization_sink->close();
-    sink_open = false;
-  } catch (...) {
-    if (sink_open) {
-      try {
-        visualization_sink->close();
-      } catch (...) {
-      }
-    }
-    throw;
-  }
+  visualization_sink->flush();
+  visualization_sink->close();
 
   return EXIT_SUCCESS;
 }
@@ -295,7 +265,10 @@ int main(int argc, char ** argv)
   try {
     return run(argc, argv);
   } catch (const std::exception & error) {
-    std::cerr << kProgramId << ": " << error.what() << "\n";
+    std::cerr << kProgramId << ": " << error.what() << '\n';
+    return EXIT_FAILURE;
+  } catch (...) {
+    std::cerr << kProgramId << ": non-standard exception\n";
     return EXIT_FAILURE;
   }
 }

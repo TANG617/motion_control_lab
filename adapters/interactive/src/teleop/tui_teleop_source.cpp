@@ -4,18 +4,28 @@
 
 #include <Eigen/Geometry>
 
+#include <ftxui/component/app.hpp>
+#include <ftxui/component/component.hpp>
+#include <ftxui/component/component_options.hpp>
+#include <ftxui/component/event.hpp>
+#include <ftxui/component/loop.hpp>
+#include <ftxui/dom/elements.hpp>
+#include <ftxui/dom/table.hpp>
+#include <ftxui/screen/color.hpp>
+#include <ftxui/screen/terminal.hpp>
+
 #include <algorithm>
-#include <cerrno>
 #include <cctype>
+#include <chrono>
 #include <cmath>
-#include <cstring>
-#include <fcntl.h>
+#include <deque>
 #include <iomanip>
-#include <iostream>
+#include <memory>
 #include <sstream>
 #include <stdexcept>
-#include <sys/ioctl.h>
-#include <unistd.h>
+#include <string>
+#include <utility>
+#include <vector>
 
 namespace motion_control_lab
 {
@@ -52,27 +62,21 @@ const ArmTargetError * findError(const std::vector<ArmTargetError> & errors, Arm
   return nullptr;
 }
 
+const ArmForwardKinematics * findForwardKinematics(
+  const std::vector<ArmForwardKinematics> & poses,
+  ArmSide side)
+{
+  for (const auto & pose : poses) {
+    if (pose.side == side) {
+      return &pose;
+    }
+  }
+  return nullptr;
+}
+
 bool hasTarget(const std::vector<ArmTarget> & targets, ArmSide side)
 {
   return findTarget(targets, side) != nullptr;
-}
-
-std::optional<char> readTerminalByte()
-{
-  char value = '\0';
-  const ssize_t count = ::read(STDIN_FILENO, &value, 1);
-  if (count == 1) {
-    return value;
-  }
-  if (count == 0) {
-    throw std::runtime_error("terminal input closed");
-  }
-  const int read_error = errno;
-  if (read_error == EAGAIN || read_error == EWOULDBLOCK || read_error == EINTR) {
-    return std::nullopt;
-  }
-  throw std::runtime_error(
-          "terminal read failed: " + std::string(std::strerror(read_error)));
 }
 
 std::string targetTopicForSide(
@@ -94,11 +98,7 @@ void adjustStep(
   const TuiTeleopOptions & options,
   double scale)
 {
-  const double next_step = std::clamp(
-    step_m * scale,
-    options.min_step_m,
-    options.max_step_m);
-  step_m = next_step;
+  step_m = std::clamp(step_m * scale, options.min_step_m, options.max_step_m);
   std::ostringstream status;
   status << "Step set to " << std::fixed << std::setprecision(4) << step_m << " m";
   command.status = status.str();
@@ -169,8 +169,7 @@ void rotateSelected(
   Eigen::Quaterniond current(target->target_pose.linear());
   current.normalize();
   const Eigen::Quaterniond delta(Eigen::AngleAxisd(angle, axis));
-  const Eigen::Quaterniond rotated = (current * delta).normalized();
-  target->target_pose.linear() = rotated.toRotationMatrix();
+  target->target_pose.linear() = (current * delta).normalized().toRotationMatrix();
 
   std::ostringstream status;
   status << armSideName(command.selected_side) << " rotate "
@@ -200,55 +199,79 @@ std::string formatPose(const ArmTarget * target, const std::string & base_frame_
   return text.str();
 }
 
-std::string fitLine(std::string text, int width)
+std::string formatTargetError(const ArmTargetError & error)
 {
-  if (width <= 0) {
-    return {};
-  }
-  if (static_cast<int>(text.size()) > width) {
-    text.resize(static_cast<std::size_t>(width));
-  }
-  return text;
+  std::ostringstream line;
+  line << "error " << armSideName(error.side)
+       << ": position=" << std::fixed << std::setprecision(6)
+       << error.position_m << " m  orientation=" << error.orientation_rad << " rad";
+  return line.str();
 }
 
-void addLine(std::ostringstream & screen, int row, int col, const std::string & text, int width)
+std::string formatStep(
+  double step_m,
+  std::size_t rotation_axis_index,
+  double rotation_step_deg)
 {
-  if (row < 0 || col >= width) {
-    return;
-  }
-  screen << "\033[" << (row + 1) << ";" << (col + 1) << "H"
-         << fitLine(text, width - col);
+  std::ostringstream line;
+  line << "step=" << std::fixed << std::setprecision(4) << step_m
+       << " m  rot_axis=tcp_" << selectedRotationAxis(rotation_axis_index)
+       << "  rot_step=" << std::setprecision(2) << rotation_step_deg << " deg";
+  return line.str();
 }
 
-std::vector<std::string> jointPositionLines(
-  const JointNames & joint_names, const std::vector<double> & positions,
-  const std::string & first_prefix, int width)
+std::string formatIk(const IkDebugFrame & frame)
 {
-  std::vector<std::string> lines;
-  std::string line = first_prefix;
-  const std::string continuation{"  "};
+  std::ostringstream line;
+  line << "IK: " << frame.ik_status
+       << "  iterations=" << frame.iterations
+       << "  converged=" << std::boolalpha << frame.converged
+       << "  solve_ms=" << std::fixed << std::setprecision(3) << frame.solve_time_ms;
+  return line.str();
+}
+
+std::string jointPositionText(
+  const JointNames & joint_names,
+  const std::vector<double> & positions,
+  const std::string & prefix)
+{
+  std::ostringstream line;
+  line << prefix;
   for (std::size_t index = 0; index < positions.size(); ++index) {
-    std::ostringstream token;
-    token << (index < joint_names.size() ? joint_names[index] : "joint_" + std::to_string(index))
-          << '=' << std::fixed << std::setprecision(3) << positions[index];
-    const std::string value = token.str();
-    const std::size_t separator = line == first_prefix || line == continuation ? 0U : 1U;
-    if (
-      separator != 0U && width > 0 &&
-      line.size() + separator + value.size() > static_cast<std::size_t>(width)) {
-      lines.push_back(line);
-      line = continuation + value;
-    } else {
-      if (separator != 0U) {
-        line.push_back(' ');
-      }
-      line += value;
+    if (index != 0U) {
+      line << ' ';
     }
+    line << (index < joint_names.size() ? joint_names[index] : "joint_" + std::to_string(index))
+         << '=' << std::fixed << std::setprecision(3) << positions[index];
   }
-  if (line != first_prefix || positions.empty()) {
-    lines.push_back(line);
+  return line.str();
+}
+
+std::string selectedJointPositionText(
+  const InteractiveIkPresentation & presentation,
+  ArmSide side,
+  const JointNames & joint_names,
+  const std::vector<double> & positions)
+{
+  std::ostringstream line;
+  line << armSideName(side) << " arm q: ";
+  const auto * arm = findArmPresentation(presentation, side);
+  if (arm == nullptr) {
+    return line.str();
   }
-  return lines;
+  bool first = true;
+  for (const auto index : arm->joint_indices) {
+    if (index >= positions.size()) {
+      continue;
+    }
+    if (!first) {
+      line << ' ';
+    }
+    first = false;
+    line << (index < joint_names.size() ? joint_names[index] : "joint_" + std::to_string(index))
+         << '=' << std::fixed << std::setprecision(3) << positions[index];
+  }
+  return line.str();
 }
 
 double collisionPairDistance(const SelfCollisionPairDebug & pair)
@@ -257,7 +280,8 @@ double collisionPairDistance(const SelfCollisionPairDebug & pair)
 }
 
 const char * collisionPairState(
-  const SelfCollisionPairDebug & pair, const SelfCollisionDebug & collision)
+  const SelfCollisionPairDebug & pair,
+  const SelfCollisionDebug & collision)
 {
   if (pair.distance_before_m < 0.0 || pair.distance_after_m < 0.0) {
     return "COLLISION";
@@ -271,142 +295,969 @@ const char * collisionPairState(
   return "NEAR";
 }
 
+ftxui::Element labelledParagraph(const std::string & label, const std::string & value)
+{
+  using namespace ftxui;
+  return hbox({text(label) | bold, paragraph(value) | flex});
+}
+
+ftxui::Element modeBadge(bool paused)
+{
+  using namespace ftxui;
+  return text(paused ? " PAUSED " : " PUBLISHING ") |
+         bold |
+         color(paused ? Color::Yellow : Color::Green);
+}
+
+ftxui::Element collisionPairElement(
+  const SelfCollisionPairDebug & pair,
+  const SelfCollisionDebug & collision)
+{
+  using namespace ftxui;
+  std::ostringstream line;
+  const std::string state = collisionPairState(pair, collision);
+  line << "[" << state << "] " << pair.first_link << " <-> " << pair.second_link
+       << "  before=" << std::showpos << std::fixed << std::setprecision(4)
+       << pair.distance_before_m << "  after=" << pair.distance_after_m << " m";
+  auto element = paragraph(line.str());
+  if (state == "COLLISION") {
+    return element | bold | color(Color::Red);
+  }
+  if (state == "SHORTFALL" || state == "ACTIVE") {
+    return element | color(Color::Yellow);
+  }
+  return element | dim;
+}
+
+std::string formatFixed(double value, int precision)
+{
+  std::ostringstream output;
+  output << std::fixed << std::setprecision(precision) << value;
+  return output.str();
+}
+
+std::string formatScientific(double value)
+{
+  std::ostringstream output;
+  output << std::scientific << std::setprecision(3) << value;
+  return output.str();
+}
+
+std::string formatPosition(const Pose & pose)
+{
+  std::ostringstream output;
+  output << std::showpos << std::fixed << std::setprecision(4)
+         << pose.translation().x() << ' ' << pose.translation().y() << ' '
+         << pose.translation().z();
+  return output.str();
+}
+
+std::string formatQuaternion(const Pose & pose)
+{
+  const Eigen::Quaterniond quaternion(pose.linear());
+  std::ostringstream output;
+  output << std::showpos << std::fixed << std::setprecision(4)
+         << quaternion.x() << ' ' << quaternion.y() << ' '
+         << quaternion.z() << ' ' << quaternion.w();
+  return output.str();
+}
+
+std::string joinStrings(const std::vector<std::string> & values)
+{
+  if (values.empty()) {
+    return "-";
+  }
+  std::ostringstream output;
+  for (std::size_t index = 0; index < values.size(); ++index) {
+    if (index != 0U) {
+      output << ", ";
+    }
+    output << values[index];
+  }
+  return output.str();
+}
+
+ftxui::Element renderTable(std::vector<std::vector<std::string>> rows)
+{
+  using namespace ftxui;
+  if (rows.empty()) {
+    return text("<none>") | dim;
+  }
+  Table table(std::move(rows));
+  table.SelectRow(0).Decorate(bold);
+  table.SelectRow(0).SeparatorHorizontal(LIGHT);
+  table.SelectAll().SeparatorVertical(LIGHT);
+  return table.Render();
+}
+
+ftxui::Element debugWindow(const std::string & title, ftxui::Element content)
+{
+  using namespace ftxui;
+  return window(text(" " + title + " ") | bold, std::move(content));
+}
+
 }  // namespace
 
-TerminalSession::TerminalSession()
+class TuiTeleopSource::Impl
 {
-  if (!::isatty(STDIN_FILENO) || !::isatty(STDOUT_FILENO)) {
-    throw std::runtime_error("TUI teleop requires an interactive TTY");
-  }
-  if (::tcgetattr(STDIN_FILENO, &original_) != 0) {
-    throw std::runtime_error("tcgetattr failed: " + std::string(std::strerror(errno)));
-  }
-  original_input_flags_ = ::fcntl(STDIN_FILENO, F_GETFL);
-  if (original_input_flags_ < 0) {
-    throw std::runtime_error("fcntl F_GETFL failed: " + std::string(std::strerror(errno)));
-  }
-  enableRawMode();
-  write("\033[?25l\033[2J\033[H");
-}
+public:
+  explicit Impl(TuiTeleopSource & source)
+  : source_(source), app_(ftxui::App::FullscreenAlternateScreen())
+  {
+    using namespace ftxui;
 
-TerminalSession::~TerminalSession()
-{
-  restoreCookedMode();
-  write("\033[0m\033[?25h\n");
-}
+    InputOption input_options;
+    input_options.multiline = false;
+    step_input_ = Input(&step_input_value_, "translation step in metres", input_options);
 
-void TerminalSession::enableRawMode()
-{
-  termios raw = original_;
-  raw.c_iflag &= static_cast<tcflag_t>(~(BRKINT | ICRNL | INPCK | ISTRIP | IXON));
-  raw.c_oflag &= static_cast<tcflag_t>(~(OPOST));
-  raw.c_cflag |= CS8;
-  raw.c_lflag &= static_cast<tcflag_t>(~(ECHO | ICANON | IEXTEN | ISIG));
-  raw.c_cc[VMIN] = 1;
-  raw.c_cc[VTIME] = 0;
-  if (::tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw) != 0) {
-    throw std::runtime_error("tcsetattr raw failed: " + std::string(std::strerror(errno)));
-  }
-  raw_enabled_ = true;
-  if (::fcntl(STDIN_FILENO, F_SETFL, original_input_flags_ | O_NONBLOCK) != 0) {
-    const int flag_error = errno;
-    restoreCookedMode();
-    throw std::runtime_error(
-            "fcntl F_SETFL failed: " + std::string(std::strerror(flag_error)));
-  }
-  nonblocking_enabled_ = true;
-}
+    auto main_component = Renderer([this] { return renderMain(); });
+    tabs_ = Container::Tab({main_component, step_input_}, &active_tab_);
+    root_ = Renderer(tabs_, [this] {
+      auto main = renderMain();
+      if (step_input_active_) {
+        return dbox({main, renderStepDialog()});
+      }
+      if (source_.show_help_) {
+        return dbox({main, renderHelpDialog()});
+      }
+      return main;
+    });
+    root_ |= CatchEvent([this](Event event) { return handleEvent(event); });
 
-void TerminalSession::restoreCookedMode()
-{
-  if (nonblocking_enabled_) {
-    ::fcntl(STDIN_FILENO, F_SETFL, original_input_flags_);
-    nonblocking_enabled_ = false;
-  }
-  if (raw_enabled_) {
-    ::tcsetattr(STDIN_FILENO, TCSAFLUSH, &original_);
-    raw_enabled_ = false;
-  }
-}
-
-KeyInput TerminalSession::readKey()
-{
-  const auto input = readTerminalByte();
-  if (!input.has_value()) {
-    return {};
-  }
-  const char ch = *input;
-  if (ch != '\033') {
-    return {Key::Character, ch};
+    app_.TrackMouse(false);
+    loop_ = std::make_unique<Loop>(&app_, root_);
   }
 
-  char sequence[2] = {'\0', '\0'};
-  const auto first = readTerminalByte();
-  if (!first.has_value()) {
-    return {Key::Escape, '\0'};
-  }
-  sequence[0] = *first;
-  const auto second = readTerminalByte();
-  if (!second.has_value()) {
-    return {Key::Escape, '\0'};
-  }
-  sequence[1] = *second;
-  if (sequence[0] == '[') {
-    switch (sequence[1]) {
-      case 'A':
-        return {Key::Up, '\0'};
-      case 'B':
-        return {Key::Down, '\0'};
-      case 'C':
-        return {Key::Right, '\0'};
-      case 'D':
-        return {Key::Left, '\0'};
-      default:
-        break;
+  void poll()
+  {
+    if (!loop_->HasQuitted()) {
+      loop_->RunOnce();
+    }
+    if (loop_->HasQuitted()) {
+      source_.command_.status = "Exiting";
+      source_.command_.stop_requested = true;
     }
   }
-  return {Key::Escape, '\0'};
-}
 
-std::optional<std::string> TerminalSession::promptLine(const std::string & prompt)
-{
-  restoreCookedMode();
-  write("\033[?25h\033[2K\r" + prompt);
-  std::string value;
-  if (!std::getline(std::cin, value)) {
-    enableRawMode();
-    write("\033[?25l");
-    return std::nullopt;
-  }
-  enableRawMode();
-  write("\033[?25l");
-  return value;
-}
-
-std::pair<int, int> TerminalSession::size() const
-{
-  winsize window{};
-  if (::ioctl(STDOUT_FILENO, TIOCGWINSZ, &window) == 0 &&
-      window.ws_col > 0 &&
-      window.ws_row > 0) {
-    return {static_cast<int>(window.ws_row), static_cast<int>(window.ws_col)};
-  }
-  return {24, 100};
-}
-
-void TerminalSession::write(const std::string & text) const
-{
-  const char * data = text.data();
-  std::size_t remaining = text.size();
-  while (remaining > 0) {
-    const ssize_t written = ::write(STDOUT_FILENO, data, remaining);
-    if (written <= 0) {
+  void render(
+    const IkDebugFrame & frame,
+    std::size_t publish_count,
+    const std::string & sink_status)
+  {
+    if (loop_->HasQuitted()) {
       return;
     }
-    data += written;
-    remaining -= static_cast<std::size_t>(written);
+    recordFrameEvents(frame, publish_count);
+    frame_ = frame;
+    publish_count_ = publish_count;
+    sink_status_ = sink_status;
+    has_frame_ = true;
+    app_.PostEvent(ftxui::Event::Custom);
+    loop_->RunOnce();
   }
-}
+
+private:
+  ftxui::Element renderHeader() const
+  {
+    using namespace ftxui;
+    std::ostringstream rate;
+    rate << "loop=" << static_cast<int>(source_.rate_hz_)
+         << " Hz  publish_seq=" << publish_count_;
+    return vbox({
+      hbox({text(source_.title_) | bold, filler(), text(sink_status_) | dim}),
+      hbox({
+        text(std::string{"side="} + armSideName(source_.command_.selected_side) + "  "),
+        modeBadge(source_.command_.paused),
+        filler(),
+        text(rate.str()) | dim,
+      }),
+    });
+  }
+
+  ftxui::Element renderTabs() const
+  {
+    using namespace ftxui;
+    static const std::vector<std::string> labels = {
+      "1 Overview", "2 Solver/QP", "3 Joints", "4 Runtime", "5 Events"};
+    Elements tabs;
+    for (std::size_t index = 0; index < labels.size(); ++index) {
+      auto label = text(" " + labels[index] + " ");
+      if (static_cast<int>(index) == page_index_) {
+        label = label | bold | color(Color::Black) | bgcolor(Color::Cyan);
+      } else {
+        label = label | dim;
+      }
+      tabs.push_back(std::move(label));
+    }
+    return hbox(std::move(tabs));
+  }
+
+  ftxui::Element renderMain() const
+  {
+    using namespace ftxui;
+    if (!has_frame_) {
+      return vbox({
+        text(source_.title_) | bold | center,
+        separator(),
+        text("Waiting for the first IK frame") | center | flex,
+        separator(),
+        labelledParagraph("status: ", source_.command_.status),
+      }) | border;
+    }
+
+    auto body = renderPage() |
+      focusPositionRelative(0.0F, scroll_y_) |
+      vscroll_indicator |
+      yframe |
+      flex;
+    Elements footer;
+    footer.push_back(labelledParagraph("command: ", source_.command_.status));
+    if (!frame_.status.empty() && frame_.status != source_.command_.status) {
+      footer.push_back(labelledParagraph("solver: ", frame_.status));
+    }
+    return vbox({
+      renderHeader(),
+      separator(),
+      renderTabs(),
+      separator(),
+      std::move(body),
+      separator(),
+      vbox(std::move(footer)),
+    }) | border;
+  }
+
+  ftxui::Element renderPage() const
+  {
+    switch (page_index_) {
+      case 0:
+        return renderOverview();
+      case 1:
+        return renderSolverPage();
+      case 2:
+        return renderJointsPage();
+      case 3:
+        return renderRuntimePage();
+      case 4:
+        return renderEventsPage();
+      default:
+        return ftxui::text("Unknown page");
+    }
+  }
+
+  ftxui::Element renderOverview() const
+  {
+    using namespace ftxui;
+    const int width = Terminal::Size().dimx;
+    if (width >= 200) {
+      return vbox({
+        hbox({
+          renderCartesianPanel(false) | flex,
+          separator(),
+          renderSolverSummaryPanel() | flex,
+          separator(),
+          renderRuntimeSummaryPanel() | flex,
+        }),
+        renderJointsPanel(true),
+      });
+    }
+    if (width >= 100) {
+      return vbox({
+        hbox({
+          renderCartesianPanel(false) | flex,
+          separator(),
+          renderSolverSummaryPanel() | flex,
+        }),
+        hbox({
+          renderJointsPanel(true) | flex,
+          separator(),
+          renderRuntimeSummaryPanel() | flex,
+        }),
+      });
+    }
+    return vbox({
+      renderCartesianPanel(true),
+      renderSolverSummaryPanel(),
+      renderRuntimeSummaryPanel(),
+    });
+  }
+
+  ftxui::Element renderCartesianPanel(bool compact) const
+  {
+    using namespace ftxui;
+    Elements content;
+    content.push_back(text(formatStep(
+      source_.step_m_, source_.rotation_axis_index_, source_.options_.rotation_step_deg)));
+    content.push_back(labelledParagraph("frame: ", source_.presentation_.base_frame_id));
+
+    std::vector<std::vector<std::string>> rows = {
+      {"arm", "kind", "position xyz [m]", "quaternion xyzw"}};
+    for (const auto & arm : source_.presentation_.arms) {
+      if (compact && arm.side != source_.command_.selected_side) {
+        continue;
+      }
+      if (const auto * target = findTarget(source_.command_.targets, arm.side)) {
+        if (compact) {
+          content.push_back(labelledParagraph(
+            std::string{armSideName(arm.side)} + " target p: ",
+            formatPosition(target->target_pose)));
+          content.push_back(labelledParagraph(
+            std::string{armSideName(arm.side)} + " target q: ",
+            formatQuaternion(target->target_pose)));
+        } else {
+          rows.push_back({
+            armSideName(arm.side), "target", formatPosition(target->target_pose),
+            formatQuaternion(target->target_pose)});
+        }
+      }
+      if (const auto * fk = findForwardKinematics(frame_.forward_kinematics, arm.side)) {
+        if (compact) {
+          content.push_back(labelledParagraph(
+            std::string{armSideName(arm.side)} + " FK p: ", formatPosition(fk->pose)));
+          content.push_back(labelledParagraph(
+            std::string{armSideName(arm.side)} + " FK q: ", formatQuaternion(fk->pose)));
+        } else {
+          rows.push_back({
+            armSideName(arm.side), "FK", formatPosition(fk->pose), formatQuaternion(fk->pose)});
+        }
+      }
+      if (const auto * error = findError(frame_.target_errors, arm.side)) {
+        std::ostringstream line;
+        line << armSideName(arm.side) << " error: position="
+             << formatScientific(error->position_m) << " m  orientation="
+             << formatScientific(error->orientation_rad) << " rad";
+        content.push_back(text(line.str()));
+      }
+    }
+    if (!compact) {
+      content.insert(content.begin() + 2, renderTable(std::move(rows)));
+    }
+
+    std::ostringstream topics;
+    for (std::size_t index = 0; index < source_.presentation_.arms.size(); ++index) {
+      if (index != 0U) {
+        topics << "  ";
+      }
+      const auto & arm = source_.presentation_.arms[index];
+      topics << armSideName(arm.side) << '=' << arm.target_channel;
+    }
+    content.push_back(paragraph("targets: " + topics.str()) | dim);
+    return debugWindow("Cartesian", vbox(std::move(content)));
+  }
+
+  ftxui::Element renderSolverSummaryPanel() const
+  {
+    using namespace ftxui;
+    std::vector<std::vector<std::string>> rows = {
+      {"solver", "result", "termination", "QP", "IK/QP ms", "hard max"}};
+    for (const auto & solver : frame_.solvers) {
+      rows.push_back({
+        solver.label,
+        solver.disposition,
+        solver.termination_reason,
+        solver.qp_status,
+        formatFixed(solver.ik_solve_time_ms, 3) + "/" +
+          formatFixed(solver.qp_solve_time_ms, 3),
+        formatScientific(solver.maximum_hard_violation)});
+    }
+    if (frame_.solvers.empty()) {
+      rows.push_back({"IK", frame_.ik_status, "-", "-", formatFixed(frame_.solve_time_ms, 3), "-"});
+    }
+    return debugWindow("Solver health", renderTable(std::move(rows)));
+  }
+
+  ftxui::Element renderRuntimeSummaryPanel() const
+  {
+    using namespace ftxui;
+    Elements content;
+    if (frame_.workers.empty()) {
+      content.push_back(text("single-loop runtime") | dim);
+    } else {
+      std::vector<std::vector<std::string>> rows = {
+        {"worker", "Hz", "iterations", "miss", "consecutive", "skipped", "max solver ms"}};
+      for (const auto & worker : frame_.workers) {
+        rows.push_back({
+          worker.label,
+          formatFixed(worker.configured_rate_hz, 0),
+          std::to_string(worker.iteration_count),
+          std::to_string(worker.deadline_miss_count),
+          std::to_string(worker.consecutive_deadline_misses),
+          std::to_string(worker.skipped_release_count),
+          formatFixed(worker.maximum_solver_ms, 3)});
+      }
+      content.push_back(renderTable(std::move(rows)));
+    }
+    for (const auto & collision : frame_.self_collisions) {
+      std::ostringstream line;
+      line << collision.label << ": seq=" << collision.input_state_sequence
+           << " min=" << formatFixed(collision.minimum_distance_before_m, 4)
+           << " -> " << formatFixed(collision.minimum_distance_after_m, 4)
+           << " m  shortfall=" << formatFixed(collision.margin_shortfall_m, 4) << " m";
+      content.push_back(paragraph(line.str()));
+    }
+    return debugWindow("Runtime", vbox(std::move(content)));
+  }
+
+  ftxui::Element renderSolverPage() const
+  {
+    using namespace ftxui;
+    Elements content;
+    if (frame_.solvers.empty()) {
+      return debugWindow("Solver/QP", paragraph(formatIk(frame_)));
+    }
+    for (const auto & solver : frame_.solvers) {
+      Elements solver_content;
+      std::vector<std::vector<std::string>> summary = {
+        {"field", "value"},
+        {"disposition", solver.disposition},
+        {"termination", solver.termination_reason},
+        {"converged", solver.converged ? "true" : "false"},
+        {"joint-limit policy", solver.joint_limit_policy},
+        {"IK iterations", std::to_string(solver.ik_iterations)},
+        {"IK solve ms", formatFixed(solver.ik_solve_time_ms, 6)},
+        {"QP backend/status", solver.backend + "/" + solver.qp_status},
+        {"QP native status", solver.native_status.empty() ? "-" : solver.native_status},
+        {"QP iterations", std::to_string(solver.qp_iterations)},
+        {"QP solve ms", formatFixed(solver.qp_solve_time_ms, 6)},
+        {"objective", formatScientific(solver.objective_value)},
+        {"primal residual", formatScientific(solver.primal_residual)},
+        {"dual residual", formatScientific(solver.dual_residual)},
+        {"maximum hard violation", formatScientific(solver.maximum_hard_violation)},
+        {"active set size", std::to_string(solver.active_set_size)},
+        {"warm start", solver.warm_start_used ? "true" : "false"},
+        {"saturated joints", joinStrings(solver.saturated_joints)},
+      };
+      solver_content.push_back(renderTable(std::move(summary)));
+      if (solver.grouped_attempt.has_value()) {
+        const auto & attempt = *solver.grouped_attempt;
+        solver_content.push_back(text("Grouped attempt") | bold);
+        if (Terminal::Size().dimx < 120) {
+          solver_content.push_back(renderTable({
+            {"field", "value"},
+            {"attempt revision", std::to_string(attempt.attempt_revision)},
+            {"value revision", std::to_string(attempt.value_revision)},
+            {"attempt accepted", attempt.attempt_accepted ? "true" : "false"},
+            {"has accepted value", attempt.has_accepted_value ? "true" : "false"},
+            {"coupling", attempt.coupling_state},
+            {"source value revision",
+             std::to_string(attempt.consumed_source_value_revision)},
+            {"captured state sequence", std::to_string(attempt.captured_state_sequence)},
+            {"captured state time [ns]",
+             std::to_string(attempt.captured_state_time_nanoseconds)},
+            {"run generation", std::to_string(attempt.run_generation)},
+          }));
+        } else {
+          solver_content.push_back(renderTable({
+            {"attempt", "value", "accepted", "coupling", "source", "state", "run"},
+            {std::to_string(attempt.attempt_revision),
+             std::to_string(attempt.value_revision),
+             attempt.attempt_accepted ? "true" : "false",
+             attempt.coupling_state,
+             std::to_string(attempt.consumed_source_value_revision),
+             std::to_string(attempt.captured_state_sequence),
+             std::to_string(attempt.run_generation)},
+          }));
+        }
+        if (attempt.rejection_reason != "none") {
+          solver_content.push_back(
+            labelledParagraph("rejection: ", attempt.rejection_reason) | color(Color::Red));
+        }
+      }
+      if (!solver.task_scales.empty()) {
+        if (Terminal::Size().dimx < 120) {
+          for (const auto & scale : solver.task_scales) {
+            std::ostringstream line;
+            line << scale.name << ": active=" << std::boolalpha << scale.active
+                 << " scale=" << formatFixed(scale.scale, 6)
+                 << " cost=" << formatScientific(scale.cost)
+                 << " degraded=" << scale.degraded << " stuck=" << scale.stuck;
+            solver_content.push_back(paragraph(line.str()));
+          }
+        } else {
+          std::vector<std::vector<std::string>> rows = {
+            {"task scale", "active", "scale", "cost", "degraded", "stuck"}};
+          for (const auto & scale : solver.task_scales) {
+            rows.push_back({
+              scale.name,
+              scale.active ? "true" : "false",
+              formatFixed(scale.scale, 6),
+              formatScientific(scale.cost),
+              scale.degraded ? "true" : "false",
+              scale.stuck ? "true" : "false"});
+          }
+          solver_content.push_back(renderTable(std::move(rows)));
+        }
+      }
+      if (!solver.requirements.empty()) {
+        if (Terminal::Size().dimx < 120) {
+          solver_content.push_back(text("Requirements") | bold);
+          for (const auto & requirement : solver.requirements) {
+            std::ostringstream line;
+            line << requirement.name << ": enabled=" << std::boolalpha << requirement.enabled
+                 << " active=" << requirement.active
+                 << " violation=" << formatScientific(requirement.maximum_violation)
+                 << " cost=" << formatScientific(requirement.cost)
+                 << " unit=" << requirement.unit << " source=" << requirement.source;
+            solver_content.push_back(paragraph(line.str()));
+          }
+        } else {
+          std::vector<std::vector<std::string>> rows = {
+            {"requirement", "enabled", "active", "violation", "cost", "unit", "source"}};
+          for (const auto & requirement : solver.requirements) {
+            rows.push_back({
+              requirement.name,
+              requirement.enabled ? "true" : "false",
+              requirement.active ? "true" : "false",
+              formatScientific(requirement.maximum_violation),
+              formatScientific(requirement.cost),
+              requirement.unit,
+              requirement.source});
+          }
+          solver_content.push_back(renderTable(std::move(rows)));
+        }
+      }
+      content.push_back(debugWindow(solver.label, vbox(std::move(solver_content))));
+    }
+    return vbox(std::move(content));
+  }
+
+  ftxui::Element renderJointsPanel(bool selected_only) const
+  {
+    using namespace ftxui;
+    std::vector<std::vector<std::string>> rows = {{"joint", "q", "dq", "saturated"}};
+    std::vector<std::size_t> indices;
+    if (selected_only) {
+      if (const auto * arm = findArmPresentation(
+          source_.presentation_, source_.command_.selected_side))
+      {
+        indices = arm->joint_indices;
+      }
+    } else {
+      indices.resize(frame_.positions.size());
+      for (std::size_t index = 0; index < indices.size(); ++index) {
+        indices[index] = index;
+      }
+    }
+    std::vector<std::string> saturated;
+    for (const auto & solver : frame_.solvers) {
+      saturated.insert(
+        saturated.end(), solver.saturated_joints.begin(), solver.saturated_joints.end());
+    }
+    for (const auto index : indices) {
+      if (index >= frame_.positions.size()) {
+        continue;
+      }
+      const std::string name = index < frame_.joint_names.size()
+        ? frame_.joint_names[index]
+        : "joint_" + std::to_string(index);
+      const bool is_saturated =
+        std::find(saturated.begin(), saturated.end(), name) != saturated.end();
+      rows.push_back({
+        name,
+        formatFixed(frame_.positions[index], 6),
+        index < frame_.velocities.size() ? formatFixed(frame_.velocities[index], 6) : "-",
+        is_saturated ? "YES" : ""});
+    }
+    return debugWindow(
+      selected_only
+      ? std::string{armSideName(source_.command_.selected_side)} + " arm state"
+      : "All joint state",
+      renderTable(std::move(rows)));
+  }
+
+  ftxui::Element renderJointsPage() const
+  {
+    return renderJointsPanel(false);
+  }
+
+  ftxui::Element renderRuntimePage() const
+  {
+    using namespace ftxui;
+    Elements content;
+    if (!frame_.workers.empty()) {
+      if (Terminal::Size().dimx < 120) {
+        Elements workers;
+        for (const auto & worker : frame_.workers) {
+          workers.push_back(debugWindow(worker.label, renderTable({
+            {"metric", "value"},
+            {"configured rate [Hz]", formatFixed(worker.configured_rate_hz, 0)},
+            {"iterations", std::to_string(worker.iteration_count)},
+            {"deadline misses", std::to_string(worker.deadline_miss_count)},
+            {"consecutive misses", std::to_string(worker.consecutive_deadline_misses)},
+            {"skipped releases", std::to_string(worker.skipped_release_count)},
+            {"maximum release lateness [ms]",
+             formatFixed(worker.maximum_release_lateness_ms, 3)},
+            {"maximum execution [ms]", formatFixed(worker.maximum_execution_ms, 3)},
+            {"maximum release-to-finish [ms]",
+             formatFixed(worker.maximum_release_to_finish_ms, 3)},
+            {"maximum overrun [ms]", formatFixed(worker.maximum_overrun_ms, 3)},
+            {"maximum solver [ms]", formatFixed(worker.maximum_solver_ms, 3)},
+          })));
+        }
+        content.push_back(debugWindow("Periodic workers", vbox(std::move(workers))));
+      } else {
+        std::vector<std::vector<std::string>> rows = {
+          {"worker", "Hz", "iterations", "miss", "consecutive", "skipped",
+           "late max", "exec max", "finish max", "overrun max", "solver max"}};
+        for (const auto & worker : frame_.workers) {
+          rows.push_back({
+            worker.label,
+            formatFixed(worker.configured_rate_hz, 0),
+            std::to_string(worker.iteration_count),
+            std::to_string(worker.deadline_miss_count),
+            std::to_string(worker.consecutive_deadline_misses),
+            std::to_string(worker.skipped_release_count),
+            formatFixed(worker.maximum_release_lateness_ms, 3),
+            formatFixed(worker.maximum_execution_ms, 3),
+            formatFixed(worker.maximum_release_to_finish_ms, 3),
+            formatFixed(worker.maximum_overrun_ms, 3),
+            formatFixed(worker.maximum_solver_ms, 3)});
+        }
+        content.push_back(debugWindow("Periodic workers [ms]", renderTable(std::move(rows))));
+      }
+    }
+    for (const auto & collision : frame_.self_collisions) {
+      Elements collision_content;
+      collision_content.push_back(renderTable({
+        {"input seq", "safe", "influence", "before min", "after min", "shortfall"},
+        {std::to_string(collision.input_state_sequence),
+         formatFixed(collision.minimum_distance_m, 6),
+         formatFixed(collision.influence_distance_m, 6),
+         formatFixed(collision.minimum_distance_before_m, 6),
+         formatFixed(collision.minimum_distance_after_m, 6),
+         formatFixed(collision.margin_shortfall_m, 6)},
+      }));
+      std::vector<const SelfCollisionPairDebug *> pairs;
+      pairs.reserve(collision.pairs.size());
+      for (const auto & pair : collision.pairs) {
+        pairs.push_back(&pair);
+      }
+      std::sort(pairs.begin(), pairs.end(), [](const auto * left, const auto * right) {
+          return collisionPairDistance(*left) < collisionPairDistance(*right);
+        });
+      for (const auto * pair : pairs) {
+        collision_content.push_back(collisionPairElement(*pair, collision));
+      }
+      collision_content.push_back(paragraph(jointPositionText(
+        frame_.joint_names, collision.input_joint_positions, "input q: ")) | dim);
+      content.push_back(debugWindow(collision.label, vbox(std::move(collision_content))));
+    }
+    if (content.empty()) {
+      content.push_back(text("No multi-rate worker or collision diagnostics") | dim | center);
+    }
+    return vbox(std::move(content));
+  }
+
+  ftxui::Element renderEventsPage() const
+  {
+    using namespace ftxui;
+    std::vector<std::vector<std::string>> rows = {{"publish seq", "source", "event"}};
+    for (const auto & event : events_) {
+      rows.push_back({std::to_string(event.publish_sequence), event.source, event.message});
+    }
+    return debugWindow("Recent state changes", renderTable(std::move(rows)));
+  }
+
+  ftxui::Element renderHelpDialog() const
+  {
+    using namespace ftxui;
+    return window(
+      text(" Help ") | bold,
+      vbox({
+        text("1..5 / F1..F5 / Tab: switch Overview, Solver/QP, Joints, Runtime, Events"),
+        text("PageUp/PageDown/Home/End: scroll current page"),
+        separator(),
+        text("w/s: +x/-x    a/d: +y/-y    q/e: +z/-z"),
+        text("n: cycle TCP rotation axis    i/u: rotate clockwise/counter-clockwise"),
+        text(source_.allow_side_switching_
+          ? "LEFT/RIGHT: select arm    UP/DOWN: step x2 / step /2"
+          : "UP/DOWN: step x2 / step /2"),
+        text("m: manual step    r: reset from FK    space: pause"),
+        text("h or Esc: close help    x: exit"),
+      })) | clear_under | center;
+  }
+
+  void appendEvent(
+    std::size_t publish_sequence,
+    std::string source,
+    std::string message)
+  {
+    events_.push_back(DebugEvent{
+      publish_sequence, std::move(source), std::move(message)});
+    constexpr std::size_t kMaximumEventCount = 64U;
+    while (events_.size() > kMaximumEventCount) {
+      events_.pop_front();
+    }
+  }
+
+  void recordFrameEvents(const IkDebugFrame & frame, std::size_t publish_sequence)
+  {
+    if (source_.command_.status != last_command_status_) {
+      last_command_status_ = source_.command_.status;
+      appendEvent(publish_sequence, "command", last_command_status_);
+    }
+    if (!frame.status.empty() && frame.status != last_frame_status_) {
+      last_frame_status_ = frame.status;
+      appendEvent(publish_sequence, "solver", last_frame_status_);
+    }
+
+    std::vector<std::string> solver_states;
+    solver_states.reserve(frame.solvers.size());
+    for (const auto & solver : frame.solvers) {
+      std::string state = solver.disposition + " / " + solver.termination_reason +
+        " / " + solver.qp_status;
+      if (!solver.native_status.empty()) {
+        state += " / " + solver.native_status;
+      }
+      solver_states.push_back(std::move(state));
+    }
+    for (std::size_t index = 0; index < solver_states.size(); ++index) {
+      if (index >= last_solver_states_.size() ||
+          solver_states[index] != last_solver_states_[index])
+      {
+        const std::string label = index < frame.solvers.size()
+          ? frame.solvers[index].label
+          : "IK";
+        appendEvent(publish_sequence, label, solver_states[index]);
+      }
+    }
+    last_solver_states_ = std::move(solver_states);
+  }
+
+  void selectPage(int page)
+  {
+    page_index_ = std::clamp(page, 0, 4);
+    scroll_y_ = 0.0F;
+  }
+
+  ftxui::Element renderStepDialog() const
+  {
+    using namespace ftxui;
+    std::ostringstream range;
+    range << "Allowed range: [" << std::fixed << std::setprecision(4)
+          << source_.options_.min_step_m << ", " << source_.options_.max_step_m << "] m";
+    return window(
+      text(" Manual translation step ") | bold,
+      vbox({
+        text(range.str()),
+        hbox({text("value: "), step_input_->Render() | flex}),
+        separatorEmpty(),
+        text("Enter: apply    Esc: cancel") | dim,
+      })) | clear_under | center;
+  }
+
+  bool handleEvent(const ftxui::Event & event)
+  {
+    using namespace ftxui;
+    if (event == Event::Custom) {
+      return true;
+    }
+    if (step_input_active_) {
+      if (event == Event::Return) {
+        applyStepInput();
+        return true;
+      }
+      if (event == Event::Escape) {
+        closeStepInput("Step unchanged");
+        return true;
+      }
+      return false;
+    }
+
+    if (source_.show_help_) {
+      if (event == Event::Escape || event == Event::h || event == Event::H) {
+        source_.show_help_ = false;
+      } else if (event == Event::x || event == Event::X) {
+        requestExit();
+      }
+      return true;
+    }
+
+    if (event == Event::Tab) {
+      selectPage((page_index_ + 1) % 5);
+      return true;
+    }
+    if (event == Event::TabReverse) {
+      selectPage((page_index_ + 4) % 5);
+      return true;
+    }
+    if (event == Event::F1 || event == Event::F2 || event == Event::F3 ||
+        event == Event::F4 || event == Event::F5)
+    {
+      selectPage(
+        event == Event::F1 ? 0 : event == Event::F2 ? 1 : event == Event::F3 ? 2 :
+        event == Event::F4 ? 3 : 4);
+      return true;
+    }
+    if (event == Event::PageUp) {
+      scroll_y_ = std::max(0.0F, scroll_y_ - 0.2F);
+      return true;
+    }
+    if (event == Event::PageDown) {
+      scroll_y_ = std::min(1.0F, scroll_y_ + 0.2F);
+      return true;
+    }
+    if (event == Event::Home) {
+      scroll_y_ = 0.0F;
+      return true;
+    }
+    if (event == Event::End) {
+      scroll_y_ = 1.0F;
+      return true;
+    }
+
+    if (event == Event::Escape) {
+      requestExit();
+      return true;
+    }
+    if (event == Event::ArrowLeft || event == Event::ArrowRight) {
+      if (source_.allow_side_switching_) {
+        const auto side = event == Event::ArrowLeft ? ArmSide::Left : ArmSide::Right;
+        if (hasTarget(source_.command_.targets, side)) {
+          source_.command_.selected_side = side;
+          source_.command_.status = std::string{"Selected "} + armSideName(side);
+        }
+      }
+      return true;
+    }
+    if (event == Event::ArrowUp) {
+      adjustStep(source_.command_, source_.step_m_, source_.options_, kStepScale);
+      return true;
+    }
+    if (event == Event::ArrowDown) {
+      adjustStep(source_.command_, source_.step_m_, source_.options_, 1.0 / kStepScale);
+      return true;
+    }
+    if (!event.is_character() || event.character().size() != 1U) {
+      return false;
+    }
+
+    const char key = static_cast<char>(std::tolower(
+      static_cast<unsigned char>(event.character().front())));
+    switch (key) {
+      case '1':
+      case '2':
+      case '3':
+      case '4':
+      case '5':
+        selectPage(key - '1');
+        break;
+      case 'x':
+        requestExit();
+        break;
+      case 'h':
+        source_.show_help_ = !source_.show_help_;
+        break;
+      case ' ':
+        source_.command_.paused = !source_.command_.paused;
+        source_.command_.status =
+          source_.command_.paused ? "Publishing paused" : "Publishing resumed";
+        break;
+      case 'm':
+        step_input_value_.clear();
+        step_input_active_ = true;
+        active_tab_ = 1;
+        step_input_->TakeFocus();
+        break;
+      case 'r':
+        source_.reset_requested_ = source_.command_.selected_side;
+        source_.command_.status =
+          std::string{"Reset requested for "} + armSideName(source_.command_.selected_side);
+        break;
+      case 'n':
+        source_.rotation_axis_index_ =
+          (source_.rotation_axis_index_ + 1) % kRotationAxes.size();
+        source_.command_.status =
+          "Rotation axis set to TCP " + selectedRotationAxis(source_.rotation_axis_index_);
+        break;
+      case 'i':
+        rotateSelected(
+          source_.command_, source_.rotation_axis_index_, source_.rotation_step_rad_, true);
+        break;
+      case 'u':
+        rotateSelected(
+          source_.command_, source_.rotation_axis_index_, source_.rotation_step_rad_, false);
+        break;
+      case 'w':
+        moveSelected(source_.command_, source_.step_m_, 0.0, 0.0);
+        break;
+      case 's':
+        moveSelected(source_.command_, -source_.step_m_, 0.0, 0.0);
+        break;
+      case 'a':
+        moveSelected(source_.command_, 0.0, source_.step_m_, 0.0);
+        break;
+      case 'd':
+        moveSelected(source_.command_, 0.0, -source_.step_m_, 0.0);
+        break;
+      case 'q':
+        moveSelected(source_.command_, 0.0, 0.0, source_.step_m_);
+        break;
+      case 'e':
+        moveSelected(source_.command_, 0.0, 0.0, -source_.step_m_);
+        break;
+      default:
+        return false;
+    }
+    return true;
+  }
+
+  void applyStepInput()
+  {
+    if (step_input_value_.empty()) {
+      closeStepInput("Step unchanged");
+      return;
+    }
+    try {
+      setStep(
+        source_.command_, source_.step_m_, source_.options_,
+        std::stod(step_input_value_));
+    } catch (const std::exception &) {
+      source_.command_.status = "Invalid step input: " + step_input_value_;
+    }
+    closeStepInput(source_.command_.status);
+  }
+
+  void closeStepInput(const std::string & status)
+  {
+    source_.command_.status = status;
+    step_input_active_ = false;
+    active_tab_ = 0;
+  }
+
+  void requestExit()
+  {
+    source_.command_.status = "Exiting";
+    source_.command_.stop_requested = true;
+    app_.Exit();
+  }
+
+  TuiTeleopSource & source_;
+  struct DebugEvent
+  {
+    std::size_t publish_sequence{0};
+    std::string source;
+    std::string message;
+  };
+
+  ftxui::App app_;
+  ftxui::Component step_input_;
+  ftxui::Component tabs_;
+  ftxui::Component root_;
+  std::unique_ptr<ftxui::Loop> loop_;
+  std::string step_input_value_;
+  bool step_input_active_{false};
+  int active_tab_{0};
+  int page_index_{0};
+  float scroll_y_{0.0F};
+  bool has_frame_{false};
+  IkDebugFrame frame_;
+  std::size_t publish_count_{0};
+  std::string sink_status_{"visualization not opened"};
+  std::deque<DebugEvent> events_;
+  std::string last_command_status_;
+  std::string last_frame_status_;
+  std::vector<std::string> last_solver_states_;
+};
 
 TuiTeleopSource::TuiTeleopSource(
   const TuiTeleopOptions & options,
@@ -435,22 +1286,14 @@ TuiTeleopSource::TuiTeleopSource(
   command_.status = allow_side_switching_
     ? "Initialized left and right targets from FK"
     : std::string{"Initialized "} + armSideName(command_.selected_side) + " target from FK";
+  impl_ = std::make_unique<Impl>(*this);
 }
 
-TuiTeleopSource::~TuiTeleopSource()
-{
-  terminal_.restoreCookedMode();
-}
+TuiTeleopSource::~TuiTeleopSource() = default;
 
 void TuiTeleopSource::poll()
 {
-  while (true) {
-    const KeyInput key = terminal_.readKey();
-    if (key.key == Key::None) {
-      break;
-    }
-    handleKey(key);
-  }
+  impl_->poll();
 }
 
 const TargetCommand & TuiTeleopSource::command() const
@@ -488,366 +1331,7 @@ void TuiTeleopSource::render(
   std::size_t publish_count,
   const std::string & sink_status)
 {
-  const auto [height, width] = terminal_.size();
-  std::ostringstream screen;
-  screen << "\033[H\033[2J";
-
-  if (!frame.self_collisions.empty()) {
-    addLine(screen, 0, 0, title_, width);
-    addLine(
-      screen, 1, 0,
-      "side=" + std::string{armSideName(command_.selected_side)} + "  " + sink_status +
-        "  mode=" + (command_.paused ? "PAUSED" : "PUBLISHING") +
-        "  rate=" + std::to_string(static_cast<int>(rate_hz_)) + " Hz" +
-        "  publish_ticks=" + std::to_string(publish_count),
-      width);
-    addLine(
-      screen, 2, 0,
-      "targets: L=" + targetTopicForSide(presentation_, ArmSide::Left) +
-        " R=" + targetTopicForSide(presentation_, ArmSide::Right),
-      width);
-    {
-      std::ostringstream line;
-      line << "step=" << std::fixed << std::setprecision(4) << step_m_
-           << " m  rot_axis=tcp_" << selectedRotationAxis(rotation_axis_index_)
-           << "  rot_step=" << std::setprecision(2) << options_.rotation_step_deg << " deg";
-      addLine(screen, 3, 0, line.str(), width);
-    }
-    addLine(
-      screen, 4, 0,
-      "target left : " +
-        formatPose(findTarget(command_.targets, ArmSide::Left), presentation_.base_frame_id),
-      width);
-    addLine(
-      screen, 5, 0,
-      "target right: " +
-        formatPose(findTarget(command_.targets, ArmSide::Right), presentation_.base_frame_id),
-      width);
-    {
-      std::ostringstream line;
-      line << "IK: " << frame.ik_status << "  iterations=" << frame.iterations
-           << "  converged=" << std::boolalpha << frame.converged
-           << "  solve_ms=" << std::fixed << std::setprecision(3) << frame.solve_time_ms;
-      addLine(screen, 6, 0, line.str(), width);
-    }
-    int row = 7;
-    for (const auto side : {ArmSide::Left, ArmSide::Right}) {
-      const auto * error = findError(frame.target_errors, side);
-      if (error == nullptr) {
-        continue;
-      }
-      std::ostringstream line;
-      line << "error " << armSideName(side) << ": position=" << std::fixed
-           << std::setprecision(6) << error->position_m << " m  orientation="
-           << error->orientation_rad << " rad";
-      addLine(screen, row++, 0, line.str(), width);
-    }
-
-    const auto & collision = frame.self_collisions.front();
-    std::size_t active_count = 0;
-    std::size_t penetrating_before_count = 0;
-    std::size_t penetrating_after_count = 0;
-    std::vector<const SelfCollisionPairDebug *> relevant_pairs;
-    relevant_pairs.reserve(collision.pairs.size());
-    for (const auto & pair : collision.pairs) {
-      active_count += pair.active ? 1U : 0U;
-      penetrating_before_count += pair.distance_before_m < 0.0 ? 1U : 0U;
-      penetrating_after_count += pair.distance_after_m < 0.0 ? 1U : 0U;
-      if (pair.active || pair.distance_after_m < collision.influence_distance_m) {
-        relevant_pairs.push_back(&pair);
-      }
-    }
-    std::sort(
-      relevant_pairs.begin(), relevant_pairs.end(),
-      [](const auto * left, const auto * right) {
-        return collisionPairDistance(*left) < collisionPairDistance(*right);
-      });
-    if (relevant_pairs.empty() && !collision.pairs.empty()) {
-      relevant_pairs.push_back(&*std::min_element(
-        collision.pairs.begin(), collision.pairs.end(), [](const auto & left, const auto & right) {
-          return collisionPairDistance(left) < collisionPairDistance(right);
-        }));
-    }
-    {
-      std::ostringstream line;
-      line << collision.label << ": input_seq=" << collision.input_state_sequence
-           << " active=" << active_count << '/' << collision.pairs.size()
-           << " penetrating(before/after)=" << penetrating_before_count << '/'
-           << penetrating_after_count;
-      addLine(screen, row++, 0, line.str(), width);
-    }
-    {
-      std::ostringstream line;
-      line << "distance: min_before=" << std::fixed << std::setprecision(4)
-           << collision.minimum_distance_before_m
-           << " m  min_after=" << collision.minimum_distance_after_m << " m";
-      addLine(screen, row++, 0, line.str(), width);
-    }
-    {
-      std::ostringstream line;
-      line << "threshold: safe=" << std::fixed << std::setprecision(4)
-           << collision.minimum_distance_m << " m  influence=" << collision.influence_distance_m
-           << " m  shortfall=" << collision.margin_shortfall_m << " m";
-      addLine(screen, row++, 0, line.str(), width);
-    }
-
-    const auto q_lines = jointPositionLines(
-      frame.joint_names, collision.input_joint_positions, "all q (before): ", width);
-    for (const auto & line : q_lines) {
-      if (row >= height - 1) {
-        break;
-      }
-      addLine(screen, row++, 0, line, width);
-    }
-
-    std::size_t shown_pair_count = 0;
-    for (const auto * pair : relevant_pairs) {
-      if (row >= height - 2) {
-        break;
-      }
-      std::ostringstream line;
-      line << "collision[" << collisionPairState(*pair, collision) << "] " << pair->first_link
-           << " <-> " << pair->second_link << " before=" << std::showpos << std::fixed
-           << std::setprecision(4) << pair->distance_before_m
-           << " after=" << pair->distance_after_m << " m";
-      addLine(screen, row++, 0, line.str(), width);
-      ++shown_pair_count;
-    }
-    if (shown_pair_count < relevant_pairs.size() && row < height - 1) {
-      addLine(
-        screen, row, 0,
-        "... " + std::to_string(relevant_pairs.size() - shown_pair_count) +
-          " additional active/near collision pairs not shown",
-        width);
-    }
-
-    addLine(screen, std::max(0, height - 1), 0, "status: " + command_.status, width);
-    terminal_.write(screen.str());
-    return;
-  }
-
-  addLine(screen, 0, 0, title_, width);
-  addLine(
-    screen,
-    1,
-    0,
-    "side=" + std::string{armSideName(command_.selected_side)} +
-      "  " + sink_status +
-      "  mode=" + (command_.paused ? "PAUSED" : "PUBLISHING") +
-      "  rate=" + std::to_string(static_cast<int>(rate_hz_)) + " Hz" +
-      "  publish_ticks=" + std::to_string(publish_count),
-    width);
-
-  if (allow_side_switching_) {
-    addLine(
-      screen, 3, 0,
-      "IK target left : " + targetTopicForSide(presentation_, ArmSide::Left), width);
-    addLine(
-      screen, 4, 0,
-      "IK target right: " + targetTopicForSide(presentation_, ArmSide::Right), width);
-  } else {
-    addLine(
-      screen,
-      3,
-      0,
-      std::string{"IK target "} + armSideName(command_.selected_side) + ": " +
-        targetTopicForSide(presentation_, command_.selected_side),
-      width);
-  }
-
-  {
-    std::ostringstream line;
-    line << "step=" << std::fixed << std::setprecision(4) << step_m_
-         << " m  rot_axis=tcp_" << selectedRotationAxis(rotation_axis_index_)
-         << "  rot_step=" << std::setprecision(2)
-         << options_.rotation_step_deg << " deg";
-    addLine(screen, 6, 0, line.str(), width);
-  }
-
-  if (allow_side_switching_) {
-    addLine(
-      screen,
-      8,
-      0,
-      "target left : " + formatPose(
-        findTarget(command_.targets, ArmSide::Left), presentation_.base_frame_id),
-      width);
-    addLine(
-      screen,
-      9,
-      0,
-      "target right: " + formatPose(
-        findTarget(command_.targets, ArmSide::Right), presentation_.base_frame_id),
-      width);
-  } else {
-    addLine(
-      screen,
-      8,
-      0,
-      std::string{"target "} + armSideName(command_.selected_side) + ": " +
-        formatPose(
-          findTarget(command_.targets, command_.selected_side),
-          presentation_.base_frame_id),
-      width);
-  }
-
-  {
-    std::ostringstream line;
-    line << "IK: " << frame.ik_status
-         << "  iterations=" << frame.iterations
-         << "  converged=" << std::boolalpha << frame.converged
-         << "  solve_ms=" << std::fixed << std::setprecision(3) << frame.solve_time_ms;
-    addLine(screen, 11, 0, line.str(), width);
-  }
-  int error_row = 12;
-  for (const auto side : {ArmSide::Left, ArmSide::Right}) {
-    const auto * error = findError(frame.target_errors, side);
-    if (error == nullptr) {
-      continue;
-    }
-    std::ostringstream line;
-    line << "error " << armSideName(side)
-         << ": position=" << std::fixed << std::setprecision(6)
-         << error->position_m << " m  orientation="
-         << error->orientation_rad << " rad";
-    addLine(screen, error_row++, 0, line.str(), width);
-  }
-
-  if (!frame.positions.empty()) {
-    std::ostringstream line;
-    line << armSideName(command_.selected_side) << " arm q: ";
-    const auto * arm = findArmPresentation(presentation_, command_.selected_side);
-    if (arm != nullptr) {
-      for (const auto index : arm->joint_indices) {
-        if (index >= frame.positions.size()) {
-          continue;
-        }
-        const std::string joint_name = index < frame.joint_names.size()
-          ? frame.joint_names[index]
-          : ("joint_" + std::to_string(index));
-        line << joint_name << "="
-             << std::fixed << std::setprecision(3) << frame.positions[index] << " ";
-      }
-    }
-    addLine(screen, 15, 0, line.str(), width);
-  }
-
-  if (show_help_) {
-    addLine(screen, 17, 0, "Keys", width);
-    addLine(screen, 18, 0, "w/s: +x/-x    a/d: +y/-y    q/e: +z/-z", width);
-    addLine(screen, 19, 0, "n: cycle TCP rotation axis    i: clockwise    u: counter-clockwise", width);
-    addLine(
-      screen,
-      20,
-      0,
-      allow_side_switching_
-        ? "LEFT/RIGHT: switch arm    UP/DOWN: step x2 / step /2"
-        : "UP/DOWN: step x2 / step /2",
-      width);
-    addLine(screen, 21, 0, "m: manual step    r: reset from FK    space: pause    h: hide help", width);
-    addLine(screen, 22, 0, "x or Esc: exit", width);
-  } else {
-    addLine(screen, 17, 0, "h: show help", width);
-  }
-
-  addLine(screen, std::max(0, height - 1), 0, "status: " + command_.status, width);
-  terminal_.write(screen.str());
-}
-
-void TuiTeleopSource::handleKey(const KeyInput & input)
-{
-  if (input.key == Key::Escape) {
-    command_.status = "Exiting";
-    command_.stop_requested = true;
-    return;
-  }
-  if (input.key == Key::Left || input.key == Key::Right) {
-    if (allow_side_switching_) {
-      const auto side = input.key == Key::Left ? ArmSide::Left : ArmSide::Right;
-      if (hasTarget(command_.targets, side)) {
-        command_.selected_side = side;
-        command_.status = std::string{"Selected "} + armSideName(side);
-      }
-    }
-    return;
-  }
-  if (input.key == Key::Up) {
-    adjustStep(command_, step_m_, options_, kStepScale);
-    return;
-  }
-  if (input.key == Key::Down) {
-    adjustStep(command_, step_m_, options_, 1.0 / kStepScale);
-    return;
-  }
-  if (input.key != Key::Character) {
-    return;
-  }
-
-  const char key = static_cast<char>(std::tolower(
-    static_cast<unsigned char>(input.character)));
-  switch (key) {
-    case 'x':
-      command_.status = "Exiting";
-      command_.stop_requested = true;
-      break;
-    case 'h':
-      show_help_ = !show_help_;
-      break;
-    case ' ':
-      command_.paused = !command_.paused;
-      command_.status = command_.paused ? "Publishing paused" : "Publishing resumed";
-      break;
-    case 'm': {
-      std::ostringstream prompt;
-      prompt << "New step [" << std::fixed << std::setprecision(4)
-             << options_.min_step_m << ", " << options_.max_step_m << "] m: ";
-      const auto raw_value = terminal_.promptLine(prompt.str());
-      if (!raw_value.has_value() || raw_value->empty()) {
-        command_.status = "Step unchanged";
-        break;
-      }
-      try {
-        setStep(command_, step_m_, options_, std::stod(*raw_value));
-      } catch (const std::exception &) {
-        command_.status = "Invalid step input: " + *raw_value;
-      }
-      break;
-    }
-    case 'r':
-      reset_requested_ = command_.selected_side;
-      command_.status = std::string{"Reset requested for "} + armSideName(command_.selected_side);
-      break;
-    case 'n':
-      rotation_axis_index_ = (rotation_axis_index_ + 1) % kRotationAxes.size();
-      command_.status = "Rotation axis set to TCP " + selectedRotationAxis(rotation_axis_index_);
-      break;
-    case 'i':
-      rotateSelected(command_, rotation_axis_index_, rotation_step_rad_, true);
-      break;
-    case 'u':
-      rotateSelected(command_, rotation_axis_index_, rotation_step_rad_, false);
-      break;
-    case 'w':
-      moveSelected(command_, step_m_, 0.0, 0.0);
-      break;
-    case 's':
-      moveSelected(command_, -step_m_, 0.0, 0.0);
-      break;
-    case 'a':
-      moveSelected(command_, 0.0, step_m_, 0.0);
-      break;
-    case 'd':
-      moveSelected(command_, 0.0, -step_m_, 0.0);
-      break;
-    case 'q':
-      moveSelected(command_, 0.0, 0.0, step_m_);
-      break;
-    case 'e':
-      moveSelected(command_, 0.0, 0.0, -step_m_);
-      break;
-    default:
-      break;
-  }
+  impl_->render(frame, publish_count, sink_status);
 }
 
 }  // namespace motion_control_lab

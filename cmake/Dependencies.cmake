@@ -1,13 +1,41 @@
 include(FetchContent)
 
 # The robot model and algorithms come from the native Pinocchio installation.
-# PlaCo is vendored in this repository so experiments can modify its source.
+# PlaCo and FTXUI are vendored so their source is available in the repository.
 # The remaining small libraries are fetched as pinned source revisions.
 find_package(pinocchio REQUIRED)
 find_package(Eigen3 REQUIRED NO_MODULE)
 find_package(Threads REQUIRED)
 
 set(BUILD_SHARED_LIBS OFF CACHE BOOL "Build fetched dependencies as static libraries" FORCE)
+
+if(MCL_BUILD_ANY_INTERACTIVE_IK)
+  set(
+    MCL_FTXUI_SOURCE_DIR
+    "${PROJECT_SOURCE_DIR}/third_party/ftxui"
+    CACHE PATH
+    "FTXUI source directory"
+  )
+  if(NOT EXISTS "${MCL_FTXUI_SOURCE_DIR}/CMakeLists.txt")
+    message(
+      FATAL_ERROR
+      "FTXUI source is missing from MCL_FTXUI_SOURCE_DIR=${MCL_FTXUI_SOURCE_DIR}"
+    )
+  endif()
+
+  set(FTXUI_BUILD_DOCS OFF CACHE BOOL "" FORCE)
+  set(FTXUI_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+  set(FTXUI_BUILD_MODULES OFF CACHE BOOL "" FORCE)
+  set(FTXUI_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+  set(FTXUI_BUILD_TESTS_FUZZER OFF CACHE BOOL "" FORCE)
+  set(FTXUI_ENABLE_INSTALL OFF CACHE BOOL "" FORCE)
+  add_subdirectory(
+    "${MCL_FTXUI_SOURCE_DIR}"
+    "${CMAKE_CURRENT_BINARY_DIR}/third_party/ftxui"
+    EXCLUDE_FROM_ALL
+    SYSTEM
+  )
+endif()
 set(JSONCPP_WITH_TESTS OFF CACHE BOOL "" FORCE)
 set(JSONCPP_WITH_POST_BUILD_UNITTEST OFF CACHE BOOL "" FORCE)
 set(JSONCPP_WITH_EXAMPLE OFF CACHE BOOL "" FORCE)

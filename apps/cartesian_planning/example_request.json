@@ -1,6 +1,6 @@
 {
   "schema_version": "motion_control_lab.cartesian_move_line_request.v1",
-  "reference_frame_name": "world",
+  "reference_frame_name": "base_link",
   "sample_period_s": 0.01,
   "maximum_sample_count": 100000,
   "synchronization": "time",
@@ -11,7 +11,7 @@
   },
   "segments": [
     {
-      "frame_name": "left_tcp",
+      "frame_name": "left_arm_ee_link",
       "start_pose": {
         "position_m": [0.4, 0.2, 0.8],
         "orientation_xyzw": [0.0, 0.0, 0.0, 1.0]
@@ -23,7 +23,7 @@
       "equivalent_radius_m": 0.5
     },
     {
-      "frame_name": "right_tcp",
+      "frame_name": "right_arm_ee_link",
       "start_pose": {
         "position_m": [0.4, -0.2, 0.8],
         "orientation_xyzw": [0.0, 0.0, 0.0, 1.0]

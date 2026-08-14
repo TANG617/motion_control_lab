@@ -5,7 +5,10 @@ set_target_properties(
 )
 target_link_libraries(
   mcl_dual_arm_ik_servo_step
-  PRIVATE motion_control_lab::app_common
+  PRIVATE
+    motion_control_lab::app_common
+    motion_control_core::motion_control_core
+    motion_control_lab::interactive_support
 )
 install(
   TARGETS mcl_dual_arm_ik_servo_step

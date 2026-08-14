@@ -102,6 +102,8 @@ if(MCL_BUILD_ANY_INTERACTIVE_IK OR MCL_BUILD_CARTESIAN_PLANNING OR
   find_package(motion_control_viz 0.3 CONFIG REQUIRED)
 endif()
 
+add_subdirectory(apps/common)
+
 add_library(
   mcl_mcap
   adapters/data/source/mcap_implementation.cpp
@@ -164,6 +166,8 @@ if(MCL_BUILD_ANY_INTERACTIVE_IK)
     PUBLIC
       Eigen3::Eigen
       motion_control_viz::motion_control_viz
+    PRIVATE
+      ftxui::ftxui
   )
 
   if(TARGET motion_control_viz::foxglove_sink)
@@ -181,8 +185,6 @@ if(MCL_BUILD_ANY_INTERACTIVE_IK)
       PRIVATE MCL_WITH_FOXGLOVE_SINK=0
     )
   endif()
-
-  add_subdirectory(apps/common)
 
   if(MCL_BUILD_SINGLE_ARM_IK)
     add_subdirectory(apps/single_arm_ik)
@@ -238,25 +240,7 @@ if(MCL_BUILD_MCC_PLOTS)
     )
   endif()
 
-  add_executable(
-    motion_control_lab_plot_core_planning
-    apps/plot_core_planning.cpp
-  )
-  target_include_directories(
-    motion_control_lab_plot_core_planning
-    SYSTEM PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/third_party/matplotlib-cpp"
-  )
-  target_compile_definitions(
-    motion_control_lab_plot_core_planning
-    PRIVATE MATPLOTLIBCPP_PYTHON_EXECUTABLE="${Python3_EXECUTABLE}"
-  )
-  target_link_libraries(
-    motion_control_lab_plot_core_planning
-    PRIVATE
-      motion_control_core::motion_control_core
-      Python3::Python
-      Python3::NumPy
-  )
+  add_subdirectory(apps/plot_core_planning)
 endif()
 
 add_library(
@@ -300,6 +284,7 @@ if(MCL_BUILD_DUAL_ARM_REPLAY_IK OR MCL_BUILD_E03_BATCH_REPLAY_IK)
     mcl_replay_ik_engine
     PUBLIC
       motion_control_lab::replay_support
+      motion_control_lab::r1_robot_config
       motion_control_core::motion_control_core
   )
 endif()
@@ -590,15 +575,6 @@ if(BUILD_TESTING)
   )
   add_test(NAME data.pipeline COMMAND test_data_pipeline)
 
-  add_test(
-    NAME apps.mcl_replay_plan_invalid_arguments
-    COMMAND mcl_replay_plan --timestamp-policy not-a-policy
-  )
-  set_tests_properties(
-    apps.mcl_replay_plan_invalid_arguments
-    PROPERTIES WILL_FAIL TRUE
-  )
-
   if(MCL_BUILD_ANY_INTERACTIVE_IK)
     add_executable(
       test_interactive_ik_configuration
@@ -628,6 +604,35 @@ if(BUILD_TESTING)
     add_test(
       NAME interactive.grouped_runtime
       COMMAND test_grouped_runtime
+    )
+
+    add_executable(
+      test_tui_console
+      tests/tui_console.cpp
+    )
+    target_link_libraries(
+      test_tui_console
+      PRIVATE motion_control_lab::interactive_support
+    )
+    add_test(
+      NAME interactive.tui_console_pty
+      COMMAND
+        "${Python3_EXECUTABLE}"
+        "${CMAKE_CURRENT_SOURCE_DIR}/tests/run_tui_pty.py"
+        "$<TARGET_FILE:test_tui_console>"
+    )
+    add_test(
+      NAME interactive.tui_exception_pty
+      COMMAND
+        "${Python3_EXECUTABLE}"
+        "${CMAKE_CURRENT_SOURCE_DIR}/tests/run_tui_pty.py"
+        "$<TARGET_FILE:test_tui_console>"
+        --expect-exception
+    )
+    set_tests_properties(
+      interactive.tui_console_pty
+      interactive.tui_exception_pty
+      PROPERTIES TIMEOUT 15
     )
   endif()
 

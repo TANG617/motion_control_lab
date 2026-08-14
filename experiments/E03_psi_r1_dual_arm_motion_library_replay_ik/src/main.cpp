@@ -293,7 +293,7 @@ Json::Value actionManifestJson(
   manifest["target_pose"]["input_semantics"] = "tcp";
   manifest["target_pose"]["solver_semantics"] = "end_effector";
   manifest["target_pose"]["conversion"] = "end_effector_target=tcp_target*tcp_offset.inverse()";
-  const auto & robot = replay::r1ReplayIkContract();
+  const auto & robot = mcl::r1RobotConfig();
   manifest["target_pose"]["tcp_offsets"]["left"] = isometryJson(robot.left_tcp_offset);
   manifest["target_pose"]["tcp_offsets"]["right"] = isometryJson(robot.right_tcp_offset);
   manifest["statistics"] = actionStatusJson(record)["frames"];

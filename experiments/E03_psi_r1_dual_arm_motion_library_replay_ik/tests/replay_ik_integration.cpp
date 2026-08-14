@@ -132,13 +132,13 @@ std::vector<std::byte> poseCdr(std::int64_t stamp_ns, double x)
 
 std::vector<std::byte> jointStateCdr()
 {
-  const auto & robot = replay::r1ReplayIkContract();
+  const auto & robot = motion_control_lab::r1RobotConfig();
   CdrWriter writer;
   writer.int32(0);
   writer.uint32(0);
   writer.string("base_link");
   writer.strings(robot.joint_names);
-  writer.doubles(robot.fallback_initial_positions);
+  writer.doubles(robot.default_positions);
   writer.doubles(std::vector<double>(robot.joint_names.size(), 9.0));
   writer.doubles({});
   return writer.finish();
@@ -297,10 +297,10 @@ int main(int argc, char ** argv)
   require(result.rejected_solves == 1, "first rejected frame must be counted");
   require(result.first_failure_frame == 0, "first failure frame must be recorded");
   require(
-    result.initial_positions == replay::r1ReplayIkContract().fallback_initial_positions,
+    result.initial_positions == motion_control_lab::r1RobotConfig().default_positions,
     "first JointState positions must initialize by joint name");
   require(
-    first_visualized_velocities.size() == replay::r1ReplayIkContract().joint_names.size() &&
+    first_visualized_velocities.size() == motion_control_lab::r1RobotConfig().joint_names.size() &&
       std::all_of(
         first_visualized_velocities.begin(), first_visualized_velocities.end(),
         [](double velocity) { return velocity == 0.0; }),

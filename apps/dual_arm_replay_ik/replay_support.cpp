@@ -13,7 +13,6 @@
 #include <cctype>
 #include <fstream>
 #include <iomanip>
-#include <limits>
 #include <memory>
 #include <sstream>
 #include <utility>
@@ -45,36 +44,14 @@ StatePolicy parseStatePolicy(const std::string & value)
   throw data::DataError(data::DataErrorCode::InvalidArgument, "unknown state policy: " + value);
 }
 
-double parsePositiveDouble(const std::string & value, const std::string & option)
+double parseDouble(const std::string & value)
 {
-  std::size_t parsed = 0;
-  double result = 0.0;
-  try {
-    result = std::stod(value, &parsed);
-  } catch (const std::exception &) {
-    throw data::DataError(data::DataErrorCode::InvalidArgument, option + " requires a number");
-  }
-  if (parsed != value.size() || !std::isfinite(result) || result <= 0.0) {
-    throw data::DataError(data::DataErrorCode::InvalidArgument, option + " must be finite and > 0");
-  }
-  return result;
+  return std::stod(value);
 }
 
-std::uint16_t parsePort(const std::string & value, const std::string & option)
+std::uint16_t parsePort(const std::string & value)
 {
-  std::size_t parsed = 0;
-  unsigned long result = 0;
-  try {
-    result = std::stoul(value, &parsed);
-  } catch (const std::exception &) {
-    throw data::DataError(data::DataErrorCode::InvalidArgument, option + " requires an integer");
-  }
-  if (parsed != value.size() || result == 0 || result > 65535) {
-    throw data::DataError(
-            data::DataErrorCode::InvalidArgument,
-            option + " must be in [1, 65535]");
-  }
-  return static_cast<std::uint16_t>(result);
+  return static_cast<std::uint16_t>(std::stoul(value));
 }
 
 void validateRunId(const std::string & value)
@@ -89,35 +66,14 @@ void validateRunId(const std::string & value)
   }
 }
 
-std::int64_t millisecondsToNanoseconds(const std::string & value, const std::string & option)
+std::int64_t millisecondsToNanoseconds(const std::string & value)
 {
-  const long double milliseconds = parsePositiveDouble(value, option);
-  const long double nanoseconds = milliseconds * 1'000'000.0L;
-  if (nanoseconds > static_cast<long double>(std::numeric_limits<std::int64_t>::max())) {
-    throw data::DataError(data::DataErrorCode::InvalidArgument, option + " is too large");
-  }
-  return static_cast<std::int64_t>(std::llround(nanoseconds));
+  return static_cast<std::int64_t>(std::llround(std::stold(value) * 1'000'000.0L));
 }
 
-std::int64_t nonnegativeMillisecondsToNanoseconds(
-  const std::string & value,
-  const std::string & option)
+std::int64_t nonnegativeMillisecondsToNanoseconds(const std::string & value)
 {
-  std::size_t parsed = 0;
-  long double milliseconds = 0.0L;
-  try {
-    milliseconds = std::stold(value, &parsed);
-  } catch (const std::exception &) {
-    throw data::DataError(data::DataErrorCode::InvalidArgument, option + " requires a number");
-  }
-  if (parsed != value.size() || !std::isfinite(milliseconds) || milliseconds < 0.0L) {
-    throw data::DataError(data::DataErrorCode::InvalidArgument, option + " must be finite and >= 0");
-  }
-  const long double nanoseconds = milliseconds * 1'000'000.0L;
-  if (nanoseconds > static_cast<long double>(std::numeric_limits<std::int64_t>::max())) {
-    throw data::DataError(data::DataErrorCode::InvalidArgument, option + " is too large");
-  }
-  return static_cast<std::int64_t>(std::llround(nanoseconds));
+  return millisecondsToNanoseconds(value);
 }
 
 data::TimestampSource parseCsvTimestampTarget(
@@ -126,11 +82,6 @@ data::TimestampSource parseCsvTimestampTarget(
 {
   if (!object.isMember("timestamp_target")) {
     return default_value;
-  }
-  if (!object["timestamp_target"].isString()) {
-    throw data::DataError(
-            data::DataErrorCode::InvalidFormat,
-            "CSV mapping timestamp_target must be a string");
   }
   return data::parseTimestampSource(object["timestamp_target"].asString());
 }
@@ -142,11 +93,6 @@ std::string optionalString(
 {
   if (!object.isMember(key)) {
     return default_value;
-  }
-  if (!object[key].isString() || object[key].asString().empty()) {
-    throw data::DataError(
-            data::DataErrorCode::InvalidFormat,
-            "CSV mapping field must be a non-empty string: " + key);
   }
   return object[key].asString();
 }
@@ -176,13 +122,6 @@ data::CsvPoseMapping parseMapping(
   const std::string & decoder_id,
   data::TimestampSource timestamp_target)
 {
-  if (!root.isMember("streams") || !root["streams"].isObject() ||
-      !root["streams"].isMember(stream_name) ||
-      !root["streams"][stream_name].isObject()) {
-    throw data::DataError(
-            data::DataErrorCode::InvalidFormat,
-            "CSV mapping lacks streams['" + stream_name + "']");
-  }
   const auto & object = root["streams"][stream_name];
   data::CsvPoseMapping mapping;
   mapping.decoder_id = decoder_id;
@@ -203,11 +142,6 @@ data::CsvPoseMapping parseMapping(
   } else {
     mapping.frame_id_column = optionalString(object, "frame_id_column", "frame_id");
   }
-  if (!object.isMember("columns") || !object["columns"].isObject()) {
-    throw data::DataError(
-            data::DataErrorCode::InvalidFormat,
-            "CSV pose mapping requires a columns object");
-  }
   const auto & columns = object["columns"];
   mapping.x_column = optionalString(columns, "x", "x");
   mapping.y_column = optionalString(columns, "y", "y");
@@ -221,10 +155,9 @@ data::CsvPoseMapping parseMapping(
 
 Json::Value loadJson(const std::filesystem::path & path)
 {
-  std::ifstream input(path);
-  if (!input) {
-    throw data::DataError(data::DataErrorCode::Io, "failed to open JSON: " + path.string());
-  }
+  std::ifstream input;
+  input.exceptions(std::ios::failbit | std::ios::badbit);
+  input.open(path);
   Json::CharReaderBuilder builder;
   Json::Value result;
   std::string errors;
@@ -290,21 +223,21 @@ ReplayOptions parseReplayOptions(int argc, char ** argv, bool require_urdf)
     } else if (argument == "--timestamp-policy") {
       result.timestamp_projection.policy = data::parseTimestampPolicy(requireValue());
     } else if (argument == "--period-ms") {
-      result.timestamp_projection.period_ns = millisecondsToNanoseconds(requireValue(), argument);
+      result.timestamp_projection.period_ns = millisecondsToNanoseconds(requireValue());
     } else if (argument == "--pairing-policy") {
       result.pairing_policy = data::parsePairingPolicy(requireValue());
     } else if (argument == "--nearest-tolerance-ms") {
-      result.nearest_tolerance_ns = nonnegativeMillisecondsToNanoseconds(requireValue(), argument);
+      result.nearest_tolerance_ns = nonnegativeMillisecondsToNanoseconds(requireValue());
     } else if (argument == "--unmatched-policy") {
       result.unmatched_policy = data::parseUnmatchedPolicy(requireValue());
     } else if (argument == "--execution-mode") {
       result.execution_mode = data::parseExecutionMode(requireValue());
     } else if (argument == "--playback-rate") {
-      result.playback_rate = parsePositiveDouble(requireValue(), argument);
+      result.playback_rate = parseDouble(requireValue());
     } else if (argument == "--state-policy") {
       result.state_policy = parseStatePolicy(requireValue());
     } else if (argument == "--servo-period-ms") {
-      result.servo_period_ns = millisecondsToNanoseconds(requireValue(), argument);
+      result.servo_period_ns = millisecondsToNanoseconds(requireValue());
     } else if (argument == "--output-dir") {
       result.output_dir = requireValue();
       result.output_dir_explicit = true;
@@ -318,7 +251,7 @@ ReplayOptions parseReplayOptions(int argc, char ** argv, bool require_urdf)
     } else if (argument == "--viz-host") {
       result.visualization_host = requireValue();
     } else if (argument == "--viz-port") {
-      result.visualization_port = parsePort(requireValue(), argument);
+      result.visualization_port = parsePort(requireValue());
     } else if (argument == "--record-visualization-mcap") {
       result.record_visualization_mcap = true;
     } else if (argument == "--wait-for-space") {
@@ -342,11 +275,6 @@ ReplayOptions parseReplayOptions(int argc, char ** argv, bool require_urdf)
   if (result.left_stream == result.right_stream) {
     throw data::DataError(data::DataErrorCode::InvalidArgument, "left and right streams must differ");
   }
-  if (!std::filesystem::is_regular_file(result.input_path)) {
-    throw data::DataError(
-            data::DataErrorCode::Io,
-            "input is not a regular file: " + result.input_path.string());
-  }
   if (result.input_format == InputFormat::Mcap && result.csv_mapping_path.has_value()) {
     throw data::DataError(
             data::DataErrorCode::InvalidArgument,
@@ -361,17 +289,10 @@ ReplayOptions parseReplayOptions(int argc, char ** argv, bool require_urdf)
       !initial_joint_state_stream_set) {
     result.initial_joint_state_stream = "/mc/ik/joint_states";
   }
-  if (result.csv_mapping_path.has_value() &&
-      !std::filesystem::is_regular_file(*result.csv_mapping_path)) {
-    throw data::DataError(data::DataErrorCode::Io, "CSV mapping file does not exist");
-  }
   if (result.pairing_policy == data::PairingPolicy::Exact && result.nearest_tolerance_ns != 0) {
     throw data::DataError(
             data::DataErrorCode::InvalidArgument,
             "--nearest-tolerance-ms requires --pairing-policy nearest");
-  }
-  if (require_urdf && !std::filesystem::is_regular_file(result.urdf_path)) {
-    throw data::DataError(data::DataErrorCode::Io, "--urdf must name an existing file");
   }
   if (result.output_dir.empty()) {
     throw data::DataError(data::DataErrorCode::InvalidArgument, "--output-dir must be non-empty");
@@ -478,13 +399,7 @@ LoadedReplay loadReplay(const ReplayOptions & options)
         {*options.initial_joint_state_stream, std::nullopt, std::nullopt});
       auto initial_states = data::decodeStream(
         *initial_cursor, *options.initial_joint_state_stream, joint_state_decoder);
-      if (initial_states.samples.empty()) {
-        throw data::DataError(
-                data::DataErrorCode::InvalidFormat,
-                "initial JointState stream contains no samples: " +
-                *options.initial_joint_state_stream);
-      }
-      loaded.initial_joint_state = std::move(initial_states.samples.front());
+      loaded.initial_joint_state = std::move(initial_states.samples.at(0));
       loaded.initial_joint_state_decoder = initial_states.decoder_id;
       loaded.decoder_diagnostic_count += initial_states.diagnostics.size();
     }
@@ -496,13 +411,6 @@ LoadedReplay loadReplay(const ReplayOptions & options)
     data::CsvPoseMapping right_mapping;
     if (options.csv_mapping_path.has_value()) {
       const auto mapping = loadJson(*options.csv_mapping_path);
-      if (mapping.isMember("schema_version") &&
-          (!mapping["schema_version"].isString() ||
-          mapping["schema_version"].asString() != "mcl.csv_mapping.v1")) {
-        throw data::DataError(
-                data::DataErrorCode::InvalidFormat,
-                "CSV mapping schema_version must be mcl.csv_mapping.v1");
-      }
       left_mapping = parseMapping(
         mapping, options.left_stream, "csv_pose:left", options.timestamp_source);
       right_mapping = parseMapping(
@@ -541,24 +449,15 @@ void createOutputDirectory(const std::filesystem::path & output_dir)
             data::DataErrorCode::Io,
             "refusing to overwrite output directory: " + output_dir.string());
   }
-  std::error_code error;
-  if (!std::filesystem::create_directories(output_dir, error) || error) {
-    throw data::DataError(
-            data::DataErrorCode::Io,
-            "failed to create output directory: " + error.message());
-  }
+  std::filesystem::create_directories(output_dir);
 }
 
 void writeTextFile(const std::filesystem::path & path, const std::string & contents)
 {
-  std::ofstream output(path, std::ios::binary);
-  if (!output) {
-    throw data::DataError(data::DataErrorCode::Io, "failed to create artifact: " + path.string());
-  }
+  std::ofstream output;
+  output.exceptions(std::ios::failbit | std::ios::badbit);
+  output.open(path, std::ios::binary);
   output << contents;
-  if (!output) {
-    throw data::DataError(data::DataErrorCode::Io, "failed to write artifact: " + path.string());
-  }
 }
 
 std::string csvEscape(const std::string & value)

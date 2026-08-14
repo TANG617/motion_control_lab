@@ -1,5 +1,5 @@
-#include "dual_arm_ik_app.hpp"
 #include "ik_app_utils.hpp"
+#include "r1_interactive_config.hpp"
 #include "r1_robot_config.hpp"
 
 #include "config/interactive_ik_options.hpp"
@@ -16,69 +16,6 @@
 int main()
 {
   namespace mcc = motion_control::core;
-
-  auto require_rejected_shape = [](const auto & function) {
-      try {
-        function();
-      } catch (const std::runtime_error &) {
-        return;
-      }
-      throw std::runtime_error("invalid accepted-solution shape was not rejected");
-    };
-
-  mcc::InverseKinematicsSolution servo_solution;
-  servo_solution.joint_positions = Eigen::VectorXd::Zero(20);
-  servo_solution.joint_velocities = Eigen::VectorXd::Zero(20);
-  motion_control_lab::validateDualArmAcceptedSolution(
-    servo_solution, mcc::IkSolveMode::ServoStep, 20);
-  servo_solution.joint_positions = Eigen::VectorXd::Zero(19);
-  require_rejected_shape([&] {
-      motion_control_lab::validateDualArmAcceptedSolution(
-        servo_solution, mcc::IkSolveMode::ServoStep, 20);
-    });
-  servo_solution.joint_positions = Eigen::VectorXd::Zero(20);
-  servo_solution.joint_velocities.resize(0);
-  require_rejected_shape([&] {
-      motion_control_lab::validateDualArmAcceptedSolution(
-        servo_solution, mcc::IkSolveMode::ServoStep, 20);
-    });
-
-  mcc::InverseKinematicsSolution target_solution;
-  target_solution.joint_positions = Eigen::VectorXd::Zero(20);
-  target_solution.joint_velocities.resize(0);
-  motion_control_lab::validateDualArmAcceptedSolution(
-    target_solution, mcc::IkSolveMode::TargetSolve, 20);
-  target_solution.joint_velocities = Eigen::VectorXd::Zero(20);
-  require_rejected_shape([&] {
-      motion_control_lab::validateDualArmAcceptedSolution(
-        target_solution, mcc::IkSolveMode::TargetSolve, 20);
-    });
-
-  const auto servo_step = motion_control_lab::makeDualArmIkSolverSetup(
-    mcc::IkSolveMode::ServoStep, 50.0);
-  if (servo_step.solver_config.mode != mcc::IkSolveMode::ServoStep ||
-      std::abs(servo_step.solver_config.servo_period - 0.02) > 1.0e-12 ||
-      servo_step.solver_config.joint_limit_policy !=
-      mcc::KinematicsJointLimitPolicy::ExplicitRequirements ||
-      servo_step.solver_config.qp.backend != mcc::QpBackend::ProxQp ||
-      std::abs(servo_step.solver_config.qp.regularization - 1.0e-4) > 1.0e-12 ||
-      servo_step.solver_config.maximum_iterations != 1 ||
-      !servo_step.register_joint_velocity_limits) {
-    return EXIT_FAILURE;
-  }
-
-  const auto target_solve = motion_control_lab::makeDualArmIkSolverSetup(
-    mcc::IkSolveMode::TargetSolve, 50.0);
-  if (target_solve.solver_config.mode != mcc::IkSolveMode::TargetSolve ||
-      target_solve.solver_config.servo_period != 0.0 ||
-      target_solve.solver_config.joint_limit_policy !=
-      mcc::KinematicsJointLimitPolicy::ExplicitRequirements ||
-      target_solve.solver_config.qp.backend != mcc::QpBackend::ProxQp ||
-      std::abs(target_solve.solver_config.qp.regularization - 1.0e-4) > 1.0e-12 ||
-      target_solve.solver_config.maximum_iterations != 80 ||
-      target_solve.register_joint_velocity_limits) {
-    return EXIT_FAILURE;
-  }
 
   char program[] = "mcl_single_arm_ik";
   char urdf_option[] = "--urdf";

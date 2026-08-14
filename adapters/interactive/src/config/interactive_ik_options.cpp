@@ -38,6 +38,20 @@ std::string parseSide(const std::string & value)
   throw std::runtime_error("side must be either 'left' or 'right'");
 }
 
+void printTuiControls()
+{
+  std::cout
+    << "TUI controls:\n"
+    << "  1..5/F1..F5/Tab: Overview, Solver/QP, Joints, Runtime, Events\n"
+    << "  PageUp/PageDown/Home/End: scroll the current page\n"
+    << "  w/s: +x/-x, a/d: +y/-y, q/e: +z/-z\n"
+    << "  n: cycle TCP rotation axis, i: clockwise, u: counter-clockwise\n"
+    << "  left/right arrows: switch arm when the app controls both arms\n"
+    << "  up/down arrows: double/halve step size\n"
+    << "  m: enter step size, r: reset target from current FK\n"
+    << "  space: pause/resume publishing, h: show/hide help, x or Esc: exit\n";
+}
+
 }  // namespace
 
 void printInteractiveIkUsage(const char * program)
@@ -58,14 +72,8 @@ void printInteractiveIkUsage(const char * program)
     << "                      TCP local-axis rotation step (default: 5)\n"
     << "  --mcap <path>       Write MCAP output to path when Foxglove is enabled\n"
     << "  --no-mcap           Disable MCAP output (default)\n"
-    << "  --help              Show this help text\n\n"
-    << "TUI controls:\n"
-    << "  w/s: +x/-x, a/d: +y/-y, q/e: +z/-z\n"
-    << "  n: cycle TCP rotation axis, i: clockwise, u: counter-clockwise\n"
-    << "  left/right arrows: switch arm when the app controls both arms\n"
-    << "  up/down arrows: double/halve step size\n"
-    << "  m: enter step size, r: reset target from current FK\n"
-    << "  space: pause/resume publishing, h: show/hide help, x or Esc: exit\n";
+    << "  --help              Show this help text\n\n";
+  printTuiControls();
 }
 
 InteractiveIkOptions parseInteractiveIkOptions(int argc, char ** argv)
@@ -154,7 +162,8 @@ void printGroupedInteractiveIkUsage(const char * program)
     << "  --mcap <path>       Write MCAP from the UI thread when Foxglove is enabled\n"
     << "  --no-mcap           Disable MCAP output (default)\n"
     << "  --help              Show this help text\n\n"
-    << "Rates must satisfy red > yellow > 0. Each group period is its deadline.\n";
+    << "Rates must satisfy red > yellow > 0. Each group period is its deadline.\n\n";
+  printTuiControls();
 }
 
 GroupedInteractiveIkOptions parseGroupedInteractiveIkOptions(int argc, char ** argv)

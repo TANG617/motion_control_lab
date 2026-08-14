@@ -18,6 +18,7 @@
 
 #include "config/interactive_ik_options.hpp"
 #include "ik_app_utils.hpp"
+#include "r1_interactive_config.hpp"
 #include "r1_robot_config.hpp"
 #include "runtime/grouped_worker.hpp"
 #include "runtime/interactive_scheduler.hpp"
@@ -33,9 +34,6 @@ namespace
 namespace mcc = motion_control::core;
 namespace mcl = motion_control_lab;
 
-using mcl::requireOk;
-using mcl::requirePose;
-using mcl::requireTarget;
 using mcl::toEigen;
 using mcl::toStdVector;
 
@@ -51,9 +49,30 @@ constexpr double kMinimumCollisionDistanceM = 0.3;
 constexpr double kCollisionInfluenceDistanceM = 0.35;
 constexpr double kCollisionDampingGainPerS = 2.0;
 constexpr double kCollisionWeight = 10000.0;
-constexpr std::size_t kCollisionPairCount = 2;
-
 bool operationSucceeded(const mcc::Status & status) { return status.ok(); }
+
+void requireOk(const mcc::Status & status, const std::string &)
+{
+  if (!status.ok()) {
+    throw std::runtime_error(status.message);
+  }
+}
+
+const mcc::FramePose & requirePose(
+  const std::vector<mcc::FramePose> & poses,
+  const std::string & frame_name)
+{
+  return *std::find_if(
+    poses.begin(), poses.end(),
+    [&](const mcc::FramePose & pose) { return pose.frame_name == frame_name; });
+}
+
+const mcl::ArmTarget & requireTarget(
+  const std::vector<mcl::ArmTarget> & targets,
+  mcl::ArmSide side)
+{
+  return targets.at(side == mcl::ArmSide::Left ? 0 : 1);
+}
 
 struct TargetSnapshot
 {
@@ -93,6 +112,7 @@ struct RedOutputSnapshot
   double right_orientation_error_rad{0.0};
   TaskScaleSnapshot left_scale;
   TaskScaleSnapshot right_scale;
+  mcl::SolverDebug solver_debug;
 };
 
 struct CartesianHandles
@@ -110,6 +130,31 @@ struct GroupedHandles
   CartesianHandles red;
   mcc::GroupedPostureTaskHandle yellow_posture;
   mcc::GroupedSelfCollisionAvoidanceHandle yellow_collision;
+};
+
+struct WorkerThreads
+{
+  explicit WorkerThreads(mcl::WorkerStopController & stop_controller)
+  : stop_controller(stop_controller)
+  {
+  }
+
+  ~WorkerThreads() { join(); }
+
+  void join()
+  {
+    stop_controller.requestStop();
+    if (red.joinable()) {
+      red.join();
+    }
+    if (yellow.joinable()) {
+      yellow.join();
+    }
+  }
+
+  mcl::WorkerStopController & stop_controller;
+  std::thread red;
+  std::thread yellow;
 };
 
 mcc::RobotState robotState(const StateSnapshot & state)
@@ -157,11 +202,6 @@ std::filesystem::path collisionMeshSearchRoot(const std::filesystem::path & urdf
 {
   const auto canonical_urdf = std::filesystem::weakly_canonical(urdf_path);
   const auto package_root = canonical_urdf.parent_path().parent_path().parent_path();
-  const auto mesh_directory = package_root / "psi_r1" / "meshes";
-  if (!std::filesystem::is_directory(mesh_directory)) {
-    throw std::runtime_error(
-      "PSI R1 collision mesh directory does not exist: " + mesh_directory.string());
-  }
   return package_root;
 }
 
@@ -327,20 +367,6 @@ std::string rejectedAttemptDetail(
   return output.str();
 }
 
-const mcc::TaskScaleDiagnostic & requireTaskScaleDiagnostic(
-  const mcc::GroupedTaskScaleGroupHandle & handle,
-  const mcc::GroupedInverseKinematicsDiagnostics & diagnostics)
-{
-  for (const auto & scale : diagnostics.kinematics.optimization.task_scales) {
-    if (scale.handle.value == handle.value) {
-      return scale;
-    }
-  }
-  throw std::runtime_error(
-    "accepted Red solve is missing task-scale diagnostic for handle " +
-    std::to_string(handle.value));
-}
-
 TaskScaleSnapshot taskScaleSnapshot(const mcc::TaskScaleDiagnostic & diagnostic)
 {
   return TaskScaleSnapshot{
@@ -365,10 +391,9 @@ void fillRedDiagnostics(
       output.right_orientation_error_rad = error.norm_rad;
     }
   }
-  output.left_scale =
-    taskScaleSnapshot(requireTaskScaleDiagnostic(handles.left_scale, diagnostics));
-  output.right_scale =
-    taskScaleSnapshot(requireTaskScaleDiagnostic(handles.right_scale, diagnostics));
+  const auto & scales = diagnostics.kinematics.optimization.task_scales;
+  output.left_scale = taskScaleSnapshot(scales.at(0));
+  output.right_scale = taskScaleSnapshot(scales.at(1));
 }
 
 const char * taskScaleClassification(const TaskScaleSnapshot & scale)
@@ -421,10 +446,6 @@ void fillSelfCollisionDebug(
 int run(int argc, char ** argv)
 {
   const auto options = mcl::parseGroupedInteractiveIkOptions(argc, argv);
-  if (!std::filesystem::exists(options.urdf_path)) {
-    throw std::runtime_error("URDF does not exist: " + options.urdf_path);
-  }
-
   const auto & robot = mcl::r1RobotConfig();
   const auto & joint_names = robot.joint_names;
   const Eigen::VectorXd initial_positions = toEigen(robot.default_positions);
@@ -524,6 +545,7 @@ int run(int argc, char ** argv)
   initial_output.right_pose = initial_target.right;
   mcc::SelfCollisionDiagnostics initial_collision_diagnostics;
   mcl::SelfCollisionDebug initial_collision_debug;
+  mcl::SolverDebug initial_yellow_solver_debug;
 
   // Warm all numerical workspaces and the coupling path before deadlines apply.
   requireOk(solver.beginRun(1), "Failed to begin warm-up run");
@@ -542,13 +564,9 @@ int run(int argc, char ** argv)
     requireOk(
       solver.getSelfCollisionDiagnostics(handles.yellow_collision, initial_collision_diagnostics),
       "Failed to query Yellow self-collision diagnostics after warm-up");
-    if (
-      initial_collision_diagnostics.pairs.size() != kCollisionPairCount ||
-      !std::isfinite(initial_collision_diagnostics.minimum_distance_before_m) ||
-      !std::isfinite(initial_collision_diagnostics.minimum_distance_after_m)) {
-      throw std::runtime_error("Yellow warm-up returned invalid self-collision diagnostics");
-    }
     fillSelfCollisionDebug(initial_state, initial_collision_diagnostics, initial_collision_debug);
+    initial_yellow_solver_debug = mcl::makeSolverDebug(
+      "Yellow", diagnostics, solution.kinematics_solution.disposition);
 
     mcc::GroupedInverseKinematicsRequest red;
     initializeCartesianRequest(handles.red, robot.base_frame, red);
@@ -558,16 +576,12 @@ int run(int argc, char ** argv)
     if (!operationSucceeded(status) || !diagnostics.attempt_accepted) {
       throw std::runtime_error("Red warm-up failed: " + rejectedAttemptDetail(status, diagnostics));
     }
-    if (solution.kinematics_solution.joint_positions.size() != initial_state.positions.size()) {
-      throw std::runtime_error("accepted Red warm-up result has invalid joint-position count");
-    }
-    if (solution.kinematics_solution.joint_velocities.size() != initial_state.velocities.size()) {
-      throw std::runtime_error("accepted Red warm-up result has invalid joint-velocity count");
-    }
     initial_output.solve_time_ms = diagnostics.kinematics.solve_time_ms;
     initial_output.iterations = diagnostics.kinematics.iterations;
     initial_output.converged = diagnostics.kinematics.converged;
     fillRedDiagnostics(handles.red, diagnostics, initial_output);
+    initial_output.solver_debug = mcl::makeSolverDebug(
+      "Red", diagnostics, solution.kinematics_solution.disposition);
   }
   requireOk(solver.beginRun(2), "Failed to begin timed grouped run");
 
@@ -575,10 +589,13 @@ int run(int argc, char ** argv)
   mcl::LatestValueMailbox<StateSnapshot> state_to_yellow(initial_state);
   mcl::LatestValueMailbox<RedOutputSnapshot> output_to_ui(initial_output);
   mcl::LatestValueMailbox<mcl::SelfCollisionDebug> collision_to_ui(initial_collision_debug);
+  mcl::LatestValueMailbox<mcl::SolverDebug> yellow_solver_to_ui(
+    initial_yellow_solver_debug);
   target_to_red.publish(initial_target);
   state_to_yellow.publish(initial_state);
   output_to_ui.publish(initial_output);
   collision_to_ui.publish(initial_collision_debug);
+  yellow_solver_to_ui.publish(initial_yellow_solver_debug);
 
   const auto presentation = mcl::makeArmPresentation(robot, mcl::foxgloveIkVisualizationChannels());
   mcl::TuiTeleopSource tui(
@@ -590,25 +607,12 @@ int run(int argc, char ** argv)
   mcl::GroupedFaultState fault;
   mcl::PeriodicWorkerDiagnostics red_worker_diagnostics;
   mcl::PeriodicWorkerDiagnostics yellow_worker_diagnostics;
-  std::thread red_thread;
-  std::thread yellow_thread;
-  auto joinWorkers = [&]() {
-    stop_controller.requestStop();
-    if (red_thread.joinable()) {
-      red_thread.join();
-    }
-    if (yellow_thread.joinable()) {
-      yellow_thread.join();
-    }
-  };
+  WorkerThreads workers(stop_controller);
 
-  bool sink_open = false;
-  try {
     visualization_sink->open({"interactive-preview", kProgramId});
-    sink_open = true;
     mcl::installInteractiveSignalHandlers();
 
-    yellow_thread = std::thread([&]() {
+    workers.yellow = std::thread([&]() {
       StateSnapshot state = initial_state;
       mcc::GroupedInverseKinematicsRequest request;
       request.reference_frame_name = robot.base_frame;
@@ -616,6 +620,7 @@ int run(int argc, char ** argv)
       mcc::GroupedInverseKinematicsDiagnostics diagnostics;
       mcc::SelfCollisionDiagnostics collision_diagnostics = initial_collision_diagnostics;
       mcl::SelfCollisionDebug collision_debug = initial_collision_debug;
+      mcl::SolverDebug solver_debug = initial_yellow_solver_debug;
       mcl::runPeriodicWorker(
         {mcl::WorkerGroup::Yellow, options.yellow_rate_hz, options.deadline_policy},
         stop_controller, fault, yellow_worker_diagnostics, [&](double, std::int64_t) {
@@ -630,6 +635,9 @@ int run(int argc, char ** argv)
               "Failed to query accepted Yellow self-collision diagnostics");
             fillSelfCollisionDebug(state, collision_diagnostics, collision_debug);
             collision_to_ui.publish(collision_debug);
+            mcl::updateSolverDebug(
+              solver_debug, diagnostics, solution.kinematics_solution.disposition);
+            yellow_solver_to_ui.publish(solver_debug);
           }
           return mcl::WorkerIterationResult{
             accepted, diagnostics.attempt_revision,
@@ -638,7 +646,7 @@ int run(int argc, char ** argv)
         });
     });
 
-    red_thread = std::thread([&]() {
+    workers.red = std::thread([&]() {
       StateSnapshot state = initial_state;
       TargetSnapshot target = initial_target;
       RedOutputSnapshot output = initial_output;
@@ -656,12 +664,6 @@ int run(int argc, char ** argv)
             solver.solveInverseKinematics(mcc::SolverGroup::Red, request, solution, diagnostics);
           const bool accepted = operationSucceeded(status) && diagnostics.attempt_accepted;
           if (accepted) {
-            if (solution.kinematics_solution.joint_positions.size() != state.positions.size()) {
-              throw std::runtime_error("accepted Red result has invalid joint-position count");
-            }
-            if (solution.kinematics_solution.joint_velocities.size() != state.velocities.size()) {
-              throw std::runtime_error("accepted Red result has invalid joint-velocity count");
-            }
             state.positions = solution.kinematics_solution.joint_positions;
             state.velocities = solution.kinematics_solution.joint_velocities;
             ++state.sequence;
@@ -680,6 +682,8 @@ int run(int argc, char ** argv)
             output.iterations = diagnostics.kinematics.iterations;
             output.converged = diagnostics.kinematics.converged;
             fillRedDiagnostics(handles.red, diagnostics, output);
+            mcl::updateSolverDebug(
+              output.solver_debug, diagnostics, solution.kinematics_solution.disposition);
             output_to_ui.publish(output);
           }
           return mcl::WorkerIterationResult{
@@ -693,6 +697,7 @@ int run(int argc, char ** argv)
     TargetSnapshot published_target = initial_target;
     RedOutputSnapshot latest_output = initial_output;
     mcl::SelfCollisionDebug latest_collision_debug = initial_collision_debug;
+    mcl::SolverDebug latest_yellow_solver_debug = initial_yellow_solver_debug;
     std::size_t publish_count = 0;
     std::int64_t last_sample_time_ns = 0;
     std::uint64_t last_emit_time_ns = 0;
@@ -704,6 +709,7 @@ int run(int argc, char ** argv)
       {mcl::ArmSide::Left, initial_output.left_pose},
       {mcl::ArmSide::Right, initial_output.right_pose}};
     frame.selected_side = mcl::parseArmSide(options.tui.side);
+    frame.solvers = {initial_output.solver_debug, initial_yellow_solver_debug};
     frame.self_collisions = {initial_collision_debug};
 
     while (!stop_controller.stopRequested()) {
@@ -714,6 +720,7 @@ int run(int argc, char ** argv)
       tui.poll();
       output_to_ui.readLatest(latest_output);
       collision_to_ui.readLatest(latest_collision_debug);
+      yellow_solver_to_ui.readLatest(latest_yellow_solver_debug);
       if (const auto reset_side = tui.consumeResetRequest()) {
         tui.setTargetPose(
           *reset_side,
@@ -741,6 +748,28 @@ int run(int argc, char ** argv)
         frame.velocities = toStdVector(latest_output.state.velocities);
         const auto red_stats = red_worker_diagnostics.snapshot();
         const auto yellow_stats = yellow_worker_diagnostics.snapshot();
+        frame.solvers = {latest_output.solver_debug, latest_yellow_solver_debug};
+        frame.workers = {
+          {"Red", options.red_rate_hz,
+           red_stats.iteration_count,
+           red_stats.deadline_miss_count,
+           red_stats.consecutive_deadline_misses,
+           red_stats.skipped_release_count,
+           red_stats.maximum_release_lateness_ms,
+           red_stats.maximum_execution_ms,
+           red_stats.maximum_release_to_finish_ms,
+           red_stats.maximum_overrun_ms,
+           red_stats.maximum_solver_ms},
+          {"Yellow", options.yellow_rate_hz,
+           yellow_stats.iteration_count,
+           yellow_stats.deadline_miss_count,
+           yellow_stats.consecutive_deadline_misses,
+           yellow_stats.skipped_release_count,
+           yellow_stats.maximum_release_lateness_ms,
+           yellow_stats.maximum_execution_ms,
+           yellow_stats.maximum_release_to_finish_ms,
+           yellow_stats.maximum_overrun_ms,
+           yellow_stats.maximum_solver_ms}};
         frame.ik_status = fault.triggered()
                             ? "fault " + taskScaleStatus(latest_output)
                             : "running " + taskScaleStatus(latest_output) + " deadline_misses R=" +
@@ -757,9 +786,10 @@ int run(int argc, char ** argv)
           {mcl::ArmSide::Right, latest_output.right_position_error_m,
            latest_output.right_orientation_error_rad}};
         frame.self_collisions = {latest_collision_debug};
-        frame.status = command.status +
-                       " | skipped_releases R=" + std::to_string(red_stats.skipped_release_count) +
-                       " Y=" + std::to_string(yellow_stats.skipped_release_count);
+        frame.status =
+          "Grouped IK running | skipped_releases R=" +
+          std::to_string(red_stats.skipped_release_count) +
+          " Y=" + std::to_string(yellow_stats.skipped_release_count);
         frame.paused = command.paused;
         frame.selected_side = command.selected_side;
 
@@ -773,7 +803,7 @@ int run(int argc, char ** argv)
       ui_scheduler.sleep();
     }
 
-    joinWorkers();
+    workers.join();
     if (const auto recorded_fault = fault.snapshot()) {
       output_to_ui.readLatest(latest_output);
       frame.positions = toStdVector(latest_output.state.positions);
@@ -781,6 +811,7 @@ int run(int argc, char ** argv)
       frame.forward_kinematics = {
         {mcl::ArmSide::Left, latest_output.left_pose},
         {mcl::ArmSide::Right, latest_output.right_pose}};
+      frame.solvers = {latest_output.solver_debug, latest_yellow_solver_debug};
       frame.ik_status = "fault";
       frame.status =
         std::string{mcl::workerGroupName(recorded_fault->group)} + " " +
@@ -800,17 +831,6 @@ int run(int argc, char ** argv)
 
     visualization_sink->flush();
     visualization_sink->close();
-    sink_open = false;
-  } catch (...) {
-    joinWorkers();
-    if (sink_open) {
-      try {
-        visualization_sink->close();
-      } catch (...) {
-      }
-    }
-    throw;
-  }
 
   return fault.triggered() ? EXIT_FAILURE : EXIT_SUCCESS;
 }
@@ -822,7 +842,10 @@ int main(int argc, char ** argv)
   try {
     return run(argc, argv);
   } catch (const std::exception & error) {
-    std::cerr << kProgramId << ": " << error.what() << "\n";
+    std::cerr << kProgramId << ": " << error.what() << '\n';
+    return EXIT_FAILURE;
+  } catch (...) {
+    std::cerr << kProgramId << ": non-standard exception\n";
     return EXIT_FAILURE;
   }
 }

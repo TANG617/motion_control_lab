@@ -1,7 +1,6 @@
 #include "apps/dual_arm_replay_ik/replay_ik_engine.hpp"
 
 #include <Eigen/Core>
-#include <Eigen/Geometry>
 #include <algorithm>
 #include <chrono>
 #include <iomanip>
@@ -18,17 +17,10 @@ namespace
 {
 namespace mcc = motion_control::core;
 
-Eigen::Isometry3d makeR1TcpOffset()
-{
-  Eigen::Isometry3d result = Eigen::Isometry3d::Identity();
-  result.translation() = Eigen::Vector3d{0.0, 0.0, 0.1};
-  return result;
-}
-
-void requireOk(const mcc::Status & status, const std::string & operation)
+void requireOk(const mcc::Status & status, const std::string &)
 {
   if (!status.ok()) {
-    throw std::runtime_error(operation + ": " + status.message);
+    throw std::runtime_error(status.message);
   }
 }
 
@@ -45,30 +37,16 @@ std::vector<double> toVector(const Eigen::VectorXd & values)
 std::vector<double> positionsByJointName(
   const data::StampedJointState & joint_state, const std::vector<std::string> & expected_names)
 {
-  if (joint_state.names.size() != joint_state.positions.size()) {
-    throw std::runtime_error("initial JointState names and positions have different lengths");
-  }
   std::unordered_map<std::string, double> positions;
   positions.reserve(joint_state.names.size());
   for (std::size_t index = 0; index < joint_state.names.size(); ++index) {
-    if (joint_state.names[index].empty()) {
-      throw std::runtime_error("initial JointState contains an empty joint name");
-    }
-    const auto inserted = positions.emplace(joint_state.names[index], joint_state.positions[index]);
-    if (!inserted.second) {
-      throw std::runtime_error(
-        "initial JointState contains duplicate joint: " + joint_state.names[index]);
-    }
+    positions.emplace(joint_state.names[index], joint_state.positions.at(index));
   }
 
   std::vector<double> result;
   result.reserve(expected_names.size());
   for (const auto & name : expected_names) {
-    const auto found = positions.find(name);
-    if (found == positions.end()) {
-      throw std::runtime_error("initial JointState is missing joint: " + name);
-    }
-    result.push_back(found->second);
+    result.push_back(positions.at(name));
   }
   return result;
 }
@@ -107,12 +85,12 @@ struct EndEffectorFk
 };
 
 EndEffectorFk computeEndEffectorFk(
-  mcc::GroupedKinematicsSolver & solver, const R1ReplayIkContract & robot,
+  mcc::GroupedKinematicsSolver & solver, const R1RobotConfig & robot,
   const std::vector<double> & positions, const std::vector<double> & velocities)
 {
   mcc::ForwardKinematicsRequest request;
   request.state = makeState(positions, velocities);
-  request.frame_names = {robot.left_end_effector, robot.right_end_effector};
+  request.frame_names = {robot.left_end_effector_frame, robot.right_end_effector_frame};
   request.reference_frame_name = robot.base_frame;
   mcc::ForwardKinematicsSolution solution;
   mcc::ForwardKinematicsDiagnostics diagnostics;
@@ -123,17 +101,16 @@ EndEffectorFk computeEndEffectorFk(
     const auto found = std::find_if(
       solution.poses.begin(), solution.poses.end(),
       [&](const mcc::FramePose & pose) { return pose.frame_name == frame_name; });
-    if (found == solution.poses.end()) {
-      throw std::runtime_error("visualization FK omitted frame: " + frame_name);
-    }
     return *found;
   };
-  return {findPose(robot.left_end_effector).pose, findPose(robot.right_end_effector).pose};
+  return {
+    findPose(robot.left_end_effector_frame).pose,
+    findPose(robot.right_end_effector_frame).pose};
 }
 
 ReplayIkVisualizationSample makeVisualizationSample(
   std::uint64_t sequence, std::int64_t sample_time_ns, const data::DualArmFrame & frame,
-  const R1ReplayIkContract & robot, const EndEffectorFk & fk, const std::vector<double> & positions,
+  const R1RobotConfig & robot, const EndEffectorFk & fk, const std::vector<double> & positions,
   const std::vector<double> & velocities, std::string status, bool paused, bool accepted,
   double solve_time_ms)
 {
@@ -180,24 +157,6 @@ std::string statusCodeString(mcc::StatusCode code)
 
 }  // namespace
 
-const R1ReplayIkContract & r1ReplayIkContract()
-{
-  static const R1ReplayIkContract contract{
-    "base_link",
-    "left_arm_ee_link",
-    "right_arm_ee_link",
-    makeR1TcpOffset(),
-    makeR1TcpOffset(),
-    {"head_yaw_joint",   "head_pitch_joint",  "torso_yaw_joint",  "torso_pitch_joint",
-     "knee_pitch_joint", "ankle_pitch_joint", "left_arm_joint1",  "left_arm_joint2",
-     "left_arm_joint3",  "left_arm_joint4",   "left_arm_joint5",  "left_arm_joint6",
-     "left_arm_joint7",  "right_arm_joint1",  "right_arm_joint2", "right_arm_joint3",
-     "right_arm_joint4", "right_arm_joint5",  "right_arm_joint6", "right_arm_joint7"},
-    {0.0,   0.31, 0.0, 0.5,  0.5,  -0.5, 0.9, -1.38, -1.57, -1.4,
-     -0.45, 0.0,  0.0, -0.9, 1.38, 1.57, 1.4, 0.45,  0.0,   0.0}};
-  return contract;
-}
-
 bool ReplayIkCaseResult::completed() const
 {
   return frames_attempted == frames_planned && rejected_solves == 0;
@@ -219,12 +178,10 @@ ReplayIkCaseResult executeReplayIkCase(
   ReplayIkCaseResult result;
   result.next_visualization_sequence = execution_config.first_visualization_sequence;
   result.loaded = loadReplay(options);
-  if (result.loaded.timeline.timeline.empty()) {
-    throw std::runtime_error("replay timeline contains no paired frames");
-  }
+  const auto & first_frame = result.loaded.timeline.timeline.at(0).value;
   result.frames_planned = result.loaded.timeline.timeline.size();
 
-  const auto & robot = r1ReplayIkContract();
+  const auto & robot = r1RobotConfig();
   mcc::RobotModelDescription model_description;
   model_description.urdf_path = options.urdf_path.string();
   model_description.kinematics_reference_frame = robot.base_frame;
@@ -257,7 +214,7 @@ ReplayIkCaseResult executeReplayIkCase(
   mcc::GroupedPositionTaskHandle left_position;
   requireOk(
     builder.addPositionTask(
-      mcc::SolverGroup::Red, robot.left_end_effector, left_position_config, left_position),
+      mcc::SolverGroup::Red, robot.left_end_effector_frame, left_position_config, left_position),
     "failed to add left position task");
 
   mcc::OrientationTaskConfig left_orientation_config;
@@ -266,7 +223,7 @@ ReplayIkCaseResult executeReplayIkCase(
   mcc::GroupedOrientationTaskHandle left_orientation;
   requireOk(
     builder.addOrientationTask(
-      mcc::SolverGroup::Red, robot.left_end_effector, left_orientation_config, left_orientation),
+      mcc::SolverGroup::Red, robot.left_end_effector_frame, left_orientation_config, left_orientation),
     "failed to add left orientation task");
 
   mcc::PositionTaskConfig right_position_config;
@@ -275,7 +232,7 @@ ReplayIkCaseResult executeReplayIkCase(
   mcc::GroupedPositionTaskHandle right_position;
   requireOk(
     builder.addPositionTask(
-      mcc::SolverGroup::Red, robot.right_end_effector, right_position_config, right_position),
+      mcc::SolverGroup::Red, robot.right_end_effector_frame, right_position_config, right_position),
     "failed to add right position task");
 
   mcc::OrientationTaskConfig right_orientation_config;
@@ -284,7 +241,7 @@ ReplayIkCaseResult executeReplayIkCase(
   mcc::GroupedOrientationTaskHandle right_orientation;
   requireOk(
     builder.addOrientationTask(
-      mcc::SolverGroup::Red, robot.right_end_effector, right_orientation_config, right_orientation),
+      mcc::SolverGroup::Red, robot.right_end_effector_frame, right_orientation_config, right_orientation),
     "failed to add right orientation task");
 
   mcc::JointPositionLimitConfig position_limit_config;
@@ -309,7 +266,7 @@ ReplayIkCaseResult executeReplayIkCase(
   result.initial_positions =
     result.loaded.initial_joint_state.has_value()
       ? positionsByJointName(*result.loaded.initial_joint_state, robot.joint_names)
-      : robot.fallback_initial_positions;
+      : robot.default_positions;
   std::vector<double> positions = result.initial_positions;
   std::vector<double> velocities(positions.size(), 0.0);
   const auto fixed_positions = positions;
@@ -321,7 +278,6 @@ ReplayIkCaseResult executeReplayIkCase(
   }
 
   if (execution_config.initial_frame_gate || execution_config.visualization_callback) {
-    const auto & first_frame = result.loaded.timeline.timeline.at(0).value;
     const auto initial_fk =
       computeEndEffectorFk(solver, robot, result.initial_positions, fixed_velocities);
     auto sample = makeVisualizationSample(
@@ -387,17 +343,6 @@ ReplayIkCaseResult executeReplayIkCase(
     std::vector<double> output_positions = state_positions;
     std::vector<double> output_velocities = state_velocities;
     if (accepted) {
-      const auto expected_joint_count = static_cast<Eigen::Index>(robot.joint_names.size());
-      if (solution.kinematics_solution.joint_positions.size() != expected_joint_count) {
-        throw std::runtime_error(
-                "accepted replay IK result has invalid joint-position count at frame " +
-                std::to_string(frame.sequence));
-      }
-      if (solution.kinematics_solution.joint_velocities.size() != expected_joint_count) {
-        throw std::runtime_error(
-                "accepted replay IK result has invalid joint-velocity count at frame " +
-                std::to_string(frame.sequence));
-      }
       output_positions = toVector(solution.kinematics_solution.joint_positions);
       output_velocities = toVector(solution.kinematics_solution.joint_velocities);
       ++result.accepted_solves;

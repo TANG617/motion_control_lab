@@ -8,22 +8,10 @@
 #include <vector>
 
 #include "apps/dual_arm_replay_ik/replay_support.hpp"
+#include "r1_robot_config.hpp"
 
 namespace motion_control_lab::replay
 {
-
-struct R1ReplayIkContract
-{
-  std::string base_frame;
-  std::string left_end_effector;
-  std::string right_end_effector;
-  Eigen::Isometry3d left_tcp_offset{Eigen::Isometry3d::Identity()};
-  Eigen::Isometry3d right_tcp_offset{Eigen::Isometry3d::Identity()};
-  std::vector<std::string> joint_names;
-  std::vector<double> fallback_initial_positions;
-};
-
-const R1ReplayIkContract & r1ReplayIkContract();
 
 struct ReplayIkVisualizationSample
 {

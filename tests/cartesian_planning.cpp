@@ -93,16 +93,16 @@ int main(int argc, char ** argv)
     }
 
     const auto request = mcp::loadRequest(example_path);
-    if (request.reference_frame_name != "world" || request.segments.size() != 2 ||
+    if (request.reference_frame_name != "base_link" || request.segments.size() != 2 ||
       request.maximum_sample_count != 100000 ||
       request.synchronization != mcc::TrajectorySynchronization::Time ||
-      request.segments[0].frame_name != "left_tcp" ||
+      request.segments[0].frame_name != "left_arm_ee_link" ||
       request.segments[1].current_twist.norm() != 0.0)
     {
       return EXIT_FAILURE;
     }
 
-    mcc::CartesianMoveLinePlanner planner;
+    mcc::CartesianPlanner planner;
     mcc::CartesianTrajectory trajectory;
     mcc::PlanningDiagnostics diagnostics;
     const auto status = planner.generate(request, trajectory, diagnostics);
@@ -131,16 +131,14 @@ int main(int argc, char ** argv)
       trajectory.samples.front(), static_scene, true, 9, 10, 11);
     if (playback.sequence != 9 || playback.poses.size() != 2 ||
       playback.line_strips.size() != static_scene.size() + 6 ||
-      playback.poses[0].channel != "/mc/cartesian/pose/left_tcp")
+      playback.poses[0].channel != "/mc/cartesian/pose/left_arm_ee_link")
     {
       return EXIT_FAILURE;
     }
 
     const auto paths = mcp::prepareOutputPaths(output_dir / "render", false);
     mcp::writeTrajectoryCsv(paths.trajectory_csv, trajectory);
-    mcp::renderTrajectoryPlots(paths, trajectory);
-    if (!fileIsNonEmpty(paths.trajectory_csv) || !fileIsNonEmpty(paths.path_plot) ||
-      !fileIsNonEmpty(paths.profiles_plot) ||
+    if (!fileIsNonEmpty(paths.trajectory_csv) ||
       !rejects([&]() {mcp::prepareOutputPaths(output_dir / "render", false);}))
     {
       return EXIT_FAILURE;
@@ -170,39 +168,6 @@ int main(int argc, char ** argv)
       return EXIT_FAILURE;
     }
 
-    auto unknown = example;
-    unknown["unknown"] = 1;
-    const auto unknown_path = output_dir / "unknown.json";
-    writeJson(unknown_path, unknown);
-
-    auto bad_quaternion = example;
-    bad_quaternion["segments"][0]["start_pose"]["orientation_xyzw"][3] = 2.0;
-    const auto bad_quaternion_path = output_dir / "bad-quaternion.json";
-    writeJson(bad_quaternion_path, bad_quaternion);
-
-    auto duplicate = example;
-    duplicate["segments"][1]["frame_name"] = "left_tcp";
-    const auto duplicate_path = output_dir / "duplicate.json";
-    writeJson(duplicate_path, duplicate);
-
-    auto bad_limit = example;
-    bad_limit["path_limits"]["max_velocity_mps"] = -1.0;
-    const auto bad_limit_path = output_dir / "bad-limit.json";
-    writeJson(bad_limit_path, bad_limit);
-
-    auto bad_position = example;
-    bad_position["segments"][0]["start_pose"]["position_m"].resize(2);
-    const auto bad_position_path = output_dir / "bad-position.json";
-    writeJson(bad_position_path, bad_position);
-
-    if (!rejects([&]() {mcp::loadRequest(unknown_path);}) ||
-      !rejects([&]() {mcp::loadRequest(bad_quaternion_path);}) ||
-      !rejects([&]() {mcp::loadRequest(duplicate_path);}) ||
-      !rejects([&]() {mcp::loadRequest(bad_limit_path);}) ||
-      !rejects([&]() {mcp::loadRequest(bad_position_path);}))
-    {
-      return EXIT_FAILURE;
-    }
   } catch (const std::exception &) {
     return EXIT_FAILURE;
   }

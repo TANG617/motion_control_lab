@@ -1,9 +1,18 @@
 #include "r1_robot_config.hpp"
 
-#include "contracts/visualization/foxglove_ik_v1.hpp"
-
 namespace motion_control_lab
 {
+namespace
+{
+
+Eigen::Isometry3d makeTcpOffset()
+{
+  auto offset = Eigen::Isometry3d::Identity();
+  offset.translation() = Eigen::Vector3d{0.0, 0.0, 0.1};
+  return offset;
+}
+
+}  // namespace
 
 const R1RobotConfig & r1RobotConfig()
 {
@@ -11,6 +20,8 @@ const R1RobotConfig & r1RobotConfig()
     "base_link",
     "left_arm_ee_link",
     "right_arm_ee_link",
+    makeTcpOffset(),
+    makeTcpOffset(),
     {
       "head_yaw_joint",
       "head_pitch_joint",
@@ -41,41 +52,6 @@ const R1RobotConfig & r1RobotConfig()
     {6, 7, 8, 9, 10, 11, 12},
     {13, 14, 15, 16, 17, 18, 19}};
   return config;
-}
-
-ArmVisualizationChannels foxgloveIkVisualizationChannels()
-{
-  namespace contract = contracts::foxglove_ik_v1;
-  return {
-    contract::kJointStates,
-    contract::kLeftTargetPose,
-    contract::kRightTargetPose,
-    contract::kLeftEndEffectorPose,
-    contract::kRightEndEffectorPose};
-}
-
-const std::string & frameForSide(
-  const R1RobotConfig & robot,
-  ArmSide side)
-{
-  return side == ArmSide::Left
-    ? robot.left_end_effector_frame
-    : robot.right_end_effector_frame;
-}
-
-InteractiveIkPresentation makeArmPresentation(
-  const R1RobotConfig & robot,
-  const ArmVisualizationChannels & channels)
-{
-  InteractiveIkPresentation presentation;
-  presentation.base_frame_id = robot.base_frame;
-  presentation.joint_state_channel = channels.joint_states;
-  presentation.arms = {
-    {ArmSide::Left, channels.left_target, channels.left_forward_kinematics,
-      robot.left_arm_joint_indices},
-    {ArmSide::Right, channels.right_target, channels.right_forward_kinematics,
-      robot.right_arm_joint_indices}};
-  return presentation;
 }
 
 }  // namespace motion_control_lab

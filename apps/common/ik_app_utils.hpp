@@ -6,7 +6,6 @@
 
 #include <Eigen/Core>
 
-#include <string>
 #include <vector>
 
 namespace motion_control_lab
@@ -16,20 +15,28 @@ Eigen::VectorXd toEigen(const std::vector<double> & values);
 
 std::vector<double> toStdVector(const Eigen::VectorXd & values);
 
-void requireOk(
-  const motion_control::core::Status & status,
-  const std::string & operation);
-
 motion_control::core::RobotState makeRobotState(
   const std::vector<double> & positions,
   const std::vector<double> & velocities);
 
-const motion_control::core::FramePose & requirePose(
-  const std::vector<motion_control::core::FramePose> & poses,
-  const std::string & frame_name);
+SolverDebug makeSolverDebug(
+  std::string label,
+  const motion_control::core::InverseKinematicsDiagnostics & diagnostics,
+  motion_control::core::ResultDisposition disposition);
 
-const ArmTarget & requireTarget(
-  const std::vector<ArmTarget> & targets,
-  ArmSide side);
+SolverDebug makeSolverDebug(
+  std::string label,
+  const motion_control::core::GroupedInverseKinematicsDiagnostics & diagnostics,
+  motion_control::core::ResultDisposition disposition);
+
+void updateSolverDebug(
+  SolverDebug & output,
+  const motion_control::core::InverseKinematicsDiagnostics & diagnostics,
+  motion_control::core::ResultDisposition disposition);
+
+void updateSolverDebug(
+  SolverDebug & output,
+  const motion_control::core::GroupedInverseKinematicsDiagnostics & diagnostics,
+  motion_control::core::ResultDisposition disposition);
 
 }  // namespace motion_control_lab

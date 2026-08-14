@@ -18,10 +18,8 @@
 #include <fstream>
 #include <iomanip>
 #include <iostream>
-#include <limits>
 #include <map>
 #include <memory>
-#include <set>
 #include <sstream>
 #include <stdexcept>
 #include <thread>
@@ -39,7 +37,6 @@ namespace plt = matplotlibcpp;
 constexpr const char * kRequestSchema =
   "motion_control_lab.cartesian_move_line_request.v1";
 constexpr const char * kSceneChannel = "/mc/cartesian/scene";
-constexpr double kQuaternionNormTolerance = 1.0e-9;
 constexpr double kAxisLengthM = 0.05;
 
 std::atomic_bool stop_requested{false};
@@ -49,132 +46,21 @@ void signalHandler(int)
   stop_requested.store(true);
 }
 
-std::string joinNames(const std::set<std::string> & names)
-{
-  std::ostringstream output;
-  bool first = true;
-  for (const auto & name : names) {
-    if (!first) {
-      output << ", ";
-    }
-    output << name;
-    first = false;
-  }
-  return output.str();
-}
-
-void validateMembers(
-  const Json::Value & value,
-  const std::set<std::string> & required,
-  const std::set<std::string> & optional,
-  const std::string & context)
-{
-  if (!value.isObject()) {
-    throw std::runtime_error(context + " must be an object");
-  }
-  std::set<std::string> missing;
-  for (const auto & name : required) {
-    if (!value.isMember(name)) {
-      missing.insert(name);
-    }
-  }
-  if (!missing.empty()) {
-    throw std::runtime_error(context + " is missing fields: " + joinNames(missing));
-  }
-
-  std::set<std::string> allowed = required;
-  allowed.insert(optional.begin(), optional.end());
-  std::set<std::string> unknown;
-  for (const auto & name : value.getMemberNames()) {
-    if (allowed.count(name) == 0) {
-      unknown.insert(name);
-    }
-  }
-  if (!unknown.empty()) {
-    throw std::runtime_error(context + " has unknown fields: " + joinNames(unknown));
-  }
-}
-
-std::string requireString(
-  const Json::Value & value,
-  const std::string & field,
-  const std::string & context)
-{
-  const auto & member = value[field];
-  if (!member.isString() || member.asString().empty()) {
-    throw std::runtime_error(context + "." + field + " must be a non-empty string");
-  }
-  return member.asString();
-}
-
-double requireFiniteNumber(
-  const Json::Value & value,
-  const std::string & field,
-  const std::string & context)
-{
-  const auto & member = value[field];
-  if (!member.isNumeric()) {
-    throw std::runtime_error(context + "." + field + " must be a number");
-  }
-  const double result = member.asDouble();
-  if (!std::isfinite(result)) {
-    throw std::runtime_error(context + "." + field + " must be finite");
-  }
-  return result;
-}
-
-double requirePositiveNumber(
-  const Json::Value & value,
-  const std::string & field,
-  const std::string & context)
-{
-  const double result = requireFiniteNumber(value, field, context);
-  if (result <= 0.0) {
-    throw std::runtime_error(context + "." + field + " must be positive");
-  }
-  return result;
-}
-
 Eigen::Vector3d parseVector3(
   const Json::Value & value,
-  const std::string & context)
+  const std::string &)
 {
-  if (!value.isArray() || value.size() != 3) {
-    throw std::runtime_error(context + " must contain exactly three numbers");
-  }
-  Eigen::Vector3d result;
-  for (Json::ArrayIndex index = 0; index < 3; ++index) {
-    if (!value[index].isNumeric() || !std::isfinite(value[index].asDouble())) {
-      throw std::runtime_error(context + " must contain only finite numbers");
-    }
-    result(static_cast<Eigen::Index>(index)) = value[index].asDouble();
-  }
-  return result;
+  return Eigen::Vector3d{value[0].asDouble(), value[1].asDouble(), value[2].asDouble()};
 }
 
 mcc::Pose parsePose(const Json::Value & value, const std::string & context)
 {
-  validateMembers(value, {"position_m", "orientation_xyzw"}, {}, context);
   const Eigen::Vector3d position = parseVector3(value["position_m"], context + ".position_m");
   const auto & orientation = value["orientation_xyzw"];
-  if (!orientation.isArray() || orientation.size() != 4) {
-    throw std::runtime_error(context + ".orientation_xyzw must contain exactly four numbers");
-  }
-  std::array<double, 4> xyzw{};
-  for (Json::ArrayIndex index = 0; index < 4; ++index) {
-    if (!orientation[index].isNumeric() ||
-      !std::isfinite(orientation[index].asDouble()))
-    {
-      throw std::runtime_error(
-              context + ".orientation_xyzw must contain only finite numbers");
-    }
-    xyzw[index] = orientation[index].asDouble();
-  }
+  const std::array<double, 4> xyzw{
+    orientation[0].asDouble(), orientation[1].asDouble(),
+    orientation[2].asDouble(), orientation[3].asDouble()};
   const Eigen::Quaterniond quaternion(xyzw[3], xyzw[0], xyzw[1], xyzw[2]);
-  if (std::abs(quaternion.norm() - 1.0) > kQuaternionNormTolerance) {
-    throw std::runtime_error(
-            context + ".orientation_xyzw must be unit length within 1e-9");
-  }
 
   mcc::Pose pose = mcc::Pose::Identity();
   pose.translation() = position;
@@ -184,7 +70,6 @@ mcc::Pose parsePose(const Json::Value & value, const std::string & context)
 
 mcc::Twist parseTwist(const Json::Value & value, const std::string & context)
 {
-  validateMembers(value, {"linear_mps", "angular_rps"}, {}, context);
   mcc::Twist result = mcc::Twist::Zero();
   result.head<3>() = parseVector3(value["linear_mps"], context + ".linear_mps");
   result.tail<3>() = parseVector3(value["angular_rps"], context + ".angular_rps");
@@ -195,7 +80,6 @@ mcc::SpatialAcceleration parseAcceleration(
   const Json::Value & value,
   const std::string & context)
 {
-  validateMembers(value, {"linear_mps2", "angular_rps2"}, {}, context);
   mcc::SpatialAcceleration result = mcc::SpatialAcceleration::Zero();
   result.head<3>() = parseVector3(value["linear_mps2"], context + ".linear_mps2");
   result.tail<3>() = parseVector3(value["angular_rps2"], context + ".angular_rps2");
@@ -204,10 +88,9 @@ mcc::SpatialAcceleration parseAcceleration(
 
 Json::Value loadJson(const std::filesystem::path & path)
 {
-  std::ifstream stream(path);
-  if (!stream) {
-    throw std::runtime_error("failed to open request JSON: " + path.string());
-  }
+  std::ifstream stream;
+  stream.exceptions(std::ios::failbit | std::ios::badbit);
+  stream.open(path);
   Json::CharReaderBuilder builder;
   builder["collectComments"] = false;
   builder["allowComments"] = false;
@@ -226,28 +109,14 @@ Json::Value loadJson(const std::filesystem::path & path)
 
 double parsePositiveCliDouble(const std::string & option, const std::string & value)
 {
-  std::size_t consumed = 0;
-  const double result = std::stod(value, &consumed);
-  if (consumed != value.size()) {
-    throw std::runtime_error(option + " must be a number without trailing characters");
-  }
-  if (!std::isfinite(result) || result <= 0.0) {
-    throw std::runtime_error(option + " must be positive and finite");
-  }
-  return result;
+  (void)option;
+  return std::stod(value);
 }
 
 double parseNonNegativeCliDouble(const std::string & option, const std::string & value)
 {
-  std::size_t consumed = 0;
-  const double result = std::stod(value, &consumed);
-  if (consumed != value.size()) {
-    throw std::runtime_error(option + " must be a number without trailing characters");
-  }
-  if (!std::isfinite(result) || result < 0.0) {
-    throw std::runtime_error(option + " must be finite and non-negative");
-  }
-  return result;
+  (void)option;
+  return std::stod(value);
 }
 
 std::array<double, 4> paletteColor(std::size_t index)
@@ -325,12 +194,11 @@ const mcc::CartesianFrameSample & requireFrame(
   const mcc::CartesianTrajectorySample & sample,
   const std::string & frame_name)
 {
-  for (const auto & frame : sample.frames) {
-    if (frame.frame_name == frame_name) {
-      return frame;
-    }
-  }
-  throw std::runtime_error("trajectory sample is missing frame: " + frame_name);
+  return *std::find_if(
+    sample.frames.begin(), sample.frames.end(),
+    [&](const mcc::CartesianFrameSample & frame) {
+      return frame.frame_name == frame_name;
+    });
 }
 
 std::vector<double> sampleTimes(const mcc::CartesianTrajectory & trajectory)
@@ -400,20 +268,9 @@ AppOptions parseAppOptions(int argc, char ** argv)
       options.output_dir = requireValue(argument);
     } else if (argument == "--host") {
       options.host = requireValue(argument);
-      if (options.host.empty()) {
-        throw std::runtime_error("--host must not be empty");
-      }
     } else if (argument == "--port") {
       const std::string port_text = requireValue(argument);
-      std::size_t consumed = 0;
-      const long value = std::stol(port_text, &consumed);
-      if (consumed != port_text.size()) {
-        throw std::runtime_error("--port must be an integer without trailing characters");
-      }
-      if (value <= 0 || value > 65535) {
-        throw std::runtime_error("--port must be in [1, 65535]");
-      }
-      options.port = static_cast<std::uint16_t>(value);
+      options.port = static_cast<std::uint16_t>(std::stol(port_text));
     } else if (argument == "--playback-rate") {
       options.playback_rate = parsePositiveCliDouble(argument, requireValue(argument));
     } else if (argument == "--loop-delay") {
@@ -443,34 +300,24 @@ AppOptions parseAppOptions(int argc, char ** argv)
   return options;
 }
 
-mcc::CartesianMoveLineRequest loadRequest(const std::filesystem::path & path)
+mcc::CartesianLineRequest loadRequest(const std::filesystem::path & path)
 {
   const Json::Value root = loadJson(path);
-  validateMembers(
-    root,
-    {"schema_version", "reference_frame_name", "sample_period_s", "path_limits", "segments"},
-    {"maximum_sample_count", "synchronization"},
-    "request");
-  if (requireString(root, "schema_version", "request") != kRequestSchema) {
+  if (root["schema_version"].asString() != kRequestSchema) {
     throw std::runtime_error("request.schema_version is unsupported");
   }
 
-  mcc::CartesianMoveLineRequest request;
-  request.reference_frame_name = requireString(root, "reference_frame_name", "request");
-  request.sample_period = requirePositiveNumber(root, "sample_period_s", "request");
+  mcc::CartesianLineRequest request;
+  request.reference_frame_name = root["reference_frame_name"].asString();
+  request.sample_period = root["sample_period_s"].asDouble();
 
   if (root.isMember("maximum_sample_count")) {
-    const auto & value = root["maximum_sample_count"];
-    if (!value.isUInt64() || value.asUInt64() == 0 ||
-      value.asUInt64() > std::numeric_limits<std::size_t>::max())
-    {
-      throw std::runtime_error("request.maximum_sample_count must be a positive size_t");
-    }
-    request.maximum_sample_count = static_cast<std::size_t>(value.asUInt64());
+    request.maximum_sample_count = static_cast<std::size_t>(
+      root["maximum_sample_count"].asUInt64());
   }
 
   if (root.isMember("synchronization")) {
-    const std::string synchronization = requireString(root, "synchronization", "request");
+    const std::string synchronization = root["synchronization"].asString();
     if (synchronization == "time") {
       request.synchronization = mcc::TrajectorySynchronization::Time;
     } else if (synchronization == "phase") {
@@ -481,38 +328,17 @@ mcc::CartesianMoveLineRequest loadRequest(const std::filesystem::path & path)
   }
 
   const auto & limits = root["path_limits"];
-  validateMembers(
-    limits,
-    {"max_velocity_mps", "max_acceleration_mps2", "max_jerk_mps3"},
-    {},
-    "request.path_limits");
-  request.path_limits.max_velocity = requirePositiveNumber(
-    limits, "max_velocity_mps", "request.path_limits");
-  request.path_limits.max_acceleration = requirePositiveNumber(
-    limits, "max_acceleration_mps2", "request.path_limits");
-  request.path_limits.max_jerk = requirePositiveNumber(
-    limits, "max_jerk_mps3", "request.path_limits");
+  request.path_limits.max_velocity = limits["max_velocity_mps"].asDouble();
+  request.path_limits.max_acceleration = limits["max_acceleration_mps2"].asDouble();
+  request.path_limits.max_jerk = limits["max_jerk_mps3"].asDouble();
 
   const auto & segments = root["segments"];
-  if (!segments.isArray() || segments.empty()) {
-    throw std::runtime_error("request.segments must be a non-empty array");
-  }
-  std::set<std::string> frame_names;
   request.segments.reserve(segments.size());
   for (Json::ArrayIndex index = 0; index < segments.size(); ++index) {
     const auto & value = segments[index];
     const std::string context = "request.segments[" + std::to_string(index) + "]";
-    validateMembers(
-      value,
-      {"frame_name", "start_pose", "target_pose"},
-      {"current_twist", "current_acceleration", "equivalent_radius_m"},
-      context);
-
-    mcc::CartesianMoveLineSegment segment;
-    segment.frame_name = requireString(value, "frame_name", context);
-    if (!frame_names.insert(segment.frame_name).second) {
-      throw std::runtime_error("duplicate frame_name: " + segment.frame_name);
-    }
+    mcc::CartesianLineSegment segment;
+    segment.frame_name = value["frame_name"].asString();
     segment.start_pose = parsePose(value["start_pose"], context + ".start_pose");
     segment.target_pose = parsePose(value["target_pose"], context + ".target_pose");
     if (value.isMember("current_twist")) {
@@ -523,8 +349,7 @@ mcc::CartesianMoveLineRequest loadRequest(const std::filesystem::path & path)
         value["current_acceleration"], context + ".current_acceleration");
     }
     if (value.isMember("equivalent_radius_m")) {
-      segment.equivalent_radius_m = requirePositiveNumber(
-        value, "equivalent_radius_m", context);
+      segment.equivalent_radius_m = value["equivalent_radius_m"].asDouble();
     }
     request.segments.push_back(std::move(segment));
   }
@@ -544,16 +369,7 @@ OutputPaths prepareOutputPaths(
       throw std::runtime_error("refusing to overwrite output: " + path.string());
     }
   }
-  std::error_code error;
-  std::filesystem::create_directories(output_dir, error);
-  if (error) {
-    throw std::runtime_error(
-            "failed to create output directory " + output_dir.string() + ": " +
-            error.message());
-  }
-  if (!std::filesystem::is_directory(output_dir)) {
-    throw std::runtime_error("output path is not a directory: " + output_dir.string());
-  }
+  std::filesystem::create_directories(output_dir);
   return paths;
 }
 
@@ -561,10 +377,9 @@ void writeTrajectoryCsv(
   const std::filesystem::path & path,
   const mcc::CartesianTrajectory & trajectory)
 {
-  std::ofstream output(path, std::ios::trunc);
-  if (!output) {
-    throw std::runtime_error("failed to open output CSV: " + path.string());
-  }
+  std::ofstream output;
+  output.exceptions(std::ios::failbit | std::ios::badbit);
+  output.open(path, std::ios::trunc);
   output << std::setprecision(17)
          << "time_from_start,reference_frame_name,frame_name,"
          << "position_x,position_y,position_z,"
@@ -597,18 +412,12 @@ void writeTrajectoryCsv(
       }
     }
   }
-  if (!output) {
-    throw std::runtime_error("failed while writing output CSV: " + path.string());
-  }
 }
 
 void renderTrajectoryPlots(
   const OutputPaths & paths,
   const mcc::CartesianTrajectory & trajectory)
 {
-  if (trajectory.samples.empty() || trajectory.samples.front().frames.empty()) {
-    throw std::runtime_error("cannot render an empty Cartesian trajectory");
-  }
   plt::backend("Agg");
 
   const long path_figure = plt::figure();
@@ -749,7 +558,7 @@ void renderTrajectoryPlots(
 }
 
 std::vector<mcv::LineStrip3d> makeStaticScene(
-  const mcc::CartesianMoveLineRequest & request)
+  const mcc::CartesianLineRequest & request)
 {
   std::vector<mcv::LineStrip3d> lines;
   for (std::size_t index = 0; index < request.segments.size(); ++index) {
@@ -823,13 +632,9 @@ mcv::VisualizationFrame makePlaybackFrame(
 
 void playTrajectory(
   const AppOptions & options,
-  const mcc::CartesianMoveLineRequest & request,
+  const mcc::CartesianLineRequest & request,
   const mcc::CartesianTrajectory & trajectory)
 {
-  if (trajectory.samples.empty()) {
-    throw std::runtime_error("cannot play an empty Cartesian trajectory");
-  }
-
   mcv::FoxgloveFrameSinkOptions sink_options;
   sink_options.server_name = "mcl_cartesian_planning";
   sink_options.host = options.host;
@@ -845,8 +650,7 @@ void playTrajectory(
   const auto static_scene = makeStaticScene(request);
   const auto playback_origin = std::chrono::steady_clock::now();
   std::uint64_t sequence = 0;
-  try {
-    do {
+  do {
       const auto loop_start = std::chrono::steady_clock::now();
       bool first_sample = true;
       for (const auto & sample : trajectory.samples) {
@@ -875,15 +679,8 @@ void playTrajectory(
         std::chrono::steady_clock::now() +
         std::chrono::duration_cast<std::chrono::steady_clock::duration>(
           std::chrono::duration<double>(options.loop_delay_s)));
-    } while (!stop_requested.load());
-    sink.close();
-  } catch (...) {
-    try {
-      sink.close();
-    } catch (...) {
-    }
-    throw;
-  }
+  } while (!stop_requested.load());
+  sink.close();
 }
 
 }  // namespace motion_control_lab::cartesian_planning
