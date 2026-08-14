@@ -83,6 +83,7 @@ if(BUILD_TESTING)
     COMMAND
       test_e03_replay_ik_integration
       "${MCL_WORKSPACE_DIRECTORY}/products/synrobot/modules/common/robot_description/psi_r1/urdf/Psi_R1_rev1.urdf"
+      "$<TARGET_FILE:mcl_e03_batch_replay_ik>"
   )
   add_test(
     NAME experiments.e03_empty_library_manifest

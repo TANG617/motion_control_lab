@@ -4,7 +4,6 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <memory>
 #include <utility>
 #include <vector>
 
@@ -29,24 +28,21 @@ public:
   using Container = std::vector<TimelineFrame<Frame>>;
   using const_iterator = typename Container::const_iterator;
 
-  Timeline()
-    : frames_(std::make_shared<const Container>())
-  {
-  }
+  Timeline() = default;
 
   explicit Timeline(Container frames)
     : frames_(makeValidated(std::move(frames)))
   {
   }
 
-  std::size_t size() const noexcept { return frames_->size(); }
-  bool empty() const noexcept { return frames_->empty(); }
-  const TimelineFrame<Frame> & at(std::size_t index) const { return frames_->at(index); }
-  const_iterator begin() const noexcept { return frames_->begin(); }
-  const_iterator end() const noexcept { return frames_->end(); }
+  std::size_t size() const noexcept { return frames_.size(); }
+  bool empty() const noexcept { return frames_.empty(); }
+  const TimelineFrame<Frame> & at(std::size_t index) const { return frames_.at(index); }
+  const_iterator begin() const noexcept { return frames_.begin(); }
+  const_iterator end() const noexcept { return frames_.end(); }
 
 private:
-  static std::shared_ptr<const Container> makeValidated(Container frames)
+  static Container makeValidated(Container frames)
   {
     for (std::size_t index = 0; index < frames.size(); ++index) {
       const auto & frame = frames[index];
@@ -65,10 +61,10 @@ private:
                 "Timeline frames must be strictly sorted by source and projected time");
       }
     }
-    return std::make_shared<const Container>(std::move(frames));
+    return frames;
   }
 
-  std::shared_ptr<const Container> frames_;
+  Container frames_;
 };
 
 template<typename Frame>

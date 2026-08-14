@@ -53,7 +53,7 @@ Lab 的 replay 输入链分为五个单向依赖的层次：
 
 ```text
 McapSource / CsvSource
-        -> DecoderRegistry -> TypedStream<StampedPose / StampedJointState>
+        -> typed decoder -> TypedStream<StampedPose / StampedJointState>
         -> 原始时间校验与 stream alignment
         -> DualArmTimeline semantic projector
         -> preserve / fixed-period timestamp projection

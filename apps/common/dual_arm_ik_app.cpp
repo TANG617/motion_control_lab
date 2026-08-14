@@ -212,16 +212,12 @@ int runImpl(int argc, char ** argv, const mcl::DualArmIkAppConfig & app_config)
                   "IK rejected candidate: " +
                   (status.message.empty() ? "solver rejected candidate" : status.message));
         }
-        if (solution.joint_positions.size() ==
-            static_cast<Eigen::Index>(joint_names.size())) {
-          positions = mcl::toStdVector(solution.joint_positions);
-          if (solution.joint_velocities.size() ==
-              static_cast<Eigen::Index>(joint_names.size())) {
-            velocities = mcl::toStdVector(solution.joint_velocities);
-          } else {
-            // TargetSolve intentionally has no time semantics and returns no velocity vector.
-            velocities.assign(joint_names.size(), 0.0);
-          }
+        mcl::validateDualArmAcceptedSolution(solution, app_config.solve_mode, joint_names.size());
+        positions = mcl::toStdVector(solution.joint_positions);
+        if (app_config.solve_mode == mcc::IkSolveMode::ServoStep) {
+          velocities = mcl::toStdVector(solution.joint_velocities);
+        } else {
+          velocities.assign(joint_names.size(), 0.0);
         }
 
         latest_frame.targets = command.targets;
@@ -318,6 +314,31 @@ int runImpl(int argc, char ** argv, const mcl::DualArmIkAppConfig & app_config)
 
 namespace motion_control_lab
 {
+void validateDualArmAcceptedSolution(
+  const motion_control::core::InverseKinematicsSolution & solution,
+  motion_control::core::IkSolveMode solve_mode,
+  std::size_t expected_joint_count)
+{
+  namespace mcc = motion_control::core;
+  const auto expected = static_cast<Eigen::Index>(expected_joint_count);
+  if (solution.joint_positions.size() != expected) {
+    throw std::runtime_error("accepted IK result has invalid joint-position count");
+  }
+  if (solve_mode == mcc::IkSolveMode::ServoStep) {
+    if (solution.joint_velocities.size() != expected) {
+      throw std::runtime_error("accepted ServoStep result has invalid joint-velocity count");
+    }
+    return;
+  }
+  if (solve_mode == mcc::IkSolveMode::TargetSolve) {
+    if (solution.joint_velocities.size() != 0) {
+      throw std::runtime_error("accepted TargetSolve result unexpectedly contains velocities");
+    }
+    return;
+  }
+  throw std::runtime_error("accepted IK result has unsupported solve mode");
+}
+
 DualArmIkSolverSetup makeDualArmIkSolverSetup(
   motion_control::core::IkSolveMode solve_mode,
   double rate_hz)

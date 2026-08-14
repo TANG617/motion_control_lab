@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <limits>
+#include <optional>
 #include <utility>
 
 namespace motion_control_lab::data
@@ -37,102 +38,119 @@ StreamDescriptor makeDescriptor(
   return descriptor;
 }
 
-class VectorCursor final : public SourceCursor
+class McapCursor final : public SourceCursor
 {
 public:
-  explicit VectorCursor(std::vector<EncodedRecord> records)
-    : records_(std::move(records))
+  McapCursor(std::filesystem::path path, const SourceSelector & selector)
+    : topic_(selector.logical_name)
   {
+    requireMcapStatus(reader_.open(path.string()), "failed to open MCAP");
+    mcap::ReadMessageOptions options;
+    options.startTime = selector.start_log_time_ns.value_or(0);
+    options.endTime = selector.end_log_time_ns.value_or(mcap::MaxTime);
+    options.readOrder = mcap::ReadMessageOptions::ReadOrder::FileOrder;
+    options.topicFilter = [topic = topic_](std::string_view candidate) {
+        return candidate == topic;
+      };
+    view_.emplace(reader_.readMessages(
+        [this](const mcap::Status & problem) {problems_.push_back(problem.message);},
+        options));
+    iterator_.emplace(view_->begin());
+    requireNoProblems();
   }
 
   bool next(EncodedRecord & record) override
   {
-    if (next_ >= records_.size()) {
+    requireNoProblems();
+    if (*iterator_ == view_->end()) {
       return false;
     }
-    record = std::move(records_[next_]);
-    ++next_;
+
+    const auto & message_view = **iterator_;
+    if (message_view.channel->topic != topic_) {
+      throw DataError(DataErrorCode::InvalidFormat, "MCAP reader violated topic filter");
+    }
+    BinaryRecord binary;
+    binary.stream = makeDescriptor(*message_view.channel, message_view.schema);
+    binary.sequence = message_view.message.sequence;
+    binary.log_time_ns = message_view.message.logTime;
+    binary.publish_time_ns = message_view.message.publishTime;
+    if (message_view.message.dataSize > 0) {
+      if (message_view.message.data == nullptr) {
+        throw DataError(DataErrorCode::InvalidFormat, "MCAP message payload pointer is null");
+      }
+      binary.payload.assign(
+        message_view.message.data,
+        message_view.message.data + message_view.message.dataSize);
+    }
+    record = std::move(binary);
+    ++*iterator_;
+    requireNoProblems();
     return true;
   }
 
 private:
-  std::vector<EncodedRecord> records_;
-  std::size_t next_{};
+  void requireNoProblems() const
+  {
+    if (!problems_.empty()) {
+      throw DataError(
+              DataErrorCode::InvalidFormat,
+              "MCAP read reported " + std::to_string(problems_.size()) +
+              " problem(s); first: " + problems_.front());
+    }
+  }
+
+  std::string topic_;
+  mcap::McapReader reader_;
+  std::vector<std::string> problems_;
+  std::optional<mcap::LinearMessageView> view_;
+  std::optional<mcap::LinearMessageView::Iterator> iterator_;
 };
 
 }  // namespace
 
-struct McapSource::Impl
-{
-  std::filesystem::path path;
-  SourceCatalog catalog;
-};
-
 McapSource::McapSource(std::filesystem::path path)
-  : impl_(std::make_unique<Impl>())
+  : path_(std::move(path))
 {
-  impl_->path = std::move(path);
   mcap::McapReader reader;
-  requireMcapStatus(reader.open(impl_->path.string()), "failed to open MCAP");
+  requireMcapStatus(reader.open(path_.string()), "failed to open MCAP");
   std::vector<std::string> problems;
   const auto summary_status = reader.readSummary(
     mcap::ReadSummaryMethod::AllowFallbackScan,
     [&](const mcap::Status & problem) {problems.push_back(problem.message);});
   requireMcapStatus(summary_status, "failed to inspect MCAP summary");
 
-  impl_->catalog.source_path =
-    std::filesystem::absolute(impl_->path).lexically_normal().string();
+  catalog_.source_path = std::filesystem::absolute(path_).lexically_normal().string();
   if (reader.header().has_value()) {
-    impl_->catalog.metadata["profile"] = reader.header()->profile;
-    impl_->catalog.metadata["library"] = reader.header()->library;
+    catalog_.metadata["profile"] = reader.header()->profile;
+    catalog_.metadata["library"] = reader.header()->library;
   }
-  impl_->catalog.metadata["summary_problem_count"] = std::to_string(problems.size());
-  impl_->catalog.metadata["chunk_count"] = std::to_string(reader.chunkIndexes().size());
+  catalog_.metadata["summary_problem_count"] = std::to_string(problems.size());
+  catalog_.metadata["chunk_count"] = std::to_string(reader.chunkIndexes().size());
 
   auto channels = reader.channels();
-  impl_->catalog.streams.reserve(channels.size());
+  catalog_.streams.reserve(channels.size());
   for (const auto & [channel_id, channel] : channels) {
     (void)channel_id;
-    impl_->catalog.streams.push_back(makeDescriptor(*channel, reader.schema(channel->schemaId)));
+    catalog_.streams.push_back(makeDescriptor(*channel, reader.schema(channel->schemaId)));
   }
   std::sort(
-    impl_->catalog.streams.begin(), impl_->catalog.streams.end(),
+    catalog_.streams.begin(), catalog_.streams.end(),
     [](const StreamDescriptor & left, const StreamDescriptor & right) {
       return left.channel_id.value_or(0) < right.channel_id.value_or(0);
     });
-
-  for (const auto & [name, index] : reader.metadataIndexes()) {
-    mcap::Record record{};
-    const auto record_status =
-      mcap::McapReader::ReadRecord(*reader.dataSource(), index.offset, &record);
-    if (!record_status.ok()) {
-      continue;
-    }
-    mcap::Metadata metadata;
-    const auto parse_status = mcap::McapReader::ParseMetadata(record, &metadata);
-    if (!parse_status.ok()) {
-      continue;
-    }
-    for (const auto & [key, value] : metadata.metadata) {
-      impl_->catalog.metadata["metadata." + name + "." + key] = value;
-    }
-  }
   reader.close();
 }
 
-McapSource::~McapSource() = default;
-McapSource::McapSource(McapSource &&) noexcept = default;
-McapSource & McapSource::operator=(McapSource &&) noexcept = default;
-
 const SourceCatalog & McapSource::catalog() const
 {
-  return impl_->catalog;
+  return catalog_;
 }
 
 std::unique_ptr<SourceCursor> McapSource::select(const SourceSelector & selector) const
 {
   bool found = false;
-  for (const auto & stream : impl_->catalog.streams) {
+  for (const auto & stream : catalog_.streams) {
     if (stream.logical_name == selector.logical_name) {
       found = true;
       break;
@@ -148,44 +166,7 @@ std::unique_ptr<SourceCursor> McapSource::select(const SourceSelector & selector
     throw DataError(DataErrorCode::InvalidArgument, "MCAP time range must be [start, end)");
   }
 
-  mcap::McapReader reader;
-  requireMcapStatus(reader.open(impl_->path.string()), "failed to open MCAP");
-  mcap::ReadMessageOptions options;
-  options.startTime = selector.start_log_time_ns.value_or(0);
-  options.endTime = selector.end_log_time_ns.value_or(mcap::MaxTime);
-  options.readOrder = mcap::ReadMessageOptions::ReadOrder::FileOrder;
-  options.topicFilter = [topic = selector.logical_name](std::string_view candidate) {
-      return candidate == topic;
-    };
-
-  std::vector<std::string> problems;
-  std::vector<EncodedRecord> records;
-  for (const auto & view : reader.readMessages(
-      [&](const mcap::Status & problem) {problems.push_back(problem.message);}, options)) {
-    if (view.channel->topic != selector.logical_name) {
-      throw DataError(DataErrorCode::InvalidFormat, "MCAP reader violated topic filter");
-    }
-    BinaryRecord record;
-    record.stream = makeDescriptor(*view.channel, view.schema);
-    record.sequence = view.message.sequence;
-    record.log_time_ns = view.message.logTime;
-    record.publish_time_ns = view.message.publishTime;
-    if (view.message.dataSize > 0) {
-      if (view.message.data == nullptr) {
-        throw DataError(DataErrorCode::InvalidFormat, "MCAP message payload pointer is null");
-      }
-      record.payload.assign(view.message.data, view.message.data + view.message.dataSize);
-    }
-    records.emplace_back(std::move(record));
-  }
-  reader.close();
-  if (!problems.empty()) {
-    throw DataError(
-            DataErrorCode::InvalidFormat,
-            "MCAP read reported " + std::to_string(problems.size()) +
-            " problem(s); first: " + problems.front());
-  }
-  return std::make_unique<VectorCursor>(std::move(records));
+  return std::make_unique<McapCursor>(path_, selector);
 }
 
 }  // namespace motion_control_lab::data

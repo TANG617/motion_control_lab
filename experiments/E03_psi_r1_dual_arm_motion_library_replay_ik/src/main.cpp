@@ -259,7 +259,7 @@ Json::Value isometryJson(const Eigen::Isometry3d & value)
 
 Json::Value actionManifestJson(
   const e03::ActionSnapshot & snapshot, const e03::ActionExecutionRecord & record,
-  const replay::ReplayIkCaseResult * result, const std::filesystem::path & urdf_path,
+  const replay::ReplayOptions & replay_options, const replay::ReplayIkCaseResult * result,
   const std::string & trace_sha256, const std::string & status_sha256)
 {
   Json::Value manifest;
@@ -274,19 +274,20 @@ Json::Value actionManifestJson(
   if (record.failure_frame.has_value()) {
     manifest["failure"]["frame"] = Json::UInt64(*record.failure_frame);
   }
-  manifest["streams"]["joint_states"] = "/mc/ik/joint_states";
-  manifest["streams"]["left_pose"] = "/mc/ik/target/left_pose";
-  manifest["streams"]["right_pose"] = "/mc/ik/target/right_pose";
-  manifest["timestamp"]["source"] = "header_stamp";
-  manifest["timestamp"]["pairing_policy"] = "nearest";
-  manifest["timestamp"]["nearest_tolerance_ns"] = Json::Int64(5'000'000);
-  manifest["timestamp"]["unmatched_policy"] = "error";
-  manifest["execution"]["state_policy"] = "previous_solution";
-  manifest["execution"]["servo_period_ns"] = Json::Int64(10'000'000);
+  manifest["streams"]["joint_states"] = replay_options.initial_joint_state_stream.value_or("");
+  manifest["streams"]["left_pose"] = replay_options.left_stream;
+  manifest["streams"]["right_pose"] = replay_options.right_stream;
+  manifest["timestamp"]["source"] = mcl::data::toString(replay_options.timestamp_source);
+  manifest["timestamp"]["pairing_policy"] = mcl::data::toString(replay_options.pairing_policy);
+  manifest["timestamp"]["nearest_tolerance_ns"] =
+    Json::Int64(replay_options.nearest_tolerance_ns);
+  manifest["timestamp"]["unmatched_policy"] = mcl::data::toString(replay_options.unmatched_policy);
+  manifest["execution"]["state_policy"] = replay::toString(replay_options.state_policy);
+  manifest["execution"]["servo_period_ns"] = Json::Int64(replay_options.servo_period_ns);
   manifest["execution"]["action_failure_policy"] = "stop_on_first_error";
   manifest["robot_model"]["urdf_path"] =
-    std::filesystem::absolute(urdf_path).lexically_normal().string();
-  manifest["robot_model"]["urdf_sha256"] = mcl::sha256_file(urdf_path);
+    std::filesystem::absolute(replay_options.urdf_path).lexically_normal().string();
+  manifest["robot_model"]["urdf_sha256"] = mcl::sha256_file(replay_options.urdf_path);
   manifest["solver"]["profile"] = "RedOnly";
   manifest["solver"]["servo_mode"] = "ServoStep";
   manifest["target_pose"]["input_semantics"] = "tcp";
@@ -302,7 +303,7 @@ Json::Value actionManifestJson(
     manifest["decoders"]["right"] = result->loaded.right_decoder;
     manifest["decoders"]["joint_states"] = result->loaded.initial_joint_state_decoder;
     manifest["initial_state"]["source"] = "mcap_first_joint_state";
-    manifest["initial_state"]["stream"] = "/mc/ik/joint_states";
+    manifest["initial_state"]["stream"] = replay_options.initial_joint_state_stream.value_or("");
     manifest["initial_state"]["sample_index"] = Json::UInt64(0);
     manifest["initial_state"]["velocity_source"] = "zero";
     for (const auto & name : robot.joint_names) {
@@ -315,29 +316,6 @@ Json::Value actionManifestJson(
   manifest["artifacts"]["trace.csv"]["sha256"] = trace_sha256;
   manifest["artifacts"]["status.json"]["sha256"] = status_sha256;
   return manifest;
-}
-
-std::string classifyFailureStage(const std::string & message)
-{
-  if (
-    message.find("unmatched") != std::string::npos ||
-    message.find("paired frames") != std::string::npos ||
-    message.find("timestamp") != std::string::npos) {
-    return "pairing";
-  }
-  if (
-    message.find("stream") != std::string::npos || message.find("MCAP") != std::string::npos ||
-    message.find("decode") != std::string::npos ||
-    message.find("JointState") != std::string::npos) {
-    return "loading";
-  }
-  if (
-    message.find("robot model") != std::string::npos ||
-    message.find("configure IK") != std::string::npos ||
-    message.find("add ") != std::string::npos || message.find("finalize IK") != std::string::npos) {
-    return "initialization";
-  }
-  return "execution";
 }
 
 std::string dataErrorCodeString(mcl::data::DataErrorCode code)
@@ -832,6 +810,7 @@ int execute(const BatchOptions & options)
     record.action_id = action.action_id;
     const auto action_directory = run_directory / "arms" / "mcc_red_only" / action.action_id;
     std::filesystem::create_directories(action_directory);
+    const auto replay_options = makeReplayOptions(options, action, action_directory);
     std::string trace = replay::replayIkTraceHeader();
     std::optional<replay::ReplayIkCaseResult> ik_result;
 
@@ -859,7 +838,6 @@ int execute(const BatchOptions & options)
               };
           }
 #endif
-          auto replay_options = makeReplayOptions(options, action, action_directory);
           ik_result = replay::executeReplayIkCase(replay_options, execution_config);
           visualization_sequence =
             std::max(visualization_sequence, ik_result->next_visualization_sequence);
@@ -889,7 +867,7 @@ int execute(const BatchOptions & options)
           record.failure_code = dataErrorCodeString(error.code());
           record.failure_message = error.what();
         } catch (const std::exception & error) {
-          record.failure_stage = classifyFailureStage(error.what());
+          record.failure_stage = "execution";
           record.failure_code = "replay_ik_error";
           record.failure_message = error.what();
         }
@@ -912,7 +890,7 @@ int execute(const BatchOptions & options)
     const auto status_path = action_directory / "status.json";
     replay::writeTextFile(status_path, jsonString(actionStatusJson(record)));
     const auto action_manifest = actionManifestJson(
-      action, record, ik_result.has_value() ? &*ik_result : nullptr, options.urdf_path,
+      action, record, replay_options, ik_result.has_value() ? &*ik_result : nullptr,
       mcl::sha256_file(trace_path), mcl::sha256_file(status_path));
     replay::writeTextFile(action_directory / "manifest.json", jsonString(action_manifest));
     return record;

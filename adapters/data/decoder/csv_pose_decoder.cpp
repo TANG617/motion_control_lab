@@ -45,11 +45,6 @@ const std::string & CsvPoseDecoder::id() const
   return mapping_.decoder_id;
 }
 
-std::type_index CsvPoseDecoder::outputType() const
-{
-  return std::type_index(typeid(StampedPose));
-}
-
 bool CsvPoseDecoder::supports(const StreamDescriptor & stream) const
 {
   std::set<std::string> required{
@@ -76,7 +71,7 @@ bool CsvPoseDecoder::supports(const StreamDescriptor & stream) const
   return stream.format == PhysicalFormat::Csv && hasColumns(stream, required);
 }
 
-AnyDecodedSample CsvPoseDecoder::decode(const EncodedRecord & record) const
+DecodedSample<CsvPoseDecoder::Sample> CsvPoseDecoder::decode(const EncodedRecord & record) const
 {
   const auto * row = std::get_if<RowRecord>(&record);
   if (row == nullptr || !supports(row->stream)) {
@@ -116,7 +111,7 @@ AnyDecodedSample CsvPoseDecoder::decode(const EncodedRecord & record) const
   if (!std::isfinite(norm) || norm <= 1.0e-12) {
     throw DataError(DataErrorCode::DecodeFailure, "CSV pose quaternion is zero or invalid");
   }
-  AnyDecodedSample decoded;
+  DecodedSample<Sample> decoded;
   if (std::abs(norm - 1.0) > 1.0e-12) {
     quaternion.normalize();
     decoded.diagnostics.push_back(

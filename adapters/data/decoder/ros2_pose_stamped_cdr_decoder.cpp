@@ -39,11 +39,6 @@ const std::string & Ros2PoseStampedCdrDecoder::id() const
   return kDecoderId;
 }
 
-std::type_index Ros2PoseStampedCdrDecoder::outputType() const
-{
-  return std::type_index(typeid(StampedPose));
-}
-
 bool Ros2PoseStampedCdrDecoder::supports(const StreamDescriptor & stream) const
 {
   return stream.format == PhysicalFormat::Mcap &&
@@ -52,7 +47,8 @@ bool Ros2PoseStampedCdrDecoder::supports(const StreamDescriptor & stream) const
          stream.message_encoding == "cdr";
 }
 
-AnyDecodedSample Ros2PoseStampedCdrDecoder::decode(const EncodedRecord & record) const
+DecodedSample<Ros2PoseStampedCdrDecoder::Sample> Ros2PoseStampedCdrDecoder::decode(
+  const EncodedRecord & record) const
 {
   const auto & binary = requireRecord(record);
   CdrReader reader(binary.payload);
@@ -82,7 +78,7 @@ AnyDecodedSample Ros2PoseStampedCdrDecoder::decode(const EncodedRecord & record)
     throw DataError(DataErrorCode::DecodeFailure, "PoseStamped quaternion is zero or invalid");
   }
 
-  AnyDecodedSample decoded;
+  DecodedSample<Sample> decoded;
   if (std::abs(norm - 1.0) > 1.0e-12) {
     quaternion.normalize();
     decoded.diagnostics.push_back(

@@ -204,16 +204,15 @@ int run(int argc, char ** argv)
                   "Red IK rejected attempt " + std::to_string(diagnostics.attempt_revision) +
                   ": " + (status.message.empty() ? "solver failure" : status.message));
         }
-        if (solution.kinematics_solution.joint_positions.size() ==
-            static_cast<Eigen::Index>(joint_names.size())) {
-          positions = mcl::toStdVector(solution.kinematics_solution.joint_positions);
-          if (solution.kinematics_solution.joint_velocities.size() ==
-              static_cast<Eigen::Index>(joint_names.size())) {
-            velocities = mcl::toStdVector(solution.kinematics_solution.joint_velocities);
-          } else {
-            velocities.assign(joint_names.size(), 0.0);
-          }
+        const auto expected_joint_count = static_cast<Eigen::Index>(joint_names.size());
+        if (solution.kinematics_solution.joint_positions.size() != expected_joint_count) {
+          throw std::runtime_error("accepted Red IK result has invalid joint-position count");
         }
+        if (solution.kinematics_solution.joint_velocities.size() != expected_joint_count) {
+          throw std::runtime_error("accepted Red IK result has invalid joint-velocity count");
+        }
+        positions = mcl::toStdVector(solution.kinematics_solution.joint_positions);
+        velocities = mcl::toStdVector(solution.kinematics_solution.joint_velocities);
 
         latest_frame.targets = command.targets;
         latest_frame.forward_kinematics = {

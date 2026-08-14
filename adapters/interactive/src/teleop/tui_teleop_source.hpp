@@ -50,7 +50,9 @@ public:
 
 private:
   termios original_{};
+  int original_input_flags_{};
   bool raw_enabled_{false};
+  bool nonblocking_enabled_{false};
 };
 
 class TuiTeleopSource

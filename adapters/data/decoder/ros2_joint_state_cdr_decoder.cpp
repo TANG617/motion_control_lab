@@ -27,11 +27,6 @@ const std::string & Ros2JointStateCdrDecoder::id() const
   return kDecoderId;
 }
 
-std::type_index Ros2JointStateCdrDecoder::outputType() const
-{
-  return std::type_index(typeid(StampedJointState));
-}
-
 bool Ros2JointStateCdrDecoder::supports(const StreamDescriptor & stream) const
 {
   return stream.format == PhysicalFormat::Mcap &&
@@ -40,7 +35,8 @@ bool Ros2JointStateCdrDecoder::supports(const StreamDescriptor & stream) const
          stream.message_encoding == "cdr";
 }
 
-AnyDecodedSample Ros2JointStateCdrDecoder::decode(const EncodedRecord & record) const
+DecodedSample<Ros2JointStateCdrDecoder::Sample> Ros2JointStateCdrDecoder::decode(
+  const EncodedRecord & record) const
 {
   const auto * binary = std::get_if<BinaryRecord>(&record);
   if (binary == nullptr) {
@@ -71,7 +67,7 @@ AnyDecodedSample Ros2JointStateCdrDecoder::decode(const EncodedRecord & record) 
   requireFinite(result.positions, "positions");
   requireFinite(result.velocities, "velocities");
   requireFinite(efforts, "efforts");
-  return AnyDecodedSample{std::move(result), {}};
+  return DecodedSample<Sample>{std::move(result), {}};
 }
 
 }  // namespace motion_control_lab::data

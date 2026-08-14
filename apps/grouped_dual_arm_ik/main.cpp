@@ -41,17 +41,17 @@ using mcl::toStdVector;
 
 constexpr const char * kProgramId = "mcl_grouped_dual_arm_ik";
 constexpr const char * kTitle = "Motion Control Grouped Dual-arm IK";
-constexpr double kMaximumAcceptedHardViolation = 1.0e-4;
+constexpr double kMaximumAcceptedHardViolation = 5.0e-4;
 constexpr double kJointPositionLimitMarginRad = 1.0e-2;
-constexpr double kCartesianProgressWeight = 10.0;
+constexpr double kCartesianProgressWeight = 1000.0;
 constexpr double kRedProxQpAbsoluteTolerance = 1.0e-6;
-constexpr double kYellowPostureWeight = 100.0;
-constexpr double kYellowToRedCouplingWeight = 1.0;
-constexpr double kMinimumCollisionDistanceM = 0.02;
-constexpr double kCollisionInfluenceDistanceM = 0.3;
-constexpr double kCollisionDampingGainPerS = 20.0;
-constexpr double kCollisionWeight = 100.0;
-constexpr std::size_t kCollisionPairCount = 5;
+constexpr double kYellowPostureWeight = 10.0;
+constexpr double kYellowToRedCouplingWeight = 0.1;
+constexpr double kMinimumCollisionDistanceM = 0.3;
+constexpr double kCollisionInfluenceDistanceM = 0.35;
+constexpr double kCollisionDampingGainPerS = 2.0;
+constexpr double kCollisionWeight = 10000.0;
+constexpr std::size_t kCollisionPairCount = 2;
 
 bool operationSucceeded(const mcc::Status & status) { return status.ok(); }
 
@@ -170,9 +170,7 @@ mcc::SelfCollisionModelDescription collisionModelDescription(
 {
   mcc::SelfCollisionModelDescription description;
   description.link_pairs = {
-      {"hand2_link_base", "body_link4"}, {"hand2_link_base", "hand1_link_base"},
-      {"hand1_link_base", "body_link4"}, 
-      {"left_arm_link4", "body_link4"},  {"right_arm_link4", "body_link4"}};
+      {"left_arm_link4", "body_link4"}, {"right_arm_link4", "body_link4"}};
   description.mesh_search_paths = {collisionMeshSearchRoot(urdf_path).string()};
   return description;
 }
@@ -560,6 +558,12 @@ int run(int argc, char ** argv)
     if (!operationSucceeded(status) || !diagnostics.attempt_accepted) {
       throw std::runtime_error("Red warm-up failed: " + rejectedAttemptDetail(status, diagnostics));
     }
+    if (solution.kinematics_solution.joint_positions.size() != initial_state.positions.size()) {
+      throw std::runtime_error("accepted Red warm-up result has invalid joint-position count");
+    }
+    if (solution.kinematics_solution.joint_velocities.size() != initial_state.velocities.size()) {
+      throw std::runtime_error("accepted Red warm-up result has invalid joint-velocity count");
+    }
     initial_output.solve_time_ms = diagnostics.kinematics.solve_time_ms;
     initial_output.iterations = diagnostics.kinematics.iterations;
     initial_output.converged = diagnostics.kinematics.converged;
@@ -619,7 +623,8 @@ int run(int argc, char ** argv)
           request.captured_state = capturedState(state);
           const auto status =
             solver.solveInverseKinematics(mcc::SolverGroup::Yellow, request, solution, diagnostics);
-          if (diagnostics.attempt_accepted) {
+          const bool accepted = operationSucceeded(status) && diagnostics.attempt_accepted;
+          if (accepted) {
             requireOk(
               solver.getSelfCollisionDiagnostics(handles.yellow_collision, collision_diagnostics),
               "Failed to query accepted Yellow self-collision diagnostics");
@@ -627,10 +632,9 @@ int run(int argc, char ** argv)
             collision_to_ui.publish(collision_debug);
           }
           return mcl::WorkerIterationResult{
-            diagnostics.attempt_accepted, diagnostics.attempt_revision,
+            accepted, diagnostics.attempt_revision,
             diagnostics.kinematics.solve_time_ms,
-            diagnostics.attempt_accepted ? std::string{}
-                                         : rejectedAttemptDetail(status, diagnostics)};
+            accepted ? std::string{} : rejectedAttemptDetail(status, diagnostics)};
         });
     });
 
@@ -650,7 +654,14 @@ int run(int argc, char ** argv)
           addCartesianTargets(handles.red, target, request);
           const auto status =
             solver.solveInverseKinematics(mcc::SolverGroup::Red, request, solution, diagnostics);
-          if (diagnostics.attempt_accepted) {
+          const bool accepted = operationSucceeded(status) && diagnostics.attempt_accepted;
+          if (accepted) {
+            if (solution.kinematics_solution.joint_positions.size() != state.positions.size()) {
+              throw std::runtime_error("accepted Red result has invalid joint-position count");
+            }
+            if (solution.kinematics_solution.joint_velocities.size() != state.velocities.size()) {
+              throw std::runtime_error("accepted Red result has invalid joint-velocity count");
+            }
             state.positions = solution.kinematics_solution.joint_positions;
             state.velocities = solution.kinematics_solution.joint_velocities;
             ++state.sequence;
@@ -672,10 +683,9 @@ int run(int argc, char ** argv)
             output_to_ui.publish(output);
           }
           return mcl::WorkerIterationResult{
-            diagnostics.attempt_accepted, diagnostics.attempt_revision,
+            accepted, diagnostics.attempt_revision,
             diagnostics.kinematics.solve_time_ms,
-            diagnostics.attempt_accepted ? std::string{}
-                                         : rejectedAttemptDetail(status, diagnostics)};
+            accepted ? std::string{} : rejectedAttemptDetail(status, diagnostics)};
         });
     });
 

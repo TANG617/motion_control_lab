@@ -9,6 +9,7 @@
 #include <cctype>
 #include <cmath>
 #include <cstring>
+#include <fcntl.h>
 #include <iomanip>
 #include <iostream>
 #include <sstream>
@@ -54,6 +55,24 @@ const ArmTargetError * findError(const std::vector<ArmTargetError> & errors, Arm
 bool hasTarget(const std::vector<ArmTarget> & targets, ArmSide side)
 {
   return findTarget(targets, side) != nullptr;
+}
+
+std::optional<char> readTerminalByte()
+{
+  char value = '\0';
+  const ssize_t count = ::read(STDIN_FILENO, &value, 1);
+  if (count == 1) {
+    return value;
+  }
+  if (count == 0) {
+    throw std::runtime_error("terminal input closed");
+  }
+  const int read_error = errno;
+  if (read_error == EAGAIN || read_error == EWOULDBLOCK || read_error == EINTR) {
+    return std::nullopt;
+  }
+  throw std::runtime_error(
+          "terminal read failed: " + std::string(std::strerror(read_error)));
 }
 
 std::string targetTopicForSide(
@@ -262,6 +281,10 @@ TerminalSession::TerminalSession()
   if (::tcgetattr(STDIN_FILENO, &original_) != 0) {
     throw std::runtime_error("tcgetattr failed: " + std::string(std::strerror(errno)));
   }
+  original_input_flags_ = ::fcntl(STDIN_FILENO, F_GETFL);
+  if (original_input_flags_ < 0) {
+    throw std::runtime_error("fcntl F_GETFL failed: " + std::string(std::strerror(errno)));
+  }
   enableRawMode();
   write("\033[?25l\033[2J\033[H");
 }
@@ -279,16 +302,27 @@ void TerminalSession::enableRawMode()
   raw.c_oflag &= static_cast<tcflag_t>(~(OPOST));
   raw.c_cflag |= CS8;
   raw.c_lflag &= static_cast<tcflag_t>(~(ECHO | ICANON | IEXTEN | ISIG));
-  raw.c_cc[VMIN] = 0;
+  raw.c_cc[VMIN] = 1;
   raw.c_cc[VTIME] = 0;
   if (::tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw) != 0) {
     throw std::runtime_error("tcsetattr raw failed: " + std::string(std::strerror(errno)));
   }
   raw_enabled_ = true;
+  if (::fcntl(STDIN_FILENO, F_SETFL, original_input_flags_ | O_NONBLOCK) != 0) {
+    const int flag_error = errno;
+    restoreCookedMode();
+    throw std::runtime_error(
+            "fcntl F_SETFL failed: " + std::string(std::strerror(flag_error)));
+  }
+  nonblocking_enabled_ = true;
 }
 
 void TerminalSession::restoreCookedMode()
 {
+  if (nonblocking_enabled_) {
+    ::fcntl(STDIN_FILENO, F_SETFL, original_input_flags_);
+    nonblocking_enabled_ = false;
+  }
   if (raw_enabled_) {
     ::tcsetattr(STDIN_FILENO, TCSAFLUSH, &original_);
     raw_enabled_ = false;
@@ -297,25 +331,26 @@ void TerminalSession::restoreCookedMode()
 
 KeyInput TerminalSession::readKey()
 {
-  char ch = '\0';
-  const ssize_t count = ::read(STDIN_FILENO, &ch, 1);
-  if (count == 0 || (count < 0 && (errno == EAGAIN || errno == EWOULDBLOCK))) {
+  const auto input = readTerminalByte();
+  if (!input.has_value()) {
     return {};
   }
-  if (count < 0) {
-    return {};
-  }
+  const char ch = *input;
   if (ch != '\033') {
     return {Key::Character, ch};
   }
 
   char sequence[2] = {'\0', '\0'};
-  if (::read(STDIN_FILENO, &sequence[0], 1) != 1) {
+  const auto first = readTerminalByte();
+  if (!first.has_value()) {
     return {Key::Escape, '\0'};
   }
-  if (::read(STDIN_FILENO, &sequence[1], 1) != 1) {
+  sequence[0] = *first;
+  const auto second = readTerminalByte();
+  if (!second.has_value()) {
     return {Key::Escape, '\0'};
   }
+  sequence[1] = *second;
   if (sequence[0] == '[') {
     switch (sequence[1]) {
       case 'A':

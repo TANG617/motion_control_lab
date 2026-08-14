@@ -5,9 +5,13 @@
 #include <cstdint>
 #include <cstring>
 #include <filesystem>
+#include <fstream>
+#include <json/json.h>
 #include <mcap/writer.hpp>
 #include <stdexcept>
 #include <string>
+#include <sys/wait.h>
+#include <unistd.h>
 #include <vector>
 
 #include "apps/dual_arm_replay_ik/replay_ik_engine.hpp"
@@ -194,11 +198,70 @@ void writeSyntheticAction(const std::filesystem::path & path)
   writer.close();
 }
 
+Json::Value loadJson(const std::filesystem::path & path)
+{
+  std::ifstream input(path);
+  require(static_cast<bool>(input), "failed to open generated action manifest");
+  Json::CharReaderBuilder builder;
+  Json::Value result;
+  std::string errors;
+  require(Json::parseFromStream(builder, input, &result, &errors), "failed to parse action manifest");
+  return result;
+}
+
+void verifyBatchActionManifest(
+  const std::filesystem::path & executable,
+  const std::filesystem::path & urdf,
+  const std::filesystem::path & library,
+  const std::filesystem::path & output_root)
+{
+  const std::string executable_string = executable.string();
+  const std::string urdf_string = urdf.string();
+  const std::string library_string = library.string();
+  const std::string output_string = output_root.string();
+  const pid_t child = ::fork();
+  require(child >= 0, "failed to fork E03 batch runner");
+  if (child == 0) {
+    ::execl(
+      executable_string.c_str(), executable_string.c_str(),
+      "--urdf", urdf_string.c_str(),
+      "--library-dir", library_string.c_str(),
+      "--output-root", output_string.c_str(),
+      "--run-id", "manifest-contract", static_cast<char *>(nullptr));
+    ::_exit(127);
+  }
+
+  int status = 0;
+  require(::waitpid(child, &status, 0) == child, "failed to wait for E03 batch runner");
+  require(WIFEXITED(status), "E03 batch runner did not exit normally");
+  require(WEXITSTATUS(status) != 127, "failed to execute E03 batch runner");
+  require(WEXITSTATUS(status) != 0, "unreachable E03 action unexpectedly succeeded");
+
+  const auto manifest = loadJson(
+    output_root / "manifest-contract" / "arms" / "mcc_red_only" /
+    "unreachable" / "manifest.json");
+  require(
+    manifest["streams"]["joint_states"].asString() == "/mc/ik/joint_states" &&
+      manifest["streams"]["left_pose"].asString() == "/mc/ik/target/left_pose" &&
+      manifest["streams"]["right_pose"].asString() == "/mc/ik/target/right_pose",
+    "E03 action manifest streams differ from replay options");
+  require(
+    manifest["timestamp"]["source"].asString() == "header_stamp" &&
+      manifest["timestamp"]["pairing_policy"].asString() == "nearest" &&
+      manifest["timestamp"]["nearest_tolerance_ns"].asInt64() == 5'000'000 &&
+      manifest["timestamp"]["unmatched_policy"].asString() == "error",
+    "E03 action manifest timestamp contract differs from replay options");
+  require(
+    manifest["execution"]["state_policy"].asString() == "previous_solution" &&
+      manifest["execution"]["servo_period_ns"].asInt64() == 10'000'000,
+    "E03 action manifest execution contract differs from replay options");
+}
+
 }  // namespace
 
 int main(int argc, char ** argv)
 {
-  require(argc == 2, "expected URDF path argument");
+  require(argc == 3, "expected URDF path and E03 executable arguments");
   TemporaryDirectory temporary;
   const auto input = temporary.path() / "unreachable.mcap";
   writeSyntheticAction(input);
@@ -246,6 +309,7 @@ int main(int argc, char ** argv)
     static_cast<std::size_t>(std::count(result.trace_csv.begin(), result.trace_csv.end(), '\n')) ==
       2,
     "prefix trace must contain its header and first rejected frame");
+  verifyBatchActionManifest(argv[2], argv[1], temporary.path(), temporary.path() / "runs");
   execution.first_visualization_sequence = result.next_visualization_sequence;
   const auto second_result = replay::executeReplayIkCase(options, execution);
   require(

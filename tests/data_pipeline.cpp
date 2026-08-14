@@ -1,6 +1,5 @@
-#include "adapters/data/decoder/csv_joint_state_decoder.hpp"
 #include "adapters/data/decoder/csv_pose_decoder.hpp"
-#include "adapters/data/decoder/decoder_registry.hpp"
+#include "adapters/data/decoder/decode_stream.hpp"
 #include "adapters/data/decoder/ros2_joint_state_cdr_decoder.hpp"
 #include "adapters/data/decoder/ros2_pose_stamped_cdr_decoder.hpp"
 #include "adapters/data/projection/dual_arm_timeline.hpp"
@@ -22,7 +21,6 @@
 #include <fstream>
 #include <iostream>
 #include <limits>
-#include <memory>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -204,13 +202,13 @@ data::StreamDescriptor jointDescriptor()
 data::StampedPose decodePoseRecord(data::BinaryRecord record)
 {
   data::Ros2PoseStampedCdrDecoder decoder;
-  return std::any_cast<data::StampedPose>(decoder.decode(data::EncodedRecord{std::move(record)}).sample);
+  return decoder.decode(data::EncodedRecord{std::move(record)}).sample;
 }
 
 data::StampedJointState decodeJointRecord(data::BinaryRecord record)
 {
   data::Ros2JointStateCdrDecoder decoder;
-  return std::any_cast<data::StampedJointState>(decoder.decode(data::EncodedRecord{std::move(record)}).sample);
+  return decoder.decode(data::EncodedRecord{std::move(record)}).sample;
 }
 
 void writeSyntheticMcap(const std::filesystem::path & path)
@@ -235,6 +233,8 @@ void writeSyntheticMcap(const std::filesystem::path & path)
   writer.addChannel(pose_channel);
   mcap::Channel unrelated_channel("/unrelated", "cdr", joint_schema.id);
   writer.addChannel(unrelated_channel);
+  mcap::Channel empty_channel("/empty", "cdr", pose_schema.id);
+  writer.addChannel(empty_channel);
 
   const std::array<std::int64_t, 3> stamps{0, 9'500'000, 20'300'000};
   for (std::size_t index = 0; index < stamps.size(); ++index) {
@@ -265,13 +265,30 @@ void writeSyntheticMcap(const std::filesystem::path & path)
 std::vector<data::StampedPose> decodeMcapPoses(const std::filesystem::path & path)
 {
   data::McapSource source(path);
-  require(source.catalog().streams.size() == 2, "MCAP catalog did not inspect both channels");
+  require(source.catalog().streams.size() == 3, "MCAP catalog did not inspect every channel");
   require(source.catalog().metadata.at("chunk_count") != "0", "synthetic MCAP was not chunked");
+  const data::Ros2PoseStampedCdrDecoder decoder;
   auto cursor = source.select({"/target", std::nullopt, std::nullopt});
-  data::DecoderRegistry registry;
-  registry.registerDecoder(std::make_shared<data::Ros2PoseStampedCdrDecoder>());
-  auto poses = registry.decode<data::StampedPose>(*cursor, "/target");
+  auto poses = data::decodeStream(*cursor, "/target", decoder);
   require(poses.samples.size() == 3, "MCAP topic filter returned unrelated messages");
+
+  auto ranged_cursor = source.select({"/target", 9'000'000, 20'000'000});
+  data::EncodedRecord ranged_record;
+  require(ranged_cursor->next(ranged_record), "MCAP time range omitted its matching message");
+  const auto * ranged_binary = std::get_if<data::BinaryRecord>(&ranged_record);
+  require(ranged_binary != nullptr && ranged_binary->sequence == 2,
+    "MCAP cursor did not preserve file order and sequence");
+  require(!ranged_cursor->next(ranged_record), "MCAP time range returned an extra message");
+
+  auto empty_cursor = source.select({"/empty", std::nullopt, std::nullopt});
+  const auto empty = data::decodeStream(*empty_cursor, "/empty", decoder);
+  require(empty.samples.empty() && empty.decoder_id == decoder.id(),
+    "empty MCAP stream lost its typed decoder identity");
+
+  auto mismatched_cursor = source.select({"/unrelated", std::nullopt, std::nullopt});
+  requireError(data::DataErrorCode::SchemaMismatch, [&] {
+      (void)data::decodeStream(*mismatched_cursor, "/unrelated", decoder);
+    }, "schema mismatch was not rejected before CDR decoding");
   return poses.samples;
 }
 
@@ -314,11 +331,9 @@ void testMcapCsvAndDecoders(const TemporaryDirectory & temporary)
   mapping.log_time_column = "log_ns";
   mapping.publish_time_column = "publish_ns";
   mapping.frame_id_column = "frame";
-  data::DecoderRegistry csv_registry;
-  csv_registry.registerDecoder(std::make_shared<data::CsvPoseDecoder>(mapping));
+  const data::CsvPoseDecoder decoder(mapping);
   auto csv_cursor = csv_source.select({"pose", std::nullopt, std::nullopt});
-  const auto csv_poses = csv_registry.decode<data::StampedPose>(
-    *csv_cursor, "pose", mapping.decoder_id);
+  const auto csv_poses = data::decodeStream(*csv_cursor, "pose", decoder);
   require(csv_poses.samples.size() == mcap_poses.size(), "MCAP/CSV pose count differs");
   for (std::size_t index = 0; index < mcap_poses.size(); ++index) {
     require(csv_poses.samples[index].time.header_stamp_ns == mcap_poses[index].time.header_stamp_ns,
@@ -332,21 +347,6 @@ void testMcapCsvAndDecoders(const TemporaryDirectory & temporary)
     require(csv_poses.samples[index].pose.matrix().isApprox(mcap_poses[index].pose.matrix()),
       "MCAP/CSV pose differs");
   }
-
-  const auto joint_csv = temporary.path() / "joints.csv";
-  {
-    std::ofstream output(joint_csv);
-    output << "timestamp_ns,names,positions,velocities\n"
-           << "5,a;b;c,1;2;3,0.1;0.2;0.3\n";
-  }
-  data::CsvSource joint_source(joint_csv, {"joints"});
-  data::CsvJointStateMapping joint_mapping;
-  data::DecoderRegistry joint_registry;
-  joint_registry.registerDecoder(std::make_shared<data::CsvJointStateDecoder>(joint_mapping));
-  auto joint_cursor = joint_source.select({"joints", std::nullopt, std::nullopt});
-  const auto joint_samples = joint_registry.decode<data::StampedJointState>(*joint_cursor, "joints");
-  require(joint_samples.samples.front().names.size() == 3, "CSV JointState names failed");
-  require(joint_samples.samples.front().velocities[2] == 0.3, "CSV JointState velocities failed");
 }
 
 data::StampedPose sample(std::optional<std::int64_t> stamp, const std::string & frame = "base")

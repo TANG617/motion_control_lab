@@ -2,6 +2,7 @@
 
 #include <motion_control_core/motion_control_core.hpp>
 
+#include <cstddef>
 #include <string>
 
 namespace motion_control_lab
@@ -24,6 +25,11 @@ struct DualArmIkSolverSetup
 DualArmIkSolverSetup makeDualArmIkSolverSetup(
   motion_control::core::IkSolveMode solve_mode,
   double rate_hz);
+
+void validateDualArmAcceptedSolution(
+  const motion_control::core::InverseKinematicsSolution & solution,
+  motion_control::core::IkSolveMode solve_mode,
+  std::size_t expected_joint_count);
 
 int runDualArmIkApp(
   int argc,

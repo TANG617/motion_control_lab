@@ -111,13 +111,11 @@ add_library(
   adapters/data/source/data_source.cpp
   adapters/data/source/mcap_source.cpp
   adapters/data/source/csv_source.cpp
-  adapters/data/decoder/decoder_registry.cpp
   adapters/data/decoder/cdr_reader.cpp
   adapters/data/decoder/decoder_utils.cpp
   adapters/data/decoder/ros2_pose_stamped_cdr_decoder.cpp
   adapters/data/decoder/ros2_joint_state_cdr_decoder.cpp
   adapters/data/decoder/csv_pose_decoder.cpp
-  adapters/data/decoder/csv_joint_state_decoder.cpp
   adapters/data/temporal/timestamp_policy.cpp
   adapters/data/temporal/timestamp_projector.cpp
   adapters/data/temporal/stream_alignment.cpp

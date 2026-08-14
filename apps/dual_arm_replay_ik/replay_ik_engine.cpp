@@ -383,20 +383,23 @@ ReplayIkCaseResult executeReplayIkCase(
     const auto status =
       solver.solveInverseKinematics(mcc::SolverGroup::Red, request, solution, diagnostics);
     const auto solve_end = clock.now();
-    const bool accepted = status.ok() && diagnostics.attempt_accepted &&
-                          solution.kinematics_solution.joint_positions.size() ==
-                            static_cast<Eigen::Index>(robot.joint_names.size());
+    const bool accepted = status.ok() && diagnostics.attempt_accepted;
     std::vector<double> output_positions = state_positions;
     std::vector<double> output_velocities = state_velocities;
     if (accepted) {
-      output_positions = toVector(solution.kinematics_solution.joint_positions);
-      if (
-        solution.kinematics_solution.joint_velocities.size() ==
-        static_cast<Eigen::Index>(robot.joint_names.size())) {
-        output_velocities = toVector(solution.kinematics_solution.joint_velocities);
-      } else {
-        output_velocities.assign(output_positions.size(), 0.0);
+      const auto expected_joint_count = static_cast<Eigen::Index>(robot.joint_names.size());
+      if (solution.kinematics_solution.joint_positions.size() != expected_joint_count) {
+        throw std::runtime_error(
+                "accepted replay IK result has invalid joint-position count at frame " +
+                std::to_string(frame.sequence));
       }
+      if (solution.kinematics_solution.joint_velocities.size() != expected_joint_count) {
+        throw std::runtime_error(
+                "accepted replay IK result has invalid joint-velocity count at frame " +
+                std::to_string(frame.sequence));
+      }
+      output_positions = toVector(solution.kinematics_solution.joint_positions);
+      output_velocities = toVector(solution.kinematics_solution.joint_velocities);
       ++result.accepted_solves;
       if (options.state_policy == StatePolicy::PreviousSolution) {
         positions = output_positions;

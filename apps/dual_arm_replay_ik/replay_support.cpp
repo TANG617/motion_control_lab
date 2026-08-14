@@ -1,7 +1,7 @@
 #include "apps/dual_arm_replay_ik/replay_support.hpp"
 
 #include "adapters/data/decoder/csv_pose_decoder.hpp"
-#include "adapters/data/decoder/decoder_registry.hpp"
+#include "adapters/data/decoder/decode_stream.hpp"
 #include "adapters/data/decoder/ros2_joint_state_cdr_decoder.hpp"
 #include "adapters/data/decoder/ros2_pose_stamped_cdr_decoder.hpp"
 #include "adapters/data/source/csv_source.hpp"
@@ -459,19 +459,34 @@ std::string toString(StatePolicy policy)
 
 LoadedReplay loadReplay(const ReplayOptions & options)
 {
-  data::DecoderRegistry registry;
   std::unique_ptr<data::DataSource> source;
-  std::string left_decoder;
-  std::string right_decoder;
+  data::TypedStream<data::StampedPose> left;
+  data::TypedStream<data::StampedPose> right;
+  LoadedReplay loaded;
 
   if (options.input_format == InputFormat::Mcap) {
     source = std::make_unique<data::McapSource>(options.input_path);
-    auto decoder = std::make_shared<data::Ros2PoseStampedCdrDecoder>();
-    left_decoder = decoder->id();
-    right_decoder = decoder->id();
-    registry.registerDecoder(std::move(decoder));
+    const data::Ros2PoseStampedCdrDecoder pose_decoder;
+    auto left_cursor = source->select({options.left_stream, std::nullopt, std::nullopt});
+    auto right_cursor = source->select({options.right_stream, std::nullopt, std::nullopt});
+    left = data::decodeStream(*left_cursor, options.left_stream, pose_decoder);
+    right = data::decodeStream(*right_cursor, options.right_stream, pose_decoder);
+
     if (options.initial_joint_state_stream.has_value()) {
-      registry.registerDecoder(std::make_shared<data::Ros2JointStateCdrDecoder>());
+      const data::Ros2JointStateCdrDecoder joint_state_decoder;
+      auto initial_cursor = source->select(
+        {*options.initial_joint_state_stream, std::nullopt, std::nullopt});
+      auto initial_states = data::decodeStream(
+        *initial_cursor, *options.initial_joint_state_stream, joint_state_decoder);
+      if (initial_states.samples.empty()) {
+        throw data::DataError(
+                data::DataErrorCode::InvalidFormat,
+                "initial JointState stream contains no samples: " +
+                *options.initial_joint_state_stream);
+      }
+      loaded.initial_joint_state = std::move(initial_states.samples.front());
+      loaded.initial_joint_state_decoder = initial_states.decoder_id;
+      loaded.decoder_diagnostic_count += initial_states.diagnostics.size();
     }
   } else {
     source = std::make_unique<data::CsvSource>(
@@ -496,18 +511,13 @@ LoadedReplay loadReplay(const ReplayOptions & options)
       left_mapping = defaultMapping("csv_pose:left", "left_", options.timestamp_source);
       right_mapping = defaultMapping("csv_pose:right", "right_", options.timestamp_source);
     }
-    left_decoder = left_mapping.decoder_id;
-    right_decoder = right_mapping.decoder_id;
-    registry.registerDecoder(std::make_shared<data::CsvPoseDecoder>(std::move(left_mapping)));
-    registry.registerDecoder(std::make_shared<data::CsvPoseDecoder>(std::move(right_mapping)));
+    const data::CsvPoseDecoder left_decoder(std::move(left_mapping));
+    const data::CsvPoseDecoder right_decoder(std::move(right_mapping));
+    auto left_cursor = source->select({options.left_stream, std::nullopt, std::nullopt});
+    auto right_cursor = source->select({options.right_stream, std::nullopt, std::nullopt});
+    left = data::decodeStream(*left_cursor, options.left_stream, left_decoder);
+    right = data::decodeStream(*right_cursor, options.right_stream, right_decoder);
   }
-
-  auto left_cursor = source->select({options.left_stream, std::nullopt, std::nullopt});
-  auto right_cursor = source->select({options.right_stream, std::nullopt, std::nullopt});
-  auto left = registry.decode<data::StampedPose>(
-    *left_cursor, options.left_stream, left_decoder);
-  auto right = registry.decode<data::StampedPose>(
-    *right_cursor, options.right_stream, right_decoder);
 
   data::DualArmProjectionConfig projection;
   projection.timestamp_source = options.timestamp_source;
@@ -516,26 +526,10 @@ LoadedReplay loadReplay(const ReplayOptions & options)
   projection.unmatched_policy = options.unmatched_policy;
   projection.timestamp_projection = options.timestamp_projection;
 
-  LoadedReplay loaded;
   loaded.catalog = source->catalog();
   loaded.left_decoder = left.decoder_id;
   loaded.right_decoder = right.decoder_id;
-  loaded.decoder_diagnostic_count = left.diagnostics.size() + right.diagnostics.size();
-  if (options.initial_joint_state_stream.has_value()) {
-    auto initial_cursor = source->select(
-      {*options.initial_joint_state_stream, std::nullopt, std::nullopt});
-    auto initial_states = registry.decode<data::StampedJointState>(
-      *initial_cursor, *options.initial_joint_state_stream);
-    if (initial_states.samples.empty()) {
-      throw data::DataError(
-              data::DataErrorCode::InvalidFormat,
-              "initial JointState stream contains no samples: " +
-              *options.initial_joint_state_stream);
-    }
-    loaded.initial_joint_state = std::move(initial_states.samples.front());
-    loaded.initial_joint_state_decoder = initial_states.decoder_id;
-    loaded.decoder_diagnostic_count += initial_states.diagnostics.size();
-  }
+  loaded.decoder_diagnostic_count += left.diagnostics.size() + right.diagnostics.size();
   loaded.timeline = data::makeDualArmTimeline(left, right, projection);
   return loaded;
 }
