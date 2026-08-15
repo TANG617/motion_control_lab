@@ -36,6 +36,8 @@ public:
 
   void setStatus(const std::string & status);
 
+  void setMotionInputEnabled(bool enabled, const std::string & status);
+
   void render(
     const IkDebugFrame & frame,
     std::size_t publish_count,
@@ -54,6 +56,8 @@ private:
   double rotation_step_rad_{0.0};
   bool show_help_{false};
   bool allow_side_switching_{false};
+  bool motion_input_enabled_{true};
+  std::string motion_input_disabled_status_{"Motion controls disabled"};
   std::optional<ArmSide> reset_requested_;
   std::unique_ptr<Impl> impl_;
 };

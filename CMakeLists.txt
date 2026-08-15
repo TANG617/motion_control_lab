@@ -629,9 +629,18 @@ if(BUILD_TESTING)
         "$<TARGET_FILE:test_tui_console>"
         --expect-exception
     )
+    add_test(
+      NAME interactive.tui_fault_hold_pty
+      COMMAND
+        "${Python3_EXECUTABLE}"
+        "${CMAKE_CURRENT_SOURCE_DIR}/tests/run_tui_pty.py"
+        "$<TARGET_FILE:test_tui_console>"
+        --fault-hold
+    )
     set_tests_properties(
       interactive.tui_console_pty
       interactive.tui_exception_pty
+      interactive.tui_fault_hold_pty
       PROPERTIES TIMEOUT 15
     )
   endif()

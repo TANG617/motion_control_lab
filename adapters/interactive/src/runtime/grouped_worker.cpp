@@ -111,6 +111,7 @@ PeriodicWorkerStatistics PeriodicWorkerDiagnostics::snapshot() const
     deadline_miss_count_.load(std::memory_order_relaxed),
     consecutive_deadline_misses_.load(std::memory_order_relaxed),
     skipped_release_count_.load(std::memory_order_relaxed),
+    recoverable_rejection_count_.load(std::memory_order_relaxed),
     maximum_release_lateness_ms_.load(std::memory_order_relaxed),
     maximum_execution_ms_.load(std::memory_order_relaxed),
     maximum_release_to_finish_ms_.load(std::memory_order_relaxed),
@@ -143,6 +144,11 @@ void PeriodicWorkerDiagnostics::recordIteration(
 void PeriodicWorkerDiagnostics::recordSkippedReleases(std::uint64_t count)
 {
   skipped_release_count_.fetch_add(count, std::memory_order_relaxed);
+}
+
+void PeriodicWorkerDiagnostics::recordRecoverableRejection()
+{
+  recoverable_rejection_count_.fetch_add(1, std::memory_order_relaxed);
 }
 
 void runPeriodicWorker(
@@ -218,7 +224,10 @@ void runPeriodicWorker(
         timing.release_to_finish_ms,
         timing.overrun_ms,
         result.solve_time_ms);
-      if (!result.accepted) {
+      if (result.outcome == WorkerIterationOutcome::RecoverableRejected) {
+        diagnostics.recordRecoverableRejection();
+      }
+      if (result.outcome == WorkerIterationOutcome::FatalRejected) {
         fault.trigger(makeFault(
           WorkerFailureKind::RejectedAttempt,
           result.revision,

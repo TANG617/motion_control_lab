@@ -101,13 +101,66 @@ bool testRejectedAttemptFault()
     fault,
     diagnostics,
     [](double, std::int64_t) {
-      return mcl::WorkerIterationResult{false, 7, 0.1, "rejected"};
+      return mcl::WorkerIterationResult{
+        mcl::WorkerIterationOutcome::FatalRejected, 7, 0.1, "rejected"};
     });
   const auto snapshot = fault.snapshot();
   const auto statistics = diagnostics.snapshot();
   return stop.stopRequested() && snapshot.has_value() &&
          snapshot->failure == mcl::WorkerFailureKind::RejectedAttempt &&
          snapshot->revision == 7 && statistics.iteration_count == 1;
+}
+
+bool testRecoverableRejectionWaitsAndContinues()
+{
+  mcl::WorkerStopController stop;
+  mcl::GroupedFaultState fault;
+  mcl::PeriodicWorkerDiagnostics diagnostics;
+  std::atomic_int iterations{0};
+  mcl::runPeriodicWorker(
+    {mcl::WorkerGroup::Red, 1000.0, mcl::DeadlinePolicy::Monitor},
+    stop,
+    fault,
+    diagnostics,
+    [&](double, std::int64_t) {
+      const int iteration = iterations.fetch_add(1, std::memory_order_relaxed);
+      if (iteration == 0) {
+        return mcl::WorkerIterationResult{
+          mcl::WorkerIterationOutcome::RecoverableRejected, 7, 0.1, "infeasible"};
+      }
+      if (iteration == 1) {
+        return mcl::WorkerIterationResult{
+          mcl::WorkerIterationOutcome::Idle, 7, 0.0, {}};
+      }
+      stop.requestStop();
+      return mcl::WorkerIterationResult{
+        mcl::WorkerIterationOutcome::Accepted, 8, 0.1, {}};
+    });
+  const auto statistics = diagnostics.snapshot();
+  return iterations.load(std::memory_order_relaxed) == 3 && !fault.triggered() &&
+         statistics.iteration_count == 3 && statistics.recoverable_rejection_count == 1;
+}
+
+bool testStrictDeadlineWinsOverRecoverableRejection()
+{
+  mcl::WorkerStopController stop;
+  mcl::GroupedFaultState fault;
+  mcl::PeriodicWorkerDiagnostics diagnostics;
+  mcl::runPeriodicWorker(
+    {mcl::WorkerGroup::Red, 100.0, mcl::DeadlinePolicy::Strict},
+    stop,
+    fault,
+    diagnostics,
+    [](double, std::int64_t) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(20));
+      return mcl::WorkerIterationResult{
+        mcl::WorkerIterationOutcome::RecoverableRejected, 9, 20.0, "infeasible"};
+    });
+  const auto snapshot = fault.snapshot();
+  const auto statistics = diagnostics.snapshot();
+  return stop.stopRequested() && snapshot.has_value() &&
+         snapshot->failure == mcl::WorkerFailureKind::DeadlineMiss &&
+         snapshot->revision == 9 && statistics.recoverable_rejection_count == 1;
 }
 
 bool testMonitorPolicyDoesNotSuppressExceptions()
@@ -141,7 +194,8 @@ bool testDeadlineAndCooperativeStop()
     deadline_diagnostics,
     [](double, std::int64_t) {
       std::this_thread::sleep_for(std::chrono::milliseconds(20));
-      return mcl::WorkerIterationResult{true, 1, 20.0, {}};
+      return mcl::WorkerIterationResult{
+        mcl::WorkerIterationOutcome::Accepted, 1, 20.0, {}};
     });
   const auto deadline = deadline_fault.snapshot();
   if (!deadline || deadline->failure != mcl::WorkerFailureKind::DeadlineMiss ||
@@ -167,7 +221,8 @@ bool testDeadlineAndCooperativeStop()
         if (iterations.fetch_add(1) >= 4) {
           stop.requestStop();
         }
-        return mcl::WorkerIterationResult{true, 1, 0.0, {}};
+        return mcl::WorkerIterationResult{
+          mcl::WorkerIterationOutcome::Accepted, 1, 0.0, {}};
       });
   });
   worker.join();
@@ -190,7 +245,8 @@ bool testMonitorPolicyContinuesAndSkipsExpiredReleases()
       if (iterations.fetch_add(1, std::memory_order_relaxed) >= 2) {
         stop.requestStop();
       }
-      return mcl::WorkerIterationResult{true, 1, 20.0, {}};
+      return mcl::WorkerIterationResult{
+        mcl::WorkerIterationOutcome::Accepted, 1, 20.0, {}};
     });
 
   const auto statistics = diagnostics.snapshot();
@@ -215,7 +271,8 @@ bool testPeriodicWaitIsInterruptible()
       diagnostics,
       [&](double, std::int64_t) {
         iteration_finished.store(true, std::memory_order_release);
-        return mcl::WorkerIterationResult{true, 1, 0.0, {}};
+        return mcl::WorkerIterationResult{
+          mcl::WorkerIterationOutcome::Accepted, 1, 0.0, {}};
       });
   });
   while (!iteration_finished.load(std::memory_order_acquire)) {
@@ -242,6 +299,8 @@ int main()
   check("mailbox", testMailbox());
   check("first writer fault", testFirstWriterFault());
   check("rejected attempt", testRejectedAttemptFault());
+  check("recoverable rejection", testRecoverableRejectionWaitsAndContinues());
+  check("recoverable rejection strict deadline", testStrictDeadlineWinsOverRecoverableRejection());
   check("monitor exception", testMonitorPolicyDoesNotSuppressExceptions());
   check("deadline and cooperative stop", testDeadlineAndCooperativeStop());
   check("monitor policy", testMonitorPolicyContinuesAndSkipsExpiredReleases());

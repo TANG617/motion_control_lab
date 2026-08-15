@@ -152,6 +152,21 @@ struct WorkerDebug
   double maximum_release_to_finish_ms{0.0};
   double maximum_overrun_ms{0.0};
   double maximum_solver_ms{0.0};
+  std::uint64_t recoverable_rejection_count{0};
+};
+
+enum class IkRuntimeState
+{
+  Running,
+  RecoverableReject,
+  FaultHold,
+};
+
+struct RejectedTargetDebug
+{
+  std::uint64_t revision{0};
+  std::vector<ArmTarget> targets;
+  std::string detail;
 };
 
 struct ArmPresentation
@@ -205,7 +220,9 @@ struct IkDebugFrame
   std::vector<SolverDebug> solvers;
   std::vector<WorkerDebug> workers;
   std::vector<SelfCollisionDebug> self_collisions;
+  std::optional<RejectedTargetDebug> rejected_target;
   std::string status{"Ready"};
+  IkRuntimeState runtime_state{IkRuntimeState::Running};
   bool paused{false};
   ArmSide selected_side{ArmSide::Left};
 };

@@ -301,9 +301,15 @@ ftxui::Element labelledParagraph(const std::string & label, const std::string & 
   return hbox({text(label) | bold, paragraph(value) | flex});
 }
 
-ftxui::Element modeBadge(bool paused)
+ftxui::Element modeBadge(IkRuntimeState runtime_state, bool paused)
 {
   using namespace ftxui;
+  if (runtime_state == IkRuntimeState::FaultHold) {
+    return text(" FAULT HOLD ") | bold | color(Color::Red);
+  }
+  if (runtime_state == IkRuntimeState::RecoverableReject) {
+    return text(" TARGET REJECTED ") | bold | color(Color::Yellow);
+  }
   return text(paused ? " PAUSED " : " PUBLISHING ") |
          bold |
          color(paused ? Color::Yellow : Color::Green);
@@ -456,6 +462,17 @@ public:
     loop_->RunOnce();
   }
 
+  void setMotionInputEnabled(bool enabled, const std::string & status)
+  {
+    source_.motion_input_enabled_ = enabled;
+    if (!enabled) {
+      step_input_active_ = false;
+      active_tab_ = 0;
+    }
+    source_.motion_input_disabled_status_ = status;
+    source_.command_.status = status;
+  }
+
 private:
   ftxui::Element renderHeader() const
   {
@@ -467,7 +484,7 @@ private:
       hbox({text(source_.title_) | bold, filler(), text(sink_status_) | dim}),
       hbox({
         text(std::string{"side="} + armSideName(source_.command_.selected_side) + "  "),
-        modeBadge(source_.command_.paused),
+        modeBadge(frame_.runtime_state, source_.command_.paused),
         filler(),
         text(rate.str()) | dim,
       }),
@@ -609,6 +626,22 @@ private:
             formatQuaternion(target->target_pose)});
         }
       }
+      if (frame_.rejected_target.has_value()) {
+        if (const auto * rejected = findTarget(frame_.rejected_target->targets, arm.side)) {
+          if (compact) {
+            content.push_back(labelledParagraph(
+              std::string{armSideName(arm.side)} + " rejected p: ",
+              formatPosition(rejected->target_pose)) | color(Color::Yellow));
+            content.push_back(labelledParagraph(
+              std::string{armSideName(arm.side)} + " rejected q: ",
+              formatQuaternion(rejected->target_pose)) | color(Color::Yellow));
+          } else {
+            rows.push_back({
+              armSideName(arm.side), "rejected", formatPosition(rejected->target_pose),
+              formatQuaternion(rejected->target_pose)});
+          }
+        }
+      }
       if (const auto * fk = findForwardKinematics(frame_.forward_kinematics, arm.side)) {
         if (compact) {
           content.push_back(labelledParagraph(
@@ -630,6 +663,14 @@ private:
     }
     if (!compact) {
       content.insert(content.begin() + 2, renderTable(std::move(rows)));
+    }
+    if (frame_.rejected_target.has_value()) {
+      content.push_back(labelledParagraph(
+        "rejected target revision: ", std::to_string(frame_.rejected_target->revision)) |
+        color(Color::Yellow));
+      if (!frame_.rejected_target->detail.empty()) {
+        content.push_back(paragraph(frame_.rejected_target->detail) | color(Color::Yellow));
+      }
     }
 
     std::ostringstream topics;
@@ -673,7 +714,8 @@ private:
       content.push_back(text("single-loop runtime") | dim);
     } else {
       std::vector<std::vector<std::string>> rows = {
-        {"worker", "Hz", "iterations", "miss", "consecutive", "skipped", "max solver ms"}};
+        {"worker", "Hz", "iterations", "miss", "consecutive", "skipped",
+         "recoverable rejects", "max solver ms"}};
       for (const auto & worker : frame_.workers) {
         rows.push_back({
           worker.label,
@@ -682,6 +724,7 @@ private:
           std::to_string(worker.deadline_miss_count),
           std::to_string(worker.consecutive_deadline_misses),
           std::to_string(worker.skipped_release_count),
+          std::to_string(worker.recoverable_rejection_count),
           formatFixed(worker.maximum_solver_ms, 3)});
       }
       content.push_back(renderTable(std::move(rows)));
@@ -884,6 +927,7 @@ private:
             {"deadline misses", std::to_string(worker.deadline_miss_count)},
             {"consecutive misses", std::to_string(worker.consecutive_deadline_misses)},
             {"skipped releases", std::to_string(worker.skipped_release_count)},
+            {"recoverable rejections", std::to_string(worker.recoverable_rejection_count)},
             {"maximum release lateness [ms]",
              formatFixed(worker.maximum_release_lateness_ms, 3)},
             {"maximum execution [ms]", formatFixed(worker.maximum_execution_ms, 3)},
@@ -897,6 +941,7 @@ private:
       } else {
         std::vector<std::vector<std::string>> rows = {
           {"worker", "Hz", "iterations", "miss", "consecutive", "skipped",
+           "recoverable rejects",
            "late max", "exec max", "finish max", "overrun max", "solver max"}};
         for (const auto & worker : frame_.workers) {
           rows.push_back({
@@ -906,6 +951,7 @@ private:
             std::to_string(worker.deadline_miss_count),
             std::to_string(worker.consecutive_deadline_misses),
             std::to_string(worker.skipped_release_count),
+            std::to_string(worker.recoverable_rejection_count),
             formatFixed(worker.maximum_release_lateness_ms, 3),
             formatFixed(worker.maximum_execution_ms, 3),
             formatFixed(worker.maximum_release_to_finish_ms, 3),
@@ -1119,6 +1165,12 @@ private:
       }
       return true;
     }
+    if (!source_.motion_input_enabled_ &&
+        (event == Event::ArrowUp || event == Event::ArrowDown))
+    {
+      source_.command_.status = source_.motion_input_disabled_status_;
+      return true;
+    }
     if (event == Event::ArrowUp) {
       adjustStep(source_.command_, source_.step_m_, source_.options_, kStepScale);
       return true;
@@ -1133,6 +1185,12 @@ private:
 
     const char key = static_cast<char>(std::tolower(
       static_cast<unsigned char>(event.character().front())));
+    const bool diagnostic_key =
+      (key >= '1' && key <= '5') || key == 'x' || key == 'h';
+    if (!source_.motion_input_enabled_ && !diagnostic_key) {
+      source_.command_.status = source_.motion_input_disabled_status_;
+      return true;
+    }
     switch (key) {
       case '1':
       case '2':
@@ -1324,6 +1382,11 @@ void TuiTeleopSource::setTargetPose(
 void TuiTeleopSource::setStatus(const std::string & status)
 {
   command_.status = status;
+}
+
+void TuiTeleopSource::setMotionInputEnabled(bool enabled, const std::string & status)
+{
+  impl_->setMotionInputEnabled(enabled, status);
 }
 
 void TuiTeleopSource::render(

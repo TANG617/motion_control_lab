@@ -69,9 +69,17 @@ struct PeriodicWorkerOptions
   DeadlinePolicy deadline_policy{DeadlinePolicy::Strict};
 };
 
+enum class WorkerIterationOutcome
+{
+  Accepted,
+  Idle,
+  RecoverableRejected,
+  FatalRejected,
+};
+
 struct WorkerIterationResult
 {
-  bool accepted{false};
+  WorkerIterationOutcome outcome{WorkerIterationOutcome::FatalRejected};
   std::uint64_t revision{0};
   double solve_time_ms{0.0};
   std::string detail;
@@ -98,6 +106,7 @@ struct PeriodicWorkerStatistics
   std::uint64_t deadline_miss_count{0};
   std::uint64_t consecutive_deadline_misses{0};
   std::uint64_t skipped_release_count{0};
+  std::uint64_t recoverable_rejection_count{0};
   double maximum_release_lateness_ms{0.0};
   double maximum_execution_ms{0.0};
   double maximum_release_to_finish_ms{0.0};
@@ -119,11 +128,13 @@ private:
     double overrun_ms,
     double solver_ms);
   void recordSkippedReleases(std::uint64_t count);
+  void recordRecoverableRejection();
 
   std::atomic<std::uint64_t> iteration_count_{0};
   std::atomic<std::uint64_t> deadline_miss_count_{0};
   std::atomic<std::uint64_t> consecutive_deadline_misses_{0};
   std::atomic<std::uint64_t> skipped_release_count_{0};
+  std::atomic<std::uint64_t> recoverable_rejection_count_{0};
   std::atomic<double> maximum_release_lateness_ms_{0.0};
   std::atomic<double> maximum_execution_ms_{0.0};
   std::atomic<double> maximum_release_to_finish_ms_{0.0};

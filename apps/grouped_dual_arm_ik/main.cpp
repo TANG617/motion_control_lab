@@ -41,14 +41,14 @@ constexpr const char * kProgramId = "mcl_grouped_dual_arm_ik";
 constexpr const char * kTitle = "Motion Control Grouped Dual-arm IK";
 constexpr double kMaximumAcceptedHardViolation = 5.0e-4;
 constexpr double kJointPositionLimitMarginRad = 1.0e-2;
-constexpr double kCartesianProgressWeight = 1000.0;
+constexpr double kCartesianProgressWeight = 3.0;
 constexpr double kRedProxQpAbsoluteTolerance = 1.0e-6;
-constexpr double kYellowPostureWeight = 10.0;
-constexpr double kYellowToRedCouplingWeight = 0.1;
+constexpr double kYellowPostureWeight = 1.0e-3;
+constexpr double kYellowToRedCouplingWeight = 10.0;
 constexpr double kMinimumCollisionDistanceM = 0.3;
 constexpr double kCollisionInfluenceDistanceM = 0.35;
 constexpr double kCollisionDampingGainPerS = 2.0;
-constexpr double kCollisionWeight = 10000.0;
+constexpr double kCollisionWeight = 100.0;
 bool operationSucceeded(const mcc::Status & status) { return status.ok(); }
 
 void requireOk(const mcc::Status & status, const std::string &)
@@ -100,6 +100,7 @@ struct TaskScaleSnapshot
 struct RedOutputSnapshot
 {
   std::uint64_t revision{0};
+  TargetSnapshot accepted_target;
   StateSnapshot state;
   mcc::Pose left_pose{mcc::Pose::Identity()};
   mcc::Pose right_pose{mcc::Pose::Identity()};
@@ -113,6 +114,21 @@ struct RedOutputSnapshot
   TaskScaleSnapshot left_scale;
   TaskScaleSnapshot right_scale;
   mcl::SolverDebug solver_debug;
+};
+
+enum class RedAttemptState
+{
+  Accepted,
+  RecoverableRejected,
+  FatalRejected,
+};
+
+struct RedAttemptSnapshot
+{
+  RedAttemptState state{RedAttemptState::Accepted};
+  TargetSnapshot target;
+  mcl::SolverDebug solver_debug;
+  std::string detail;
 };
 
 struct CartesianHandles
@@ -143,6 +159,10 @@ struct WorkerThreads
 
   void join()
   {
+    if (joined) {
+      return;
+    }
+    joined = true;
     stop_controller.requestStop();
     if (red.joinable()) {
       red.join();
@@ -155,7 +175,58 @@ struct WorkerThreads
   mcl::WorkerStopController & stop_controller;
   std::thread red;
   std::thread yellow;
+  bool joined{false};
 };
+
+std::vector<mcl::ArmTarget> armTargets(const TargetSnapshot & target)
+{
+  return {
+    {mcl::ArmSide::Left, target.left},
+    {mcl::ArmSide::Right, target.right},
+  };
+}
+
+TargetSnapshot targetSnapshot(
+  const std::vector<mcl::ArmTarget> & targets,
+  std::uint64_t revision)
+{
+  TargetSnapshot result;
+  result.revision = revision;
+  result.left = requireTarget(targets, mcl::ArmSide::Left).target_pose;
+  result.right = requireTarget(targets, mcl::ArmSide::Right).target_pose;
+  return result;
+}
+
+bool sameTargetPoses(
+  const TargetSnapshot & target,
+  const std::vector<mcl::ArmTarget> & command_targets)
+{
+  constexpr double kPoseComparisonTolerance = 1.0e-12;
+  return target.left.matrix().isApprox(
+           requireTarget(command_targets, mcl::ArmSide::Left).target_pose.matrix(),
+           kPoseComparisonTolerance) &&
+         target.right.matrix().isApprox(
+           requireTarget(command_targets, mcl::ArmSide::Right).target_pose.matrix(),
+           kPoseComparisonTolerance);
+}
+
+std::string faultSummary(const mcl::GroupedWorkerFault & fault)
+{
+  std::ostringstream summary;
+  summary << mcl::workerGroupName(fault.group) << ' '
+          << mcl::workerFailureName(fault.failure)
+          << " revision=" << fault.revision
+          << " release_lateness_ms=" << fault.release_lateness_ms
+          << " execution_ms=" << fault.execution_ms
+          << " release_to_finish_ms=" << fault.release_to_finish_ms
+          << " deadline_ms=" << fault.deadline_ms
+          << " overrun_ms=" << fault.overrun_ms
+          << " solver_ms=" << fault.solver_ms;
+  if (!fault.detail.empty()) {
+    summary << ' ' << fault.detail;
+  }
+  return summary.str();
+}
 
 mcc::RobotState robotState(const StateSnapshot & state)
 {
@@ -443,7 +514,7 @@ void fillSelfCollisionDebug(
   }
 }
 
-int run(int argc, char ** argv)
+int run(int argc, char ** argv, std::string & normal_exit_detail)
 {
   const auto options = mcl::parseGroupedInteractiveIkOptions(argc, argv);
   const auto & robot = mcl::r1RobotConfig();
@@ -505,9 +576,9 @@ int run(int argc, char ** argv)
   yellow_posture.enforcement = mcc::squaredL2Penalty(kYellowPostureWeight, 1);
   yellow_posture.reference_positions = initial_positions;
   yellow_posture.role = mcc::PostureTaskRole::Convergence;
-  requireOk(
-    builder.addPostureTask(mcc::SolverGroup::Yellow, yellow_posture, handles.yellow_posture),
-    "Failed to register Yellow initial-posture task");
+  // requireOk(
+  //   builder.addPostureTask(mcc::SolverGroup::Yellow, yellow_posture, handles.yellow_posture),
+  //   "Failed to register Yellow initial-posture task");
   mcc::SelfCollisionAvoidanceConfig collision_config;
   collision_config.minimum_distance_m = kMinimumCollisionDistanceM;
   collision_config.influence_distance_m = kCollisionInfluenceDistanceM;
@@ -540,6 +611,7 @@ int run(int argc, char ** argv)
   initial_target.right = requirePose(initial_fk.poses, robot.right_end_effector_frame).pose;
 
   RedOutputSnapshot initial_output;
+  initial_output.accepted_target = initial_target;
   initial_output.state = initial_state;
   initial_output.left_pose = initial_target.left;
   initial_output.right_pose = initial_target.right;
@@ -585,15 +657,21 @@ int run(int argc, char ** argv)
   }
   requireOk(solver.beginRun(2), "Failed to begin timed grouped run");
 
+  RedAttemptSnapshot initial_red_attempt;
+  initial_red_attempt.target = initial_target;
+  initial_red_attempt.solver_debug = initial_output.solver_debug;
+
   mcl::LatestValueMailbox<TargetSnapshot> target_to_red(initial_target);
   mcl::LatestValueMailbox<StateSnapshot> state_to_yellow(initial_state);
   mcl::LatestValueMailbox<RedOutputSnapshot> output_to_ui(initial_output);
+  mcl::LatestValueMailbox<RedAttemptSnapshot> red_attempt_to_ui(initial_red_attempt);
   mcl::LatestValueMailbox<mcl::SelfCollisionDebug> collision_to_ui(initial_collision_debug);
   mcl::LatestValueMailbox<mcl::SolverDebug> yellow_solver_to_ui(
     initial_yellow_solver_debug);
   target_to_red.publish(initial_target);
   state_to_yellow.publish(initial_state);
   output_to_ui.publish(initial_output);
+  red_attempt_to_ui.publish(initial_red_attempt);
   collision_to_ui.publish(initial_collision_debug);
   yellow_solver_to_ui.publish(initial_yellow_solver_debug);
 
@@ -635,12 +713,15 @@ int run(int argc, char ** argv)
               "Failed to query accepted Yellow self-collision diagnostics");
             fillSelfCollisionDebug(state, collision_diagnostics, collision_debug);
             collision_to_ui.publish(collision_debug);
-            mcl::updateSolverDebug(
-              solver_debug, diagnostics, solution.kinematics_solution.disposition);
-            yellow_solver_to_ui.publish(solver_debug);
           }
+          mcl::updateSolverDebug(
+            solver_debug, diagnostics,
+            accepted ? mcc::ResultDisposition::Accepted : mcc::ResultDisposition::Rejected);
+          yellow_solver_to_ui.publish(solver_debug);
           return mcl::WorkerIterationResult{
-            accepted, diagnostics.attempt_revision,
+            accepted ? mcl::WorkerIterationOutcome::Accepted
+                     : mcl::WorkerIterationOutcome::FatalRejected,
+            diagnostics.attempt_revision,
             diagnostics.kinematics.solve_time_ms,
             accepted ? std::string{} : rejectedAttemptDetail(status, diagnostics)};
         });
@@ -654,10 +735,22 @@ int run(int argc, char ** argv)
       initializeCartesianRequest(handles.red, robot.base_frame, request);
       mcc::GroupedInverseKinematicsSolution solution;
       mcc::GroupedInverseKinematicsDiagnostics diagnostics;
+      RedAttemptSnapshot attempt = initial_red_attempt;
+      std::optional<std::uint64_t> rejected_target_revision;
       mcl::runPeriodicWorker(
         {mcl::WorkerGroup::Red, options.red_rate_hz, options.deadline_policy}, stop_controller,
         fault, red_worker_diagnostics, [&](double, std::int64_t sample_time_ns) {
           target_to_red.readLatest(target);
+          if (rejected_target_revision.has_value() &&
+              target.revision == *rejected_target_revision)
+          {
+            return mcl::WorkerIterationResult{
+              mcl::WorkerIterationOutcome::Idle,
+              diagnostics.attempt_revision,
+              0.0,
+              {}};
+          }
+          rejected_target_revision.reset();
           request.captured_state = capturedState(state);
           addCartesianTargets(handles.red, target, request);
           const auto status =
@@ -671,6 +764,7 @@ int run(int argc, char ** argv)
             state_to_yellow.publish(state);
 
             output.revision = diagnostics.value_revision;
+            output.accepted_target = target;
             output.state = state;
             output.left_pose =
               requirePose(solution.kinematics_solution.solved_poses, robot.left_end_effector_frame)
@@ -685,9 +779,31 @@ int run(int argc, char ** argv)
             mcl::updateSolverDebug(
               output.solver_debug, diagnostics, solution.kinematics_solution.disposition);
             output_to_ui.publish(output);
+
+            attempt.state = RedAttemptState::Accepted;
+            attempt.target = target;
+            attempt.solver_debug = output.solver_debug;
+            attempt.detail.clear();
+            red_attempt_to_ui.publish(attempt);
+          } else {
+            attempt.state = status.code == mcc::StatusCode::Infeasible
+              ? RedAttemptState::RecoverableRejected
+              : RedAttemptState::FatalRejected;
+            attempt.target = target;
+            mcl::updateSolverDebug(
+              attempt.solver_debug, diagnostics, mcc::ResultDisposition::Rejected);
+            attempt.detail = rejectedAttemptDetail(status, diagnostics);
+            red_attempt_to_ui.publish(attempt);
+            if (attempt.state == RedAttemptState::RecoverableRejected) {
+              rejected_target_revision = target.revision;
+            }
           }
           return mcl::WorkerIterationResult{
-            accepted, diagnostics.attempt_revision,
+            accepted ? mcl::WorkerIterationOutcome::Accepted
+                     : status.code == mcc::StatusCode::Infeasible
+                       ? mcl::WorkerIterationOutcome::RecoverableRejected
+                       : mcl::WorkerIterationOutcome::FatalRejected,
+            diagnostics.attempt_revision,
             diagnostics.kinematics.solve_time_ms,
             accepted ? std::string{} : rejectedAttemptDetail(status, diagnostics)};
         });
@@ -695,12 +811,18 @@ int run(int argc, char ** argv)
 
     mcl::InteractiveScheduler ui_scheduler({options.ui_rate_hz, options.duration_s});
     TargetSnapshot published_target = initial_target;
+    TargetSnapshot last_command_target = initial_target;
     RedOutputSnapshot latest_output = initial_output;
+    RedAttemptSnapshot latest_red_attempt = initial_red_attempt;
     mcl::SelfCollisionDebug latest_collision_debug = initial_collision_debug;
     mcl::SolverDebug latest_yellow_solver_debug = initial_yellow_solver_debug;
+    std::optional<mcl::RejectedTargetDebug> rejected_target;
+    std::optional<RedAttemptSnapshot> last_recoverable_rejection;
+    std::optional<mcl::GroupedWorkerFault> held_fault;
+    std::uint64_t handled_rejected_target_revision = 0;
+    std::optional<mcl::IkRuntimeState> last_visualized_runtime_state;
+    std::uint64_t last_visualized_rejected_target_revision = 0;
     std::size_t publish_count = 0;
-    std::int64_t last_sample_time_ns = 0;
-    std::uint64_t last_emit_time_ns = 0;
     mcl::IkDebugFrame frame;
     frame.joint_names = joint_names;
     frame.positions = robot.default_positions;
@@ -712,20 +834,68 @@ int run(int argc, char ** argv)
     frame.solvers = {initial_output.solver_debug, initial_yellow_solver_debug};
     frame.self_collisions = {initial_collision_debug};
 
-    while (!stop_controller.stopRequested()) {
+    while (true) {
       const auto schedule = ui_scheduler.next();
       if (!schedule) {
         break;
       }
-      tui.poll();
+
       output_to_ui.readLatest(latest_output);
       collision_to_ui.readLatest(latest_collision_debug);
       yellow_solver_to_ui.readLatest(latest_yellow_solver_debug);
-      if (const auto reset_side = tui.consumeResetRequest()) {
-        tui.setTargetPose(
-          *reset_side,
-          *reset_side == mcl::ArmSide::Left ? latest_output.left_pose : latest_output.right_pose,
-          std::string{"Reset "} + mcl::armSideName(*reset_side) + " target from latest Red output");
+      if (red_attempt_to_ui.readLatest(latest_red_attempt)) {
+        if (latest_red_attempt.state == RedAttemptState::RecoverableRejected) {
+          last_recoverable_rejection = latest_red_attempt;
+          rejected_target = mcl::RejectedTargetDebug{
+            latest_red_attempt.target.revision,
+            armTargets(latest_red_attempt.target),
+            latest_red_attempt.detail};
+          if (latest_red_attempt.target.revision == published_target.revision &&
+              latest_red_attempt.target.revision != handled_rejected_target_revision)
+          {
+            handled_rejected_target_revision = latest_red_attempt.target.revision;
+            tui.setTargetPose(
+              mcl::ArmSide::Left, latest_output.accepted_target.left,
+              "Restoring last accepted Red target");
+            tui.setTargetPose(
+              mcl::ArmSide::Right, latest_output.accepted_target.right,
+              "Red target rejected; edit from the last accepted target to retry");
+            last_command_target = latest_output.accepted_target;
+          }
+        } else if (
+          latest_red_attempt.state == RedAttemptState::Accepted && rejected_target.has_value() &&
+          latest_red_attempt.target.revision > rejected_target->revision)
+        {
+          rejected_target.reset();
+          tui.setStatus("Red accepted the new target; grouped IK resumed");
+        } else if (latest_red_attempt.state == RedAttemptState::FatalRejected) {
+          rejected_target = mcl::RejectedTargetDebug{
+            latest_red_attempt.target.revision,
+            armTargets(latest_red_attempt.target),
+            latest_red_attempt.detail};
+        }
+      }
+
+      if (!held_fault.has_value()) {
+        if (const auto recorded_fault = fault.snapshot()) {
+          held_fault = *recorded_fault;
+          workers.join();
+          tui.setMotionInputEnabled(
+            false,
+            std::string{"FAULT HOLD: "} + mcl::workerGroupName(recorded_fault->group) + " " +
+              mcl::workerFailureName(recorded_fault->failure));
+        }
+      }
+
+      tui.poll();
+      if (!held_fault.has_value()) {
+        if (const auto reset_side = tui.consumeResetRequest()) {
+          tui.setTargetPose(
+            *reset_side,
+            *reset_side == mcl::ArmSide::Left ? latest_output.left_pose : latest_output.right_pose,
+            std::string{"Reset "} + mcl::armSideName(*reset_side) +
+              " target from latest Red output");
+        }
       }
       const auto & command = tui.command();
       if (command.stop_requested) {
@@ -733,10 +903,11 @@ int run(int argc, char ** argv)
       }
 
       if (schedule->update_due) {
-        if (!command.paused) {
-          published_target.revision++;
-          published_target.left = requireTarget(command.targets, mcl::ArmSide::Left).target_pose;
-          published_target.right = requireTarget(command.targets, mcl::ArmSide::Right).target_pose;
+        if (!held_fault.has_value() && !command.paused &&
+            !sameTargetPoses(last_command_target, command.targets))
+        {
+          published_target = targetSnapshot(command.targets, published_target.revision + 1);
+          last_command_target = published_target;
           target_to_red.publish(published_target);
         }
 
@@ -748,7 +919,7 @@ int run(int argc, char ** argv)
         frame.velocities = toStdVector(latest_output.state.velocities);
         const auto red_stats = red_worker_diagnostics.snapshot();
         const auto yellow_stats = yellow_worker_diagnostics.snapshot();
-        frame.solvers = {latest_output.solver_debug, latest_yellow_solver_debug};
+        frame.solvers = {latest_red_attempt.solver_debug, latest_yellow_solver_debug};
         frame.workers = {
           {"Red", options.red_rate_hz,
            red_stats.iteration_count,
@@ -759,7 +930,8 @@ int run(int argc, char ** argv)
            red_stats.maximum_execution_ms,
            red_stats.maximum_release_to_finish_ms,
            red_stats.maximum_overrun_ms,
-           red_stats.maximum_solver_ms},
+           red_stats.maximum_solver_ms,
+           red_stats.recoverable_rejection_count},
           {"Yellow", options.yellow_rate_hz,
            yellow_stats.iteration_count,
            yellow_stats.deadline_miss_count,
@@ -769,70 +941,86 @@ int run(int argc, char ** argv)
            yellow_stats.maximum_execution_ms,
            yellow_stats.maximum_release_to_finish_ms,
            yellow_stats.maximum_overrun_ms,
-           yellow_stats.maximum_solver_ms}};
-        frame.ik_status = fault.triggered()
-                            ? "fault " + taskScaleStatus(latest_output)
-                            : "running " + taskScaleStatus(latest_output) + " deadline_misses R=" +
-                                std::to_string(red_stats.deadline_miss_count) +
-                                " Y=" + std::to_string(yellow_stats.deadline_miss_count) +
-                                " skipped R=" + std::to_string(red_stats.skipped_release_count) +
-                                " Y=" + std::to_string(yellow_stats.skipped_release_count);
-        frame.iterations = latest_output.iterations;
-        frame.converged = latest_output.converged;
-        frame.solve_time_ms = latest_output.solve_time_ms;
+           yellow_stats.maximum_solver_ms,
+           yellow_stats.recoverable_rejection_count}};
+        if (held_fault.has_value()) {
+          frame.runtime_state = mcl::IkRuntimeState::FaultHold;
+          frame.ik_status = "fault hold " + taskScaleStatus(latest_output);
+          frame.status = faultSummary(*held_fault);
+        } else if (latest_red_attempt.state == RedAttemptState::RecoverableRejected) {
+          frame.runtime_state = mcl::IkRuntimeState::RecoverableReject;
+          frame.ik_status = "target rejected; output held " + taskScaleStatus(latest_output);
+          frame.status =
+            "Red target revision=" + std::to_string(latest_red_attempt.target.revision) +
+            " rejected as infeasible; edit from the last accepted target to retry";
+        } else {
+          frame.runtime_state = mcl::IkRuntimeState::Running;
+          frame.ik_status =
+            "running " + taskScaleStatus(latest_output) + " deadline_misses R=" +
+            std::to_string(red_stats.deadline_miss_count) +
+            " Y=" + std::to_string(yellow_stats.deadline_miss_count) +
+            " skipped R=" + std::to_string(red_stats.skipped_release_count) +
+            " Y=" + std::to_string(yellow_stats.skipped_release_count);
+          frame.status =
+            "Grouped IK running | skipped_releases R=" +
+            std::to_string(red_stats.skipped_release_count) +
+            " Y=" + std::to_string(yellow_stats.skipped_release_count) +
+            " recoverable_rejections R=" +
+            std::to_string(red_stats.recoverable_rejection_count);
+        }
+        frame.iterations = latest_red_attempt.solver_debug.ik_iterations;
+        frame.converged = latest_red_attempt.solver_debug.converged;
+        frame.solve_time_ms = latest_red_attempt.solver_debug.ik_solve_time_ms;
         frame.target_errors = {
           {mcl::ArmSide::Left, latest_output.left_position_error_m,
            latest_output.left_orientation_error_rad},
           {mcl::ArmSide::Right, latest_output.right_position_error_m,
            latest_output.right_orientation_error_rad}};
         frame.self_collisions = {latest_collision_debug};
-        frame.status =
-          "Grouped IK running | skipped_releases R=" +
-          std::to_string(red_stats.skipped_release_count) +
-          " Y=" + std::to_string(yellow_stats.skipped_release_count);
+        frame.rejected_target = rejected_target;
         frame.paused = command.paused;
         frame.selected_side = command.selected_side;
 
-        visualization_sink->write(mcl::makeIkVisualizationFrame(
-          frame, presentation, publish_count, schedule->sample_time_ns, schedule->emit_time_ns));
-        last_sample_time_ns = schedule->sample_time_ns;
-        last_emit_time_ns = schedule->emit_time_ns;
-        ++publish_count;
+        const std::uint64_t rejected_revision =
+          rejected_target.has_value() ? rejected_target->revision : 0;
+        const bool visualization_state_changed =
+          !last_visualized_runtime_state.has_value() ||
+          frame.runtime_state != *last_visualized_runtime_state ||
+          rejected_revision != last_visualized_rejected_target_revision;
+        if (frame.runtime_state == mcl::IkRuntimeState::Running || visualization_state_changed) {
+          visualization_sink->write(mcl::makeIkVisualizationFrame(
+            frame, presentation, publish_count, schedule->sample_time_ns, schedule->emit_time_ns));
+          last_visualized_runtime_state = frame.runtime_state;
+          last_visualized_rejected_target_revision = rejected_revision;
+          ++publish_count;
+        }
         tui.render(frame, publish_count, visualization_sink->status());
       }
       ui_scheduler.sleep();
     }
 
     workers.join();
-    if (const auto recorded_fault = fault.snapshot()) {
-      output_to_ui.readLatest(latest_output);
-      frame.positions = toStdVector(latest_output.state.positions);
-      frame.velocities = toStdVector(latest_output.state.velocities);
-      frame.forward_kinematics = {
-        {mcl::ArmSide::Left, latest_output.left_pose},
-        {mcl::ArmSide::Right, latest_output.right_pose}};
-      frame.solvers = {latest_output.solver_debug, latest_yellow_solver_debug};
-      frame.ik_status = "fault";
-      frame.status =
-        std::string{mcl::workerGroupName(recorded_fault->group)} + " " +
-        mcl::workerFailureName(recorded_fault->failure) +
-        " revision=" + std::to_string(recorded_fault->revision) +
-        " release_lateness_ms=" + std::to_string(recorded_fault->release_lateness_ms) +
-        " execution_ms=" + std::to_string(recorded_fault->execution_ms) +
-        " release_to_finish_ms=" + std::to_string(recorded_fault->release_to_finish_ms) +
-        " deadline_ms=" + std::to_string(recorded_fault->deadline_ms) +
-        " overrun_ms=" + std::to_string(recorded_fault->overrun_ms) +
-        " solver_ms=" + std::to_string(recorded_fault->solver_ms) +
-        (recorded_fault->detail.empty() ? "" : " " + recorded_fault->detail);
-      visualization_sink->write(mcl::makeIkVisualizationFrame(
-        frame, presentation, publish_count, last_sample_time_ns, last_emit_time_ns));
-      std::cerr << kProgramId << ": " << frame.status << "\n";
-    }
-
+    const auto recorded_fault = held_fault.has_value() ? held_fault : fault.snapshot();
     visualization_sink->flush();
     visualization_sink->close();
 
-  return fault.triggered() ? EXIT_FAILURE : EXIT_SUCCESS;
+  if (recorded_fault.has_value()) {
+    throw std::runtime_error(faultSummary(*recorded_fault));
+  }
+  const auto red_stats = red_worker_diagnostics.snapshot();
+  if (red_stats.recoverable_rejection_count > 0) {
+    std::ostringstream detail;
+    detail << "recoverable_rejections=" << red_stats.recoverable_rejection_count;
+    if (last_recoverable_rejection.has_value()) {
+      detail << " last_rejected_target_revision="
+             << last_recoverable_rejection->target.revision;
+      if (!last_recoverable_rejection->detail.empty()) {
+        detail << " last_rejection=" << last_recoverable_rejection->detail;
+      }
+    }
+    normal_exit_detail = detail.str();
+  }
+  return EXIT_SUCCESS;
 }
 
 }  // namespace
@@ -840,7 +1028,14 @@ int run(int argc, char ** argv)
 int main(int argc, char ** argv)
 {
   try {
-    return run(argc, argv);
+    std::string normal_exit_detail;
+    const int exit_code = run(argc, argv, normal_exit_detail);
+    std::cerr << kProgramId << ": exited normally";
+    if (!normal_exit_detail.empty()) {
+      std::cerr << ' ' << normal_exit_detail;
+    }
+    std::cerr << '\n';
+    return exit_code;
   } catch (const std::exception & error) {
     std::cerr << kProgramId << ": " << error.what() << '\n';
     return EXIT_FAILURE;

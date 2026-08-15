@@ -15,7 +15,7 @@ namespace
 
 constexpr std::string_view kExpectedException = "intentional TUI exception";
 
-int run(bool throw_after_render)
+int run(bool throw_after_render, bool fault_hold)
 {
   namespace mcl = motion_control_lab;
 
@@ -91,9 +91,25 @@ int run(bool throw_after_render)
   collision.pairs = {{"left_arm_link4", "body_link4", 0.062, 0.067, true}};
   frame.self_collisions = {collision};
 
+  if (fault_hold) {
+    frame.runtime_state = mcl::IkRuntimeState::RecoverableReject;
+    auto rejected_targets = frame.targets;
+    rejected_targets[0].target_pose.translation().x() += 0.050;
+    frame.rejected_target = mcl::RejectedTargetDebug{
+      42, std::move(rejected_targets), "QP is primal infeasible (test)"};
+    frame.workers.front().recoverable_rejection_count = 2;
+    frame.status = "Red target revision=42 rejected as infeasible";
+  }
+
   tui.render(frame, 1U, "test sink");
   if (throw_after_render) {
     throw std::runtime_error(std::string(kExpectedException));
+  }
+  if (fault_hold) {
+    frame.runtime_state = mcl::IkRuntimeState::FaultHold;
+    frame.status = "Red deadline miss revision=42";
+    tui.setMotionInputEnabled(false, "FAULT HOLD: Red deadline miss");
+    tui.render(frame, 2U, "test sink");
   }
 
   const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
@@ -105,17 +121,20 @@ int run(bool throw_after_render)
   }
 
   const auto & command = tui.command();
-  if (!command.stop_requested || !command.paused ||
-      command.selected_side != mcl::ArmSide::Right || command.targets.size() != 2U) {
+  if (!command.stop_requested || command.selected_side != mcl::ArmSide::Right ||
+      command.targets.size() != 2U || command.paused == fault_hold) {
     return EXIT_FAILURE;
   }
 
   const auto & left = command.targets[0].target_pose.translation();
   const auto & right = command.targets[1].target_pose.translation();
   constexpr double kTolerance = 1e-12;
-  if (std::abs(left.x() - 0.005) > kTolerance ||
-      std::abs(right.y() + 0.010) > kTolerance ||
-      std::abs(right.z() - 0.020) > kTolerance) {
+  const double expected_left_x = fault_hold ? 0.0 : 0.005;
+  const double expected_right_y = fault_hold ? 0.0 : -0.010;
+  const double expected_right_z = fault_hold ? 0.0 : 0.020;
+  if (std::abs(left.x() - expected_left_x) > kTolerance ||
+      std::abs(right.y() - expected_right_y) > kTolerance ||
+      std::abs(right.z() - expected_right_z) > kTolerance) {
     return EXIT_FAILURE;
   }
   return EXIT_SUCCESS;
@@ -127,8 +146,9 @@ int main(int argc, char ** argv)
 {
   const bool throw_after_render =
     argc == 2 && std::string_view(argv[1]) == "--throw-after-render";
+  const bool fault_hold = argc == 2 && std::string_view(argv[1]) == "--fault-hold";
   try {
-    return run(throw_after_render);
+    return run(throw_after_render, fault_hold);
   } catch (const std::exception & error) {
     std::cerr << "test_tui_console: " << error.what() << '\n';
     return EXIT_FAILURE;
