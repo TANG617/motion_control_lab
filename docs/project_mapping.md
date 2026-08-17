@@ -11,16 +11,17 @@ planned。
 | Canonical data | `data/canonical/`；MCAP/CSV 现在经相同 typed contracts 与 timeline 消费，正式 dataset promotion 仍 planned |
 | Definition format | `contracts/definitions/experiment.v1.schema.json` + 每个实验的 `definition.json` |
 | Definition validator | `tests/validate_contracts.py definition` |
-| Experiment executor | `e01_placo_smoke` 与可选 `e04_opensot_smoke` 执行同一 R1 左臂位置任务；E02 由 `mcl_dual_arm_replay_ik` 执行 PSI R1 双臂 canonical replay |
+| Experiment executor | `e01_placo_smoke` 与可选 `e04_opensot_smoke` 执行同一 R1 左臂位置任务；E02 由 `mcl_servo_step replay` 执行 PSI R1 双臂 canonical replay |
 | Execution adapter | `adapters/execution/` 中的 append-only artifact store、manifest writer 与通用 dependency provenance |
 | Physical source | `adapters/data/source/` 中平级的 `McapSource` / `CsvSource`；只处理物理格式 |
 | Typed decoder | `adapters/data/decoder/` 中的 registry、ROS2 CDR Pose/JointState 和 CSV mapping decoder |
 | Temporal projector | `adapters/data/temporal/` 中的 timestamp selection、严格时间校验、immutable Timeline、projection 与 ReplayClock |
 | Semantic projector | `adapters/data/projection/dual_arm_timeline.*`；只消费两个 `TypedStream<StampedPose>` |
 | Replay plan | `mcl_replay_plan`；预加载输入并输出 timeline trace/manifest，不运行 solver |
-| MCC interactive apps | `apps/single_arm_ik/` 使用 `RedOnly`；`apps/dual_arm_ik_servo_step/`、`apps/dual_arm_ik_target_solve/` 各自拥有完整的 `KinematicsSolver` topology 和配置；`apps/grouped_dual_arm_ik/` 固定使用 Red/Yellow |
+| MCC interactive apps | `apps/single_arm_servo_step/` 使用 `RedOnly`；`apps/servo_step/`、`apps/target_solve/` 各自拥有完整的 `KinematicsSolver` topology 和配置；`apps/grouped_servo_step/` 与 `apps/planned_grouped_servo_step/` 各自拥有完整 Red/Yellow topology |
 | Cartesian planning preview | `apps/cartesian_planning/` 读取版本化 JSON，调用 Core `CartesianPlanner`，输出 CSV/PNG 并循环发布 Foxglove；不加载 robot model 或调用 IK |
-| Interactive support | `adapters/interactive/` 提供 CLI、基于 vendored FTXUI 的 TUI、wall-clock scheduler、SPSC latest mailbox、periodic worker/Fault 和 Viz helpers |
+| Interactive support | `adapters/interactive/` 提供 CLI、独立 TUI console/presentation、source-mode controls、wall-clock scheduler、SPSC latest mailbox、periodic worker/Fault 和 Viz helpers |
+| Replay support | `adapters/replay/` 提供 solver-agnostic timeline loader、ReplayClock、provenance 与 v2 artifact mechanics；solver loop 与失败语义仍由 app 拥有 |
 | IK visualization contract | `contracts/visualization/foxglove_ik.v1.json` + `foxglove_ik_v1.hpp` 固定五条 Foxglove topic，并要求 FK 与同帧 joint state 一致 |
 | Solver A/B runner | planned；需要时由正式 Experiment 的 canonical timeline 单独设计，不预留交互 backend 接口 |
 | Interactive preview | 独立 app topology + 共享 interactive support；E02 的 Foxglove sink 是只观察 canonical replay 的可选输出，不替换 ReplayClock |
@@ -85,10 +86,12 @@ Starting/Running/Fault 属于 Lab 外层，不进入 MCC。Lab 的 deadline poli
 `strict` 和用于非实时主机交互调试的 `monitor`；后者保留统计并跳过过期 release，但不会放宽
 rejected attempt 或 worker exception。
 
-当前 grouped app 的 Red 使用双手 Hard position/orientation task。Yellow 使用固定 initial pose 的
-Soft posture task（weight 10）和 10 对 curated R1 link pair 的 Soft self-collision requirement
-（minimum/influence distance 0.02/0.07 m，gain 20 s^-1，weight 1）。Yellow→Red coupling weight
-为 1，两组 joint position/velocity limits 均为 Hard。collision margin 是诊断，不构成硬安全授权。
+当前两个 grouped app 的 Red 使用双手 scaled Hard position/orientation task。Yellow 使用 4 对
+app-local R1 link pair 的 Soft self-collision requirement（minimum/influence distance
+0.30/0.35 m，gain 2 s^-1，weight 100），当前不注册 posture task。Yellow→Red coupling weight
+为 10。raw grouped 的 Red 是 Hard position/velocity、Yellow 仅 Hard position；planned grouped
+额外为 Red 注册 PSI R1 acceleration limits，Yellow 仍仅 position。collision margin 是诊断，
+不构成硬安全授权。
 
 每个 app 显式拥有自己的 task topology、solver config、typed handles 和状态更新；相同配置也不
 跨 app 合并。它们只共享 R1 固定参数、终端/TUI 初始化、wall-clock 调度、frame 映射和 sink 创建。正式实验的 `dt`
@@ -120,11 +123,10 @@ frame，最后 projection。`fixed-period` 仅将第 `i` 帧标为 `i * period_n
 interpolation/resampling，也不会补齐缺失的左/右样本；unmatched 事实在 retime 前已经
 成为 error 或 diagnostics。
 
-`mcl_replay_plan` 与 `mcl_dual_arm_replay_ik` 在启动 clock 前完整读取和解码输入。
-后者的 realtime 路径使用 absolute monotonic deadline 并记录 lateness/miss；batch 不
-sleep。E02 的可选 Foxglove sink 在等待阶段先发布初始帧，空格 gate 结束后才建立 replay
-clock 原点，因此人工等待不计入 lateness。Viz 只消费 solver 输出，不推进 timeline 或修改
-算法 `dt`。现有 interactive preview 仍使用 TUI/Viz 和 interactive scheduler，服务人工调试，
-不是 canonical replay 或证据执行器。所有 IK preview/replay 的 topic 与 FK 数据一致性遵循
+`mcl_replay_plan` 与三个 ServoStep app 的 replay 子命令在启动 clock 前完整读取和解码输入。
+realtime 使用独立于 solver rate 的 projected target timeline；solver 消费 latest target，未消费
+的旧帧计入 dropped counter。TUI pause 只冻结 timeline，solver/planner 继续跟踪当前 goal；
+resume 重置 clock 原点以避免追赶暂停期间的 deadline。Viz 只消费 solver 输出，不推进 timeline
+或修改算法 `dt`。所有 IK preview/replay 的 topic 与 FK 数据一致性遵循
 [`foxglove_ik_visualization_contract.md`](./foxglove_ik_visualization_contract.md)。E01/E04 的
 R1 smoke 语义和输入由 pair contract 固定。

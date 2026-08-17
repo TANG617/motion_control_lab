@@ -1,8 +1,4 @@
-#define MCL_DUAL_ARM_IK_TARGET_SOLVE_TESTING
-#include "../apps/dual_arm_ik_target_solve/main.cpp"
-
-#include "placo/problem/qp_error.h"
-
+#define MCL_TARGET_SOLVE_TESTING
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
@@ -10,6 +6,9 @@
 #include <stdexcept>
 #include <string>
 #include <vector>
+
+#include "../apps/target_solve/main.cpp"
+#include "placo/problem/qp_error.h"
 
 namespace
 {
@@ -27,22 +26,19 @@ const motion_control_lab::Pose & poseForSide(
 {
   const auto found = std::find_if(
     poses.begin(), poses.end(),
-    [side](const motion_control_lab::ArmForwardKinematics & pose) {
-      return pose.side == side;
-    });
+    [side](const motion_control_lab::ArmForwardKinematics & pose) { return pose.side == side; });
   require(found != poses.end(), "missing arm FK");
   return found->pose;
 }
 
 bool isTargetTerminationReason(const std::string & reason)
 {
-  return reason == "converged" || reason == "no-progress" ||
-         reason == "soft-time-budget" || reason == "iteration-budget";
+  return reason == "converged" || reason == "no-progress" || reason == "soft-time-budget" ||
+         reason == "iteration-budget";
 }
 
 void validatePositionLimits(
-  const TargetSolveResult & result,
-  placo::model::RobotWrapper & model,
+  const TargetSolveResult & result, placo::model::RobotWrapper & model,
   const motion_control_lab::R1RobotConfig & robot)
 {
   require(result.positions.size() == robot.joint_names.size(), "position size mismatch");
@@ -51,43 +47,43 @@ void validatePositionLimits(
     const auto position_limits = model.get_joint_limits(robot.joint_names[index]);
     require(
       result.positions[index] >= position_limits.first + kJointPositionMargin - 1.0e-8 &&
-      result.positions[index] <= position_limits.second - kJointPositionMargin + 1.0e-8,
+        result.positions[index] <= position_limits.second - kJointPositionMargin + 1.0e-8,
       robot.joint_names[index] + " violated its position limit margin");
     require(result.velocities[index] == 0.0, "TargetSolve output velocity must be zero");
   }
 }
 
-template<typename Solver>
+template <typename Solver>
 void exerciseTargetSolver(
-  Solver & solver,
-  placo::model::RobotWrapper & model,
-  const motion_control_lab::R1RobotConfig & robot,
-  const std::string & expected_label,
+  Solver & solver, placo::model::RobotWrapper & model,
+  const motion_control_lab::R1RobotConfig & robot, const std::string & expected_label,
   const std::string & expected_backend)
 {
   std::vector<motion_control_lab::ArmTarget> targets{
-    {motion_control_lab::ArmSide::Left,
-     solver.currentPose(motion_control_lab::ArmSide::Left)},
-    {motion_control_lab::ArmSide::Right,
-     solver.currentPose(motion_control_lab::ArmSide::Right)}};
+    {motion_control_lab::ArmSide::Left, solver.currentPose(motion_control_lab::ArmSide::Left)},
+    {motion_control_lab::ArmSide::Right, solver.currentPose(motion_control_lab::ArmSide::Right)}};
 
   const auto initial = solver.solve(targets);
   require(initial.accepted, "initial target was not accepted");
   require(initial.solver_debug.label == expected_label, "unexpected solver label");
   require(initial.solver_debug.backend == expected_backend, "unexpected QP backend");
-  require(initial.iterations >= 1 && initial.iterations <= kMaximumIterations,
-          "initial target iteration count is invalid");
-  require(isTargetTerminationReason(initial.solver_debug.termination_reason),
-          "initial target has an invalid termination reason");
+  require(
+    initial.iterations >= 1 && initial.iterations <= kMaximumIterations,
+    "initial target iteration count is invalid");
+  require(
+    isTargetTerminationReason(initial.solver_debug.termination_reason),
+    "initial target has an invalid termination reason");
   validatePositionLimits(initial, model, robot);
 
   targets.front().target_pose.translation().x() += 0.005;
   const auto stepped = solver.solve(targets);
   require(stepped.accepted, "5 mm target was not accepted");
-  require(stepped.iterations >= 1 && stepped.iterations <= kMaximumIterations,
-          "5 mm target iteration count is invalid");
-  require(isTargetTerminationReason(stepped.solver_debug.termination_reason),
-          "5 mm target has an invalid termination reason");
+  require(
+    stepped.iterations >= 1 && stepped.iterations <= kMaximumIterations,
+    "5 mm target iteration count is invalid");
+  require(
+    isTargetTerminationReason(stepped.solver_debug.termination_reason),
+    "5 mm target has an invalid termination reason");
   require(stepped.solve_time_ms >= 0.0, "solve time must be non-negative");
   require(stepped.target_errors.size() == 2U, "missing Cartesian errors");
   for (const auto & error : stepped.target_errors) {
@@ -98,29 +94,27 @@ void exerciseTargetSolver(
   validatePositionLimits(stepped, model, robot);
   require(
     poseForSide(stepped.forward_kinematics, motion_control_lab::ArmSide::Left)
-    .matrix().isApprox(
-      solver.currentPose(motion_control_lab::ArmSide::Left).matrix(), 1.0e-10),
+      .matrix()
+      .isApprox(solver.currentPose(motion_control_lab::ArmSide::Left).matrix(), 1.0e-10),
     "left FK is not coherent with accepted state");
   require(
     poseForSide(stepped.forward_kinematics, motion_control_lab::ArmSide::Right)
-    .matrix().isApprox(
-      solver.currentPose(motion_control_lab::ArmSide::Right).matrix(), 1.0e-10),
+      .matrix()
+      .isApprox(solver.currentPose(motion_control_lab::ArmSide::Right).matrix(), 1.0e-10),
     "right FK is not coherent with accepted state");
 }
 
 void validateMccInfeasibleHold(MccTargetSolver & solver)
 {
   std::vector<motion_control_lab::ArmTarget> targets{
-    {motion_control_lab::ArmSide::Left,
-     solver.currentPose(motion_control_lab::ArmSide::Left)},
-    {motion_control_lab::ArmSide::Right,
-     solver.currentPose(motion_control_lab::ArmSide::Right)}};
+    {motion_control_lab::ArmSide::Left, solver.currentPose(motion_control_lab::ArmSide::Left)},
+    {motion_control_lab::ArmSide::Right, solver.currentPose(motion_control_lab::ArmSide::Right)}};
   targets.front().target_pose.translation().x() += 100.0;
   const auto accepted_positions = solver.positions();
   const auto rejected = solver.solve(targets);
   require(!rejected.accepted, "MCC did not reject the infeasible target");
-  require(solver.positions() == accepted_positions,
-          "MCC changed accepted state after infeasible target");
+  require(
+    solver.positions() == accepted_positions, "MCC changed accepted state after infeasible target");
 }
 
 }  // namespace
@@ -136,34 +130,34 @@ int main(int argc, char ** argv)
 
     placo::model::RobotWrapper limit_model(
       options.urdf_path,
-      placo::model::RobotWrapper::IGNORE_COLLISIONS |
-      placo::model::RobotWrapper::IGNORE_GEOMETRY);
+      placo::model::RobotWrapper::IGNORE_COLLISIONS | placo::model::RobotWrapper::IGNORE_GEOMETRY);
     MccTargetSolver mcc_proxqp_solver(options, robot, MccBackend::Proxqp);
     MccTargetSolver mcc_eiquadprog_solver(options, robot, MccBackend::Eiquadprog);
     PlacoTargetSolver placo_solver(options, robot);
     require(
-      mcc_proxqp_solver.currentPose(motion_control_lab::ArmSide::Left).matrix().isApprox(
-        placo_solver.currentPose(motion_control_lab::ArmSide::Left).matrix(), 1.0e-6),
+      mcc_proxqp_solver.currentPose(motion_control_lab::ArmSide::Left)
+        .matrix()
+        .isApprox(placo_solver.currentPose(motion_control_lab::ArmSide::Left).matrix(), 1.0e-6),
       "MCC/ProxQP and PlaCo left initial FK differ");
     require(
-      mcc_proxqp_solver.currentPose(motion_control_lab::ArmSide::Right).matrix().isApprox(
-        placo_solver.currentPose(motion_control_lab::ArmSide::Right).matrix(), 1.0e-6),
+      mcc_proxqp_solver.currentPose(motion_control_lab::ArmSide::Right)
+        .matrix()
+        .isApprox(placo_solver.currentPose(motion_control_lab::ArmSide::Right).matrix(), 1.0e-6),
       "MCC/ProxQP and PlaCo right initial FK differ");
     require(
-      mcc_eiquadprog_solver.currentPose(motion_control_lab::ArmSide::Left).matrix().isApprox(
-        placo_solver.currentPose(motion_control_lab::ArmSide::Left).matrix(), 1.0e-6),
+      mcc_eiquadprog_solver.currentPose(motion_control_lab::ArmSide::Left)
+        .matrix()
+        .isApprox(placo_solver.currentPose(motion_control_lab::ArmSide::Left).matrix(), 1.0e-6),
       "MCC/eiquadprog and PlaCo left initial FK differ");
     require(
-      mcc_eiquadprog_solver.currentPose(motion_control_lab::ArmSide::Right).matrix().isApprox(
-        placo_solver.currentPose(motion_control_lab::ArmSide::Right).matrix(), 1.0e-6),
+      mcc_eiquadprog_solver.currentPose(motion_control_lab::ArmSide::Right)
+        .matrix()
+        .isApprox(placo_solver.currentPose(motion_control_lab::ArmSide::Right).matrix(), 1.0e-6),
       "MCC/eiquadprog and PlaCo right initial FK differ");
 
-    exerciseTargetSolver(
-      mcc_proxqp_solver, limit_model, robot, "MCC/ProxQP", "proxqp");
-    exerciseTargetSolver(
-      mcc_eiquadprog_solver, limit_model, robot, "MCC/eiquadprog", "eiquadprog");
-    exerciseTargetSolver(
-      placo_solver, limit_model, robot, "PlaCo/eiquadprog", "eiquadprog");
+    exerciseTargetSolver(mcc_proxqp_solver, limit_model, robot, "MCC/ProxQP", "proxqp");
+    exerciseTargetSolver(mcc_eiquadprog_solver, limit_model, robot, "MCC/eiquadprog", "eiquadprog");
+    exerciseTargetSolver(placo_solver, limit_model, robot, "PlaCo/eiquadprog", "eiquadprog");
 
     validateMccInfeasibleHold(mcc_proxqp_solver);
     validateMccInfeasibleHold(mcc_eiquadprog_solver);

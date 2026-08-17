@@ -1,8 +1,8 @@
-#include "apps/dual_arm_replay_ik/replay_ik_engine.hpp"
 #include "contracts/data/data_error.hpp"
 #include "contracts/visualization/foxglove_ik_v1.hpp"
 #include "e03_build_config.hpp"
 #include "experiments/E03_psi_r1_dual_arm_motion_library_replay_ik/src/batch_replay.hpp"
+#include "experiments/E03_psi_r1_dual_arm_motion_library_replay_ik/src/legacy_replay/replay_ik_engine.hpp"
 #include "motion_control_lab/run_artifacts.hpp"
 #include "motion_control_lab/sha256.hpp"
 
@@ -136,7 +136,8 @@ BatchOptions parseOptions(int argc, char ** argv)
       result.run_id = requireValue();
       if (!isSafeIdentifier(*result.run_id)) {
         throw std::runtime_error(
-          "--run-id must contain only letters, digits, dot, underscore, or hyphen");
+          "--run-id must contain only letters, digits, "
+          "dot, underscore, or hyphen");
       }
     } else if (argument == "--visualize") {
       result.visualize = true;
@@ -259,7 +260,7 @@ Json::Value isometryJson(const Eigen::Isometry3d & value)
 
 Json::Value actionManifestJson(
   const e03::ActionSnapshot & snapshot, const e03::ActionExecutionRecord & record,
-  const replay::ReplayOptions & replay_options, const replay::ReplayIkCaseResult * result,
+  const replay::LegacyReplayIkOptions & replay_options, const replay::ReplayIkCaseResult * result,
   const std::string & trace_sha256, const std::string & status_sha256)
 {
   Json::Value manifest;
@@ -279,8 +280,7 @@ Json::Value actionManifestJson(
   manifest["streams"]["right_pose"] = replay_options.right_stream;
   manifest["timestamp"]["source"] = mcl::data::toString(replay_options.timestamp_source);
   manifest["timestamp"]["pairing_policy"] = mcl::data::toString(replay_options.pairing_policy);
-  manifest["timestamp"]["nearest_tolerance_ns"] =
-    Json::Int64(replay_options.nearest_tolerance_ns);
+  manifest["timestamp"]["nearest_tolerance_ns"] = Json::Int64(replay_options.nearest_tolerance_ns);
   manifest["timestamp"]["unmatched_policy"] = mcl::data::toString(replay_options.unmatched_policy);
   manifest["execution"]["state_policy"] = replay::toString(replay_options.state_policy);
   manifest["execution"]["servo_period_ns"] = Json::Int64(replay_options.servo_period_ns);
@@ -366,11 +366,11 @@ std::string dataErrorStage(mcl::data::DataErrorCode code)
   }
 }
 
-replay::ReplayOptions makeReplayOptions(
+replay::LegacyReplayIkOptions makeReplayOptions(
   const BatchOptions & batch, const e03::ActionSnapshot & action,
   const std::filesystem::path & action_output)
 {
-  replay::ReplayOptions result;
+  replay::LegacyReplayIkOptions result;
   result.urdf_path = batch.urdf_path;
   result.input_path = action.path;
   result.input_format = replay::InputFormat::Mcap;
@@ -384,7 +384,7 @@ replay::ReplayOptions makeReplayOptions(
   result.execution_mode =
     batch.visualize ? mcl::data::ExecutionMode::Realtime : mcl::data::ExecutionMode::Batch;
   result.playback_rate = batch.playback_rate;
-  result.state_policy = replay::StatePolicy::PreviousSolution;
+  result.state_policy = replay::LegacyStatePolicy::PreviousSolution;
   result.servo_period_ns = 10'000'000;
   result.output_dir = action_output;
   return result;
@@ -399,8 +399,10 @@ std::string actionSummaryCsv(
     snapshots.emplace(action.action_id, &action);
   }
   std::ostringstream output;
-  output << "action_id,file_name,size_bytes,sha256,status,failure_stage,failure_code,"
-            "failure_frame,frames_planned,frames_attempted,frames_accepted,frames_rejected,"
+  output << "action_id,file_name,size_bytes,sha256,status,failure_stage,failure_"
+            "code,"
+            "failure_frame,frames_planned,frames_attempted,frames_accepted,frames_"
+            "rejected,"
             "solve_acceptance_ratio,left_input,right_input,matched,unmatched_left,"
             "unmatched_right,maximum_pair_delta_ns\n";
   output << std::setprecision(17);
@@ -709,7 +711,8 @@ int execute(const BatchOptions & options)
   const std::string definition_sha256 = mcl::sha256_file(definition_path);
   if (definition_sha256 != std::string(mcl::e03::build_config::kDefinitionSha256)) {
     throw std::runtime_error(
-      "E03 definition changed after configuration; rerun CMake before replay");
+      "E03 definition changed after configuration; "
+      "rerun CMake before replay");
   }
   const Json::Value experiment_definition = mcl::load_json_file(definition_path);
   const std::string run_id = options.run_id.value_or(mcl::make_run_id(definition_sha256));
@@ -782,7 +785,7 @@ int execute(const BatchOptions & options)
     batch_failure_code = "visualization_unavailable";
     batch_failure_message =
       "--visualize is unavailable in this build; configure with "
-      "-DMCL_BUILD_DUAL_ARM_REPLAY_VISUALIZATION=ON";
+      "-DMCL_BUILD_E03_REPLAY_VISUALIZATION=ON";
   }
 #endif
 

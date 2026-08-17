@@ -63,10 +63,14 @@ def main() -> int:
         str(free_port()),
         "--no-mcap",
     ]
+    if os.path.basename(executable) == "mcl_servo_step":
+        command.insert(1, "teleop")
+    option_index = 2 if len(command) > 1 and command[1] == "teleop" else 1
     if requested_solver != "default":
-        command[1:1] = ["--solver", requested_solver]
+        command[option_index:option_index] = ["--solver", requested_solver]
+        option_index += 2
     if requested_backend != "default":
-        command[1:1] = ["--backend", requested_backend]
+        command[option_index:option_index] = ["--backend", requested_backend]
 
     master_fd, slave_fd = pty.openpty()
     fcntl.ioctl(slave_fd, termios.TIOCSWINSZ, struct.pack("HHHH", 45, 180, 0, 0))

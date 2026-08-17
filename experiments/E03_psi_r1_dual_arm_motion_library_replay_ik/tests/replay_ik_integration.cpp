@@ -1,3 +1,7 @@
+#include <json/json.h>
+#include <sys/wait.h>
+#include <unistd.h>
+
 #include <algorithm>
 #include <array>
 #include <chrono>
@@ -6,15 +10,12 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
-#include <json/json.h>
 #include <mcap/writer.hpp>
 #include <stdexcept>
 #include <string>
-#include <sys/wait.h>
-#include <unistd.h>
 #include <vector>
 
-#include "apps/dual_arm_replay_ik/replay_ik_engine.hpp"
+#include "experiments/E03_psi_r1_dual_arm_motion_library_replay_ik/src/legacy_replay/replay_ik_engine.hpp"
 
 namespace replay = motion_control_lab::replay;
 namespace data = motion_control_lab::data;
@@ -205,15 +206,14 @@ Json::Value loadJson(const std::filesystem::path & path)
   Json::CharReaderBuilder builder;
   Json::Value result;
   std::string errors;
-  require(Json::parseFromStream(builder, input, &result, &errors), "failed to parse action manifest");
+  require(
+    Json::parseFromStream(builder, input, &result, &errors), "failed to parse action manifest");
   return result;
 }
 
 void verifyBatchActionManifest(
-  const std::filesystem::path & executable,
-  const std::filesystem::path & urdf,
-  const std::filesystem::path & library,
-  const std::filesystem::path & output_root)
+  const std::filesystem::path & executable, const std::filesystem::path & urdf,
+  const std::filesystem::path & library, const std::filesystem::path & output_root)
 {
   const std::string executable_string = executable.string();
   const std::string urdf_string = urdf.string();
@@ -223,11 +223,9 @@ void verifyBatchActionManifest(
   require(child >= 0, "failed to fork E03 batch runner");
   if (child == 0) {
     ::execl(
-      executable_string.c_str(), executable_string.c_str(),
-      "--urdf", urdf_string.c_str(),
-      "--library-dir", library_string.c_str(),
-      "--output-root", output_string.c_str(),
-      "--run-id", "manifest-contract", static_cast<char *>(nullptr));
+      executable_string.c_str(), executable_string.c_str(), "--urdf", urdf_string.c_str(),
+      "--library-dir", library_string.c_str(), "--output-root", output_string.c_str(), "--run-id",
+      "manifest-contract", static_cast<char *>(nullptr));
     ::_exit(127);
   }
 
@@ -238,8 +236,7 @@ void verifyBatchActionManifest(
   require(WEXITSTATUS(status) != 0, "unreachable E03 action unexpectedly succeeded");
 
   const auto manifest = loadJson(
-    output_root / "manifest-contract" / "arms" / "mcc_red_only" /
-    "unreachable" / "manifest.json");
+    output_root / "manifest-contract" / "arms" / "mcc_red_only" / "unreachable" / "manifest.json");
   require(
     manifest["streams"]["joint_states"].asString() == "/mc/ik/joint_states" &&
       manifest["streams"]["left_pose"].asString() == "/mc/ik/target/left_pose" &&
@@ -266,7 +263,7 @@ int main(int argc, char ** argv)
   const auto input = temporary.path() / "unreachable.mcap";
   writeSyntheticAction(input);
 
-  replay::ReplayOptions options;
+  replay::LegacyReplayIkOptions options;
   options.urdf_path = argv[1];
   options.input_path = input;
   options.left_stream = "/mc/ik/target/left_pose";
@@ -277,7 +274,7 @@ int main(int argc, char ** argv)
   options.nearest_tolerance_ns = 5'000'000;
   options.unmatched_policy = data::UnmatchedPolicy::Error;
   options.execution_mode = data::ExecutionMode::Batch;
-  options.state_policy = replay::StatePolicy::PreviousSolution;
+  options.state_policy = replay::LegacyStatePolicy::PreviousSolution;
   options.servo_period_ns = 10'000'000;
 
   replay::ReplayIkExecutionConfig execution;
@@ -304,7 +301,8 @@ int main(int argc, char ** argv)
       std::all_of(
         first_visualized_velocities.begin(), first_visualized_velocities.end(),
         [](double velocity) { return velocity == 0.0; }),
-    "recorded JointState velocity must not replace the zero initial velocity contract");
+    "recorded JointState velocity must not replace the zero initial "
+    "velocity contract");
   require(
     static_cast<std::size_t>(std::count(result.trace_csv.begin(), result.trace_csv.end(), '\n')) ==
       2,
@@ -314,7 +312,8 @@ int main(int argc, char ** argv)
   const auto second_result = replay::executeReplayIkCase(options, execution);
   require(
     visualization_sequences == std::vector<std::uint64_t>{0, 1, 2, 3},
-    "action boundaries must publish a new initial frame with global monotonic sequence");
+    "action boundaries must publish a new initial frame with global "
+    "monotonic sequence");
   require(
     second_result.next_visualization_sequence == 4,
     "visualization sequence cursor must advance across actions");

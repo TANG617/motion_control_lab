@@ -1,16 +1,16 @@
 #pragma once
 
-#include "adapters/data/projection/dual_arm_timeline.hpp"
-#include "adapters/data/source/data_source.hpp"
-#include "adapters/data/temporal/replay_clock.hpp"
-#include "contracts/data/joint_state_sample.hpp"
+#include <json/json.h>
 
 #include <cstdint>
 #include <filesystem>
 #include <optional>
 #include <string>
 
-#include <json/json.h>
+#include "adapters/data/projection/dual_arm_timeline.hpp"
+#include "adapters/data/source/data_source.hpp"
+#include "adapters/data/temporal/replay_clock.hpp"
+#include "contracts/data/joint_state_sample.hpp"
 
 namespace motion_control_lab::replay
 {
@@ -19,12 +19,6 @@ enum class InputFormat
 {
   Mcap,
   Csv
-};
-
-enum class StatePolicy
-{
-  PreviousSolution,
-  FixedInitialState
 };
 
 struct ReplayOptions
@@ -39,22 +33,36 @@ struct ReplayOptions
   std::optional<std::filesystem::path> csv_mapping_path;
   data::TimestampSource timestamp_source{data::TimestampSource::HeaderStamp};
   data::TimestampProjectionConfig timestamp_projection;
+  std::int64_t target_period_ns{};
   data::PairingPolicy pairing_policy{data::PairingPolicy::Exact};
   std::int64_t nearest_tolerance_ns{};
   data::UnmatchedPolicy unmatched_policy{data::UnmatchedPolicy::Error};
   data::ExecutionMode execution_mode{data::ExecutionMode::Batch};
   double playback_rate{1.0};
-  StatePolicy state_policy{StatePolicy::PreviousSolution};
-  std::int64_t servo_period_ns{10'000'000};
   std::filesystem::path output_dir{"dual_arm_replay_output"};
   bool output_dir_explicit{};
   std::optional<std::filesystem::path> output_root;
   std::optional<std::string> run_id;
-  bool visualize{};
+  std::string ui_mode{"tui"};
   std::string visualization_host{"127.0.0.1"};
   std::uint16_t visualization_port{8765};
-  bool record_visualization_mcap{};
-  bool wait_for_space{};
+  std::optional<std::filesystem::path> visualization_mcap_path;
+};
+
+struct ReplayExecutionMetadata
+{
+  std::string app;
+  std::string topology;
+  std::string solver;
+  std::string backend;
+  double rate_hz{};
+  double red_rate_hz{};
+  double yellow_rate_hz{};
+  std::size_t consumed_frame_count{};
+  std::size_t dropped_frame_count{};
+  std::size_t accepted_count{};
+  std::size_t rejected_count{};
+  std::size_t deadline_miss_count{};
 };
 
 struct LoadedReplay
@@ -71,8 +79,6 @@ struct LoadedReplay
 ReplayOptions parseReplayOptions(int argc, char ** argv, bool require_urdf);
 std::string replayHelp(const std::string & program, bool include_urdf);
 std::string toString(InputFormat format);
-std::string toString(StatePolicy policy);
-
 LoadedReplay loadReplay(const ReplayOptions & options);
 
 void createOutputDirectory(const std::filesystem::path & output_dir);
@@ -80,13 +86,11 @@ void writeTextFile(const std::filesystem::path & path, const std::string & conte
 std::string csvEscape(const std::string & value);
 std::string optionalTimestamp(const std::optional<std::int64_t> & value);
 Json::Value makeReplayManifest(
-  const ReplayOptions & options,
-  const LoadedReplay & loaded,
-  std::size_t deadline_miss_count,
-  std::size_t accepted_count,
-  const std::string & trace_sha256);
-void writeReplayPlanArtifacts(
-  const ReplayOptions & options,
-  const LoadedReplay & loaded);
+  const ReplayOptions & options, const LoadedReplay & loaded,
+  const ReplayExecutionMetadata & execution, const std::string & trace_sha256);
+Json::Value makeReplayStatus(
+  const LoadedReplay & loaded, const ReplayExecutionMetadata & execution, const std::string & state,
+  const std::string & error = {});
+void writeReplayPlanArtifacts(const ReplayOptions & options, const LoadedReplay & loaded);
 
 }  // namespace motion_control_lab::replay

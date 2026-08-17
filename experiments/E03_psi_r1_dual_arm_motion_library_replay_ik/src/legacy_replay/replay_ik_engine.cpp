@@ -1,4 +1,4 @@
-#include "apps/dual_arm_replay_ik/replay_ik_engine.hpp"
+#include "experiments/E03_psi_r1_dual_arm_motion_library_replay_ik/src/legacy_replay/replay_ik_engine.hpp"
 
 #include <Eigen/Core>
 #include <algorithm>
@@ -104,8 +104,7 @@ EndEffectorFk computeEndEffectorFk(
     return *found;
   };
   return {
-    findPose(robot.left_end_effector_frame).pose,
-    findPose(robot.right_end_effector_frame).pose};
+    findPose(robot.left_end_effector_frame).pose, findPose(robot.right_end_effector_frame).pose};
 }
 
 ReplayIkVisualizationSample makeVisualizationSample(
@@ -162,10 +161,17 @@ bool ReplayIkCaseResult::completed() const
   return frames_attempted == frames_planned && rejected_solves == 0;
 }
 
+std::string toString(LegacyStatePolicy policy)
+{
+  return policy == LegacyStatePolicy::PreviousSolution ? "previous_solution"
+                                                       : "fixed_initial_state";
+}
+
 std::string replayIkTraceHeader()
 {
   return "sequence,original_logical_timestamp_ns,source_time_from_start_ns,"
-         "projected_timestamp_ns,scheduled_monotonic_time_ns,actual_solve_start_ns,"
+         "projected_timestamp_ns,scheduled_monotonic_time_ns,actual_solve_"
+         "start_ns,"
          "actual_solve_end_ns,lateness_ns,deadline_missed,"
          "left_header_stamp_ns,left_log_time_ns,left_publish_time_ns,"
          "right_header_stamp_ns,right_log_time_ns,right_publish_time_ns,"
@@ -173,7 +179,7 @@ std::string replayIkTraceHeader()
 }
 
 ReplayIkCaseResult executeReplayIkCase(
-  const ReplayOptions & options, const ReplayIkExecutionConfig & execution_config)
+  const LegacyReplayIkOptions & options, const ReplayIkExecutionConfig & execution_config)
 {
   ReplayIkCaseResult result;
   result.next_visualization_sequence = execution_config.first_visualization_sequence;
@@ -223,7 +229,8 @@ ReplayIkCaseResult executeReplayIkCase(
   mcc::GroupedOrientationTaskHandle left_orientation;
   requireOk(
     builder.addOrientationTask(
-      mcc::SolverGroup::Red, robot.left_end_effector_frame, left_orientation_config, left_orientation),
+      mcc::SolverGroup::Red, robot.left_end_effector_frame, left_orientation_config,
+      left_orientation),
     "failed to add left orientation task");
 
   mcc::PositionTaskConfig right_position_config;
@@ -241,7 +248,8 @@ ReplayIkCaseResult executeReplayIkCase(
   mcc::GroupedOrientationTaskHandle right_orientation;
   requireOk(
     builder.addOrientationTask(
-      mcc::SolverGroup::Red, robot.right_end_effector_frame, right_orientation_config, right_orientation),
+      mcc::SolverGroup::Red, robot.right_end_effector_frame, right_orientation_config,
+      right_orientation),
     "failed to add right orientation task");
 
   mcc::JointPositionLimitConfig position_limit_config;
@@ -312,9 +320,9 @@ ReplayIkCaseResult executeReplayIkCase(
     result.deadline_misses += deadline_missed ? 1U : 0U;
 
     const auto & state_positions =
-      options.state_policy == StatePolicy::PreviousSolution ? positions : fixed_positions;
+      options.state_policy == LegacyStatePolicy::PreviousSolution ? positions : fixed_positions;
     const auto & state_velocities =
-      options.state_policy == StatePolicy::PreviousSolution ? velocities : fixed_velocities;
+      options.state_policy == LegacyStatePolicy::PreviousSolution ? velocities : fixed_velocities;
     mcc::GroupedInverseKinematicsRequest request;
     request.reference_frame_name = frame.value.left.frame_id;
     request.captured_state.state = makeState(state_positions, state_velocities);
@@ -346,7 +354,7 @@ ReplayIkCaseResult executeReplayIkCase(
       output_positions = toVector(solution.kinematics_solution.joint_positions);
       output_velocities = toVector(solution.kinematics_solution.joint_velocities);
       ++result.accepted_solves;
-      if (options.state_policy == StatePolicy::PreviousSolution) {
+      if (options.state_policy == LegacyStatePolicy::PreviousSolution) {
         positions = output_positions;
         velocities = output_velocities;
       }

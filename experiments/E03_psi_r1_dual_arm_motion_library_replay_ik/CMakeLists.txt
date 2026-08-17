@@ -28,10 +28,10 @@ target_link_libraries(
   mcl_e03_batch_replay_ik
   PRIVATE
     motion_control_lab::e03_batch_support
-    motion_control_lab::replay_ik_engine
+    motion_control_lab::e03_legacy_replay_ik_engine
 )
 
-if(MCL_BUILD_DUAL_ARM_REPLAY_VISUALIZATION)
+if(MCL_BUILD_E03_REPLAY_VISUALIZATION)
   if(NOT TARGET motion_control_viz::foxglove_sink)
     message(
       FATAL_ERROR
@@ -76,7 +76,7 @@ if(BUILD_TESTING)
   )
   target_link_libraries(
     test_e03_replay_ik_integration
-    PRIVATE motion_control_lab::replay_ik_engine
+    PRIVATE motion_control_lab::e03_legacy_replay_ik_engine
   )
   add_test(
     NAME experiments.e03_replay_ik_integration

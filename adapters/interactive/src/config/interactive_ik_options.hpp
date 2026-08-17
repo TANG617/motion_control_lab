@@ -10,6 +10,12 @@
 namespace motion_control_lab
 {
 
+enum class UiMode
+{
+  Tui,
+  None,
+};
+
 struct TuiTeleopOptions
 {
   std::string side{"left"};
@@ -31,6 +37,7 @@ struct InteractiveIkOptions
   std::string urdf_path;
   double rate_hz{100.0};
   double duration_s{0.0};
+  UiMode ui{UiMode::Tui};
   TuiTeleopOptions tui;
   VisualizationSinkOptions visualization;
 };
@@ -43,6 +50,7 @@ struct GroupedInteractiveIkOptions
   double ui_rate_hz{100.0};
   DeadlinePolicy deadline_policy{DeadlinePolicy::Strict};
   double duration_s{0.0};
+  UiMode ui{UiMode::Tui};
   TuiTeleopOptions tui;
   VisualizationSinkOptions visualization;
 };
@@ -54,5 +62,7 @@ InteractiveIkOptions parseInteractiveIkOptions(int argc, char ** argv);
 void printGroupedInteractiveIkUsage(const char * program);
 
 GroupedInteractiveIkOptions parseGroupedInteractiveIkOptions(int argc, char ** argv);
+
+const char * uiModeName(UiMode mode);
 
 }  // namespace motion_control_lab

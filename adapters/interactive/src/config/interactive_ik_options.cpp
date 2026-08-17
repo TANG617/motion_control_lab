@@ -1,11 +1,11 @@
 #include "config/interactive_ik_options.hpp"
 
-#include "config/constants.hpp"
-
 #include <cmath>
 #include <cstdlib>
 #include <iostream>
 #include <stdexcept>
+
+#include "config/constants.hpp"
 
 namespace motion_control_lab
 {
@@ -38,41 +38,55 @@ std::string parseSide(const std::string & value)
   throw std::runtime_error("side must be either 'left' or 'right'");
 }
 
+UiMode parseUiMode(const std::string & value)
+{
+  if (value == "tui") {
+    return UiMode::Tui;
+  }
+  if (value == "none") {
+    return UiMode::None;
+  }
+  throw std::runtime_error("ui must be either 'tui' or 'none'");
+}
+
 void printTuiControls()
 {
-  std::cout
-    << "TUI controls:\n"
-    << "  1..5/F1..F5/Tab: Overview, Solver/QP, Joints, Runtime, Events\n"
-    << "  PageUp/PageDown/Home/End: scroll the current page\n"
-    << "  w/s: +x/-x, a/d: +y/-y, q/e: +z/-z\n"
-    << "  n: cycle TCP rotation axis, i: clockwise, u: counter-clockwise\n"
-    << "  left/right arrows: switch arm when the app controls both arms\n"
-    << "  up/down arrows: double/halve step size\n"
-    << "  m: enter step size, r: reset target from current FK\n"
-    << "  space: pause/resume publishing, h: show/hide help, x or Esc: exit\n";
+  std::cout << "TUI controls:\n"
+            << "  1..5/F1..F5/Tab: Overview, Solver/QP, Joints, Runtime, Events\n"
+            << "  PageUp/PageDown/Home/End: scroll the current page\n"
+            << "  w/s: +x/-x, a/d: +y/-y, q/e: +z/-z\n"
+            << "  n: cycle TCP rotation axis, i: clockwise, u: counter-clockwise\n"
+            << "  left/right arrows: switch arm when the app controls both arms\n"
+            << "  up/down arrows: double/halve step size\n"
+            << "  m: enter step size, r: reset target from current FK\n"
+            << "  space: pause/resume publishing, h: show/hide help, x or Esc: "
+               "exit\n";
 }
 
 }  // namespace
 
 void printInteractiveIkUsage(const char * program)
 {
-  std::cout
-    << "Usage: " << program << " [options]\n\n"
-    << "Options:\n"
-    << "  --side <left|right> Initial/selected arm side (default: left)\n"
-    << "  --urdf <path>       Robot URDF path (or $" << kUrdfEnvironmentVariable << ")\n"
-    << "  --host <address>    WebSocket bind address (default: 127.0.0.1)\n"
-    << "  --port <port>       WebSocket port (default: 8765)\n"
-    << "  --rate <hz>         IK and publish rate in Hz (default: 20)\n"
-    << "  --duration <sec>    Stop after seconds; 0 runs until Ctrl-C (default: 0)\n"
-    << "  --step-m <meters>   Cartesian increment per keypress (default: 0.01)\n"
-    << "  --min-step-m <m>    Minimum step size (default: 0.001)\n"
-    << "  --max-step-m <m>    Maximum step size (default: 0.1)\n"
-    << "  --rotation-step-deg <deg>\n"
-    << "                      TCP local-axis rotation step (default: 5)\n"
-    << "  --mcap <path>       Write MCAP output to path when Foxglove is enabled\n"
-    << "  --no-mcap           Disable MCAP output (default)\n"
-    << "  --help              Show this help text\n\n";
+  std::cout << "Usage: " << program << " [options]\n\n"
+            << "Options:\n"
+            << "  --side <left|right> Initial/selected arm side (default: left)\n"
+            << "  --urdf <path>       Robot URDF path (or $" << kUrdfEnvironmentVariable << ")\n"
+            << "  --host <address>    WebSocket bind address (default: 127.0.0.1)\n"
+            << "  --port <port>       WebSocket port (default: 8765)\n"
+            << "  --rate <hz>         IK and publish rate in Hz (default: 20)\n"
+            << "  --ui <tui|none>     User interface mode (default: tui)\n"
+            << "  --duration <sec>    Stop after seconds; 0 runs until Ctrl-C "
+               "(default: 0)\n"
+            << "  --step-m <meters>   Cartesian increment per keypress (default: "
+               "0.01)\n"
+            << "  --min-step-m <m>    Minimum step size (default: 0.001)\n"
+            << "  --max-step-m <m>    Maximum step size (default: 0.1)\n"
+            << "  --rotation-step-deg <deg>\n"
+            << "                      TCP local-axis rotation step (default: 5)\n"
+            << "  --mcap <path>       Write MCAP output to path when Foxglove is "
+               "enabled\n"
+            << "  --no-mcap           Disable MCAP output (default)\n"
+            << "  --help              Show this help text\n\n";
   printTuiControls();
 }
 
@@ -104,6 +118,8 @@ InteractiveIkOptions parseInteractiveIkOptions(int argc, char ** argv)
       options.visualization.port = parsePort(requireValue(arg));
     } else if (arg == "--rate") {
       options.rate_hz = parsePositiveDouble("rate", requireValue(arg));
+    } else if (arg == "--ui") {
+      options.ui = parseUiMode(requireValue(arg));
     } else if (arg == "--duration") {
       const double duration = std::stod(requireValue(arg));
       if (duration < 0.0 || !std::isfinite(duration)) {
@@ -129,40 +145,43 @@ InteractiveIkOptions parseInteractiveIkOptions(int argc, char ** argv)
   if (options.tui.max_step_m < options.tui.min_step_m) {
     throw std::runtime_error("--max-step-m must be greater than or equal to --min-step-m");
   }
-  if (options.tui.step_m < options.tui.min_step_m ||
-      options.tui.step_m > options.tui.max_step_m) {
+  if (options.tui.step_m < options.tui.min_step_m || options.tui.step_m > options.tui.max_step_m) {
     throw std::runtime_error("--step-m must be inside [--min-step-m, --max-step-m]");
   }
   if (options.urdf_path.empty()) {
     throw std::runtime_error(
-            std::string{"--urdf is required unless "} +
-            kUrdfEnvironmentVariable + " is set");
+      std::string{"--urdf is required unless "} + kUrdfEnvironmentVariable + " is set");
   }
   return options;
 }
 
 void printGroupedInteractiveIkUsage(const char * program)
 {
-  std::cout
-    << "Usage: " << program << " [options]\n\n"
-    << "Options:\n"
-    << "  --side <left|right> Initial selected arm side (default: left)\n"
-    << "  --urdf <path>       Robot URDF path (or $" << kUrdfEnvironmentVariable << ")\n"
-    << "  --host <address>    WebSocket bind address (default: 127.0.0.1)\n"
-    << "  --port <port>       WebSocket port (default: 8765)\n"
-    << "  --red-rate <hz>     Red servo rate/deadline (default: 1000)\n"
-    << "  --yellow-rate <hz>  Yellow proposal rate/deadline (default: 100)\n"
-    << "  --ui-rate <hz>      TUI and visualization rate (default: 20)\n"
-    << "  --deadline-policy <strict|monitor>  Deadline handling (default: strict)\n"
-    << "  --duration <sec>    Stop after seconds; 0 runs until Ctrl-C (default: 0)\n"
-    << "  --step-m <meters>   Cartesian increment per keypress (default: 0.01)\n"
-    << "  --min-step-m <m>    Minimum step size (default: 0.001)\n"
-    << "  --max-step-m <m>    Maximum step size (default: 0.1)\n"
-    << "  --rotation-step-deg <deg> TCP rotation step (default: 5)\n"
-    << "  --mcap <path>       Write MCAP from the UI thread when Foxglove is enabled\n"
-    << "  --no-mcap           Disable MCAP output (default)\n"
-    << "  --help              Show this help text\n\n"
-    << "Rates must satisfy red > yellow > 0. Each group period is its deadline.\n\n";
+  std::cout << "Usage: " << program << " [options]\n\n"
+            << "Options:\n"
+            << "  --side <left|right> Initial selected arm side (default: left)\n"
+            << "  --urdf <path>       Robot URDF path (or $" << kUrdfEnvironmentVariable << ")\n"
+            << "  --host <address>    WebSocket bind address (default: 127.0.0.1)\n"
+            << "  --port <port>       WebSocket port (default: 8765)\n"
+            << "  --red-rate <hz>     Red servo rate/deadline (default: 1000)\n"
+            << "  --yellow-rate <hz>  Yellow proposal rate/deadline (default: 100)\n"
+            << "  --ui-rate <hz>      TUI and visualization rate (default: 20)\n"
+            << "  --ui <tui|none>     User interface mode (default: tui)\n"
+            << "  --deadline-policy <strict|monitor>  Deadline handling (default: "
+               "strict)\n"
+            << "  --duration <sec>    Stop after seconds; 0 runs until Ctrl-C "
+               "(default: 0)\n"
+            << "  --step-m <meters>   Cartesian increment per keypress (default: "
+               "0.01)\n"
+            << "  --min-step-m <m>    Minimum step size (default: 0.001)\n"
+            << "  --max-step-m <m>    Maximum step size (default: 0.1)\n"
+            << "  --rotation-step-deg <deg> TCP rotation step (default: 5)\n"
+            << "  --mcap <path>       Write MCAP from the UI thread when Foxglove is "
+               "enabled\n"
+            << "  --no-mcap           Disable MCAP output (default)\n"
+            << "  --help              Show this help text\n\n"
+            << "Rates must satisfy red > yellow > 0. Each group period is its "
+               "deadline.\n\n";
   printTuiControls();
 }
 
@@ -198,6 +217,8 @@ GroupedInteractiveIkOptions parseGroupedInteractiveIkOptions(int argc, char ** a
       options.yellow_rate_hz = parsePositiveDouble("yellow rate", requireValue(arg));
     } else if (arg == "--ui-rate") {
       options.ui_rate_hz = parsePositiveDouble("UI rate", requireValue(arg));
+    } else if (arg == "--ui") {
+      options.ui = parseUiMode(requireValue(arg));
     } else if (arg == "--deadline-policy") {
       const std::string value = requireValue(arg);
       if (value == "strict") {
@@ -205,8 +226,7 @@ GroupedInteractiveIkOptions parseGroupedInteractiveIkOptions(int argc, char ** a
       } else if (value == "monitor") {
         options.deadline_policy = DeadlinePolicy::Monitor;
       } else {
-        throw std::runtime_error(
-                "--deadline-policy must be either 'strict' or 'monitor'");
+        throw std::runtime_error("--deadline-policy must be either 'strict' or 'monitor'");
       }
     } else if (arg == "--duration") {
       const double duration = std::stod(requireValue(arg));
@@ -237,17 +257,16 @@ GroupedInteractiveIkOptions parseGroupedInteractiveIkOptions(int argc, char ** a
   if (options.tui.max_step_m < options.tui.min_step_m) {
     throw std::runtime_error("--max-step-m must be greater than or equal to --min-step-m");
   }
-  if (options.tui.step_m < options.tui.min_step_m ||
-      options.tui.step_m > options.tui.max_step_m)
-  {
+  if (options.tui.step_m < options.tui.min_step_m || options.tui.step_m > options.tui.max_step_m) {
     throw std::runtime_error("--step-m must be inside [--min-step-m, --max-step-m]");
   }
   if (options.urdf_path.empty()) {
     throw std::runtime_error(
-            std::string{"--urdf is required unless "} +
-            kUrdfEnvironmentVariable + " is set");
+      std::string{"--urdf is required unless "} + kUrdfEnvironmentVariable + " is set");
   }
   return options;
 }
+
+const char * uiModeName(UiMode mode) { return mode == UiMode::Tui ? "tui" : "none"; }
 
 }  // namespace motion_control_lab

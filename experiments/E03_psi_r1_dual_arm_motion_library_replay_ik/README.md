@@ -35,7 +35,7 @@ For continuous Foxglove playback, configure visualization support and add `--vis
 
 ```bash
 cmake -S . -B /workspace/build/motion_control_lab \
-  -DMCL_BUILD_DUAL_ARM_REPLAY_VISUALIZATION=ON \
+  -DMCL_BUILD_E03_REPLAY_VISUALIZATION=ON \
   -DCMAKE_PREFIX_PATH="/workspace/install/motion_control_core;/workspace/install/motion_control_viz"
 cmake --build /workspace/build/motion_control_lab --target mcl_e03_batch_replay_ik -j8
 

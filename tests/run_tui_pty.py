@@ -15,11 +15,12 @@ def main() -> int:
     if len(sys.argv) not in (2, 3):
         raise RuntimeError(
             "usage: run_tui_pty.py <test-executable> "
-            "[--expect-exception|--fault-hold]"
+            "[--expect-exception|--fault-hold|--replay]"
         )
     expect_exception = len(sys.argv) == 3 and sys.argv[2] == "--expect-exception"
     fault_hold = len(sys.argv) == 3 and sys.argv[2] == "--fault-hold"
-    if len(sys.argv) == 3 and not (expect_exception or fault_hold):
+    replay_controls = len(sys.argv) == 3 and sys.argv[2] == "--replay"
+    if len(sys.argv) == 3 and not (expect_exception or fault_hold or replay_controls):
         raise RuntimeError(f"unknown argument: {sys.argv[2]}")
 
     master_fd, slave_fd = pty.openpty()
@@ -32,6 +33,8 @@ def main() -> int:
         command.append("--throw-after-render")
     elif fault_hold:
         command.append("--fault-hold")
+    elif replay_controls:
+        command.append("--replay")
     process = subprocess.Popen(
         command,
         stdin=slave_fd,
@@ -55,7 +58,20 @@ def main() -> int:
             ready_elapsed = (
                 time.monotonic() - ui_ready_at if ui_ready_at is not None else 0.0
             )
-            if fault_hold and action_index == 0 and ready_elapsed >= 0.12:
+            if replay_controls and action_index == 0 and ready_elapsed >= 0.12:
+                # Cartesian edit is disabled; arm selection and pause remain active.
+                os.write(master_fd, b"w\x1b[C ")
+                action_index += 1
+            elif replay_controls and action_index == 1 and ready_elapsed >= 0.32:
+                os.write(master_fd, b".")
+                action_index += 1
+            elif replay_controls and action_index == 2 and ready_elapsed >= 0.52:
+                os.write(master_fd, b"2")
+                action_index += 1
+            elif replay_controls and action_index == 3 and ready_elapsed >= 0.72:
+                os.write(master_fd, b"q")
+                action_index += 1
+            elif fault_hold and action_index == 0 and ready_elapsed >= 0.12:
                 # Motion/reset/pause/step controls must be ignored. Arm selection,
                 # Runtime page navigation, and exit remain available.
                 os.write(master_fd, b"w\x1b[C\x1b[Am0.020\rr i4")
@@ -148,6 +164,21 @@ def main() -> int:
                     "expected failure text after alternate-screen restoration "
                     f"(exit={return_code}, restore={restore_index}, "
                     f"message={message_index})\n"
+                )
+                return 1
+            return 0
+
+        if replay_controls:
+            expected_markers = (b"Replay timeline paused", b"Replay single-frame")
+            missing_markers = [
+                marker for marker in expected_markers if marker not in output
+            ]
+            if missing_markers or return_code != 0:
+                sys.stderr.buffer.write(output)
+                sys.stderr.write(
+                    "replay-control TUI validation failed: "
+                    + ", ".join(marker.decode() for marker in missing_markers)
+                    + f" (exit={return_code})\n"
                 )
                 return 1
             return 0

@@ -1,15 +1,14 @@
 #pragma once
 
-#include "runtime/rolling_percentiles.hpp"
-
 #include <Eigen/Geometry>
-
 #include <cstddef>
 #include <cstdint>
 #include <optional>
 #include <stdexcept>
 #include <string>
 #include <vector>
+
+#include "runtime/rolling_percentiles.hpp"
 
 namespace motion_control_lab
 {
@@ -23,10 +22,7 @@ enum class ArmSide
   Right,
 };
 
-inline const char * armSideName(ArmSide side)
-{
-  return side == ArmSide::Left ? "left" : "right";
-}
+inline const char * armSideName(ArmSide side) { return side == ArmSide::Left ? "left" : "right"; }
 
 inline ArmSide parseArmSide(const std::string & side)
 {
@@ -197,6 +193,25 @@ struct RejectedTargetDebug
   std::string detail;
 };
 
+struct PlannedArmDebug
+{
+  ArmSide side{ArmSide::Left};
+  Pose source_goal{Pose::Identity()};
+  Pose reference{Pose::Identity()};
+  Pose forward_kinematics{Pose::Identity()};
+  Eigen::Matrix<double, 6, 1> reference_twist{Eigen::Matrix<double, 6, 1>::Zero()};
+  Eigen::Matrix<double, 6, 1> reference_acceleration{Eigen::Matrix<double, 6, 1>::Zero()};
+  double tracking_position_error_m{0.0};
+  double tracking_orientation_error_rad{0.0};
+};
+
+struct CartesianPlannerDebug
+{
+  std::string state{"idle"};
+  double sample_time_s{0.0};
+  std::vector<PlannedArmDebug> arms;
+};
+
 struct ArmPresentation
 {
   ArmSide side{ArmSide::Left};
@@ -213,8 +228,7 @@ struct InteractiveIkPresentation
 };
 
 inline const ArmPresentation * findArmPresentation(
-  const InteractiveIkPresentation & presentation,
-  ArmSide side)
+  const InteractiveIkPresentation & presentation, ArmSide side)
 {
   for (const auto & arm : presentation.arms) {
     if (arm.side == side) {
@@ -251,6 +265,7 @@ struct IkDebugFrame
   std::vector<CpuAffinityDebug> cpu_affinities;
   std::vector<SelfCollisionDebug> self_collisions;
   std::optional<RejectedTargetDebug> rejected_target;
+  std::optional<CartesianPlannerDebug> cartesian_planner;
   std::string status{"Ready"};
   IkRuntimeState runtime_state{IkRuntimeState::Running};
   bool paused{false};

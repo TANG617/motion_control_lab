@@ -1,4 +1,13 @@
-#include "apps/dual_arm_replay_ik/replay_support.hpp"
+#include "adapters/replay/replay_support.hpp"
+
+#include <algorithm>
+#include <cctype>
+#include <cmath>
+#include <fstream>
+#include <iomanip>
+#include <memory>
+#include <sstream>
+#include <utility>
 
 #include "adapters/data/decoder/csv_pose_decoder.hpp"
 #include "adapters/data/decoder/decode_stream.hpp"
@@ -7,15 +16,6 @@
 #include "adapters/data/source/csv_source.hpp"
 #include "adapters/data/source/mcap_source.hpp"
 #include "motion_control_lab/sha256.hpp"
-
-#include <algorithm>
-#include <cmath>
-#include <cctype>
-#include <fstream>
-#include <iomanip>
-#include <memory>
-#include <sstream>
-#include <utility>
 
 namespace motion_control_lab::replay
 {
@@ -33,21 +33,7 @@ InputFormat parseInputFormat(const std::string & value)
   throw data::DataError(data::DataErrorCode::InvalidArgument, "unknown input format: " + value);
 }
 
-StatePolicy parseStatePolicy(const std::string & value)
-{
-  if (value == "previous_solution") {
-    return StatePolicy::PreviousSolution;
-  }
-  if (value == "fixed_initial_state") {
-    return StatePolicy::FixedInitialState;
-  }
-  throw data::DataError(data::DataErrorCode::InvalidArgument, "unknown state policy: " + value);
-}
-
-double parseDouble(const std::string & value)
-{
-  return std::stod(value);
-}
+double parseDouble(const std::string & value) { return std::stod(value); }
 
 std::uint16_t parsePort(const std::string & value)
 {
@@ -56,13 +42,13 @@ std::uint16_t parsePort(const std::string & value)
 
 void validateRunId(const std::string & value)
 {
-  if (value.empty() ||
-      !std::all_of(value.begin(), value.end(), [](unsigned char character) {
+  if (value.empty() || !std::all_of(value.begin(), value.end(), [](unsigned char character) {
         return std::isalnum(character) || character == '-' || character == '_' || character == '.';
       })) {
     throw data::DataError(
-            data::DataErrorCode::InvalidArgument,
-            "--run-id must contain only letters, digits, dot, underscore, or hyphen");
+      data::DataErrorCode::InvalidArgument,
+      "--run-id must contain only letters, digits, dot, "
+      "underscore, or hyphen");
   }
 }
 
@@ -77,8 +63,7 @@ std::int64_t nonnegativeMillisecondsToNanoseconds(const std::string & value)
 }
 
 data::TimestampSource parseCsvTimestampTarget(
-  const Json::Value & object,
-  data::TimestampSource default_value)
+  const Json::Value & object, data::TimestampSource default_value)
 {
   if (!object.isMember("timestamp_target")) {
     return default_value;
@@ -87,9 +72,7 @@ data::TimestampSource parseCsvTimestampTarget(
 }
 
 std::string optionalString(
-  const Json::Value & object,
-  const std::string & key,
-  const std::string & default_value)
+  const Json::Value & object, const std::string & key, const std::string & default_value)
 {
   if (!object.isMember(key)) {
     return default_value;
@@ -98,8 +81,7 @@ std::string optionalString(
 }
 
 data::CsvPoseMapping defaultMapping(
-  const std::string & decoder_id,
-  const std::string & prefix,
+  const std::string & decoder_id, const std::string & prefix,
   data::TimestampSource timestamp_target)
 {
   data::CsvPoseMapping mapping;
@@ -117,9 +99,7 @@ data::CsvPoseMapping defaultMapping(
 }
 
 data::CsvPoseMapping parseMapping(
-  const Json::Value & root,
-  const std::string & stream_name,
-  const std::string & decoder_id,
+  const Json::Value & root, const std::string & stream_name, const std::string & decoder_id,
   data::TimestampSource timestamp_target)
 {
   const auto & object = root["streams"][stream_name];
@@ -179,10 +159,7 @@ std::string pathString(const std::filesystem::path & path)
   return std::filesystem::absolute(path).lexically_normal().string();
 }
 
-Json::Int64 asJsonInt64(std::int64_t value)
-{
-  return static_cast<Json::Int64>(value);
-}
+Json::Int64 asJsonInt64(std::int64_t value) { return static_cast<Json::Int64>(value); }
 
 }  // namespace
 
@@ -190,17 +167,14 @@ ReplayOptions parseReplayOptions(int argc, char ** argv, bool require_urdf)
 {
   ReplayOptions result;
   bool initial_joint_state_stream_set = false;
-  bool wait_for_space_set = false;
   for (int index = 1; index < argc; ++index) {
     const std::string argument = argv[index];
     auto requireValue = [&]() -> std::string {
-        if (index + 1 >= argc) {
-          throw data::DataError(
-                  data::DataErrorCode::InvalidArgument,
-                  argument + " requires a value");
-        }
-        return argv[++index];
-      };
+      if (index + 1 >= argc) {
+        throw data::DataError(data::DataErrorCode::InvalidArgument, argument + " requires a value");
+      }
+      return argv[++index];
+    };
     if (argument == "--help" || argument == "-h") {
       result.help = true;
     } else if (argument == "--urdf") {
@@ -220,10 +194,8 @@ ReplayOptions parseReplayOptions(int argc, char ** argv, bool require_urdf)
       result.csv_mapping_path = std::filesystem::path{requireValue()};
     } else if (argument == "--timestamp-source") {
       result.timestamp_source = data::parseTimestampSource(requireValue());
-    } else if (argument == "--timestamp-policy") {
-      result.timestamp_projection.policy = data::parseTimestampPolicy(requireValue());
-    } else if (argument == "--period-ms") {
-      result.timestamp_projection.period_ns = millisecondsToNanoseconds(requireValue());
+    } else if (argument == "--target-period-ms") {
+      result.target_period_ns = millisecondsToNanoseconds(requireValue());
     } else if (argument == "--pairing-policy") {
       result.pairing_policy = data::parsePairingPolicy(requireValue());
     } else if (argument == "--nearest-tolerance-ms") {
@@ -234,10 +206,6 @@ ReplayOptions parseReplayOptions(int argc, char ** argv, bool require_urdf)
       result.execution_mode = data::parseExecutionMode(requireValue());
     } else if (argument == "--playback-rate") {
       result.playback_rate = parseDouble(requireValue());
-    } else if (argument == "--state-policy") {
-      result.state_policy = parseStatePolicy(requireValue());
-    } else if (argument == "--servo-period-ms") {
-      result.servo_period_ns = millisecondsToNanoseconds(requireValue());
     } else if (argument == "--output-dir") {
       result.output_dir = requireValue();
       result.output_dir_explicit = true;
@@ -246,20 +214,16 @@ ReplayOptions parseReplayOptions(int argc, char ** argv, bool require_urdf)
     } else if (argument == "--run-id") {
       result.run_id = requireValue();
       validateRunId(*result.run_id);
-    } else if (argument == "--visualize") {
-      result.visualize = true;
-    } else if (argument == "--viz-host") {
+    } else if (argument == "--ui") {
+      result.ui_mode = requireValue();
+    } else if (argument == "--host" || argument == "--viz-host") {
       result.visualization_host = requireValue();
-    } else if (argument == "--viz-port") {
+    } else if (argument == "--port" || argument == "--viz-port") {
       result.visualization_port = parsePort(requireValue());
-    } else if (argument == "--record-visualization-mcap") {
-      result.record_visualization_mcap = true;
-    } else if (argument == "--wait-for-space") {
-      result.wait_for_space = true;
-      wait_for_space_set = true;
-    } else if (argument == "--no-wait-for-space") {
-      result.wait_for_space = false;
-      wait_for_space_set = true;
+    } else if (argument == "--mcap") {
+      result.visualization_mcap_path = std::filesystem::path{requireValue()};
+    } else if (argument == "--no-mcap") {
+      result.visualization_mcap_path.reset();
     } else {
       throw data::DataError(data::DataErrorCode::InvalidArgument, "unknown option: " + argument);
     }
@@ -269,30 +233,46 @@ ReplayOptions parseReplayOptions(int argc, char ** argv, bool require_urdf)
   }
   if (result.input_path.empty() || result.left_stream.empty() || result.right_stream.empty()) {
     throw data::DataError(
-            data::DataErrorCode::InvalidArgument,
-            "--input, --left-stream, and --right-stream are required");
+      data::DataErrorCode::InvalidArgument,
+      "--input, --left-stream, and --right-stream are required");
   }
   if (result.left_stream == result.right_stream) {
-    throw data::DataError(data::DataErrorCode::InvalidArgument, "left and right streams must differ");
+    throw data::DataError(
+      data::DataErrorCode::InvalidArgument, "left and right streams must differ");
+  }
+  if (result.target_period_ns <= 0) {
+    throw data::DataError(
+      data::DataErrorCode::InvalidArgument, "--target-period-ms is required and must be positive");
+  }
+  result.timestamp_projection.policy = data::TimestampPolicy::FixedPeriod;
+  result.timestamp_projection.period_ns = result.target_period_ns;
+  if (!std::isfinite(result.playback_rate) || result.playback_rate <= 0.0) {
+    throw data::DataError(
+      data::DataErrorCode::InvalidArgument, "--playback-rate must be finite and positive");
+  }
+  if (require_urdf && result.urdf_path.empty()) {
+    throw data::DataError(data::DataErrorCode::InvalidArgument, "--urdf is required");
+  }
+  if (result.ui_mode != "tui" && result.ui_mode != "none") {
+    throw data::DataError(
+      data::DataErrorCode::InvalidArgument, "--ui must be either 'tui' or 'none'");
   }
   if (result.input_format == InputFormat::Mcap && result.csv_mapping_path.has_value()) {
     throw data::DataError(
-            data::DataErrorCode::InvalidArgument,
-            "--csv-mapping is only valid with --input-format csv");
+      data::DataErrorCode::InvalidArgument, "--csv-mapping is only valid with --input-format csv");
   }
   if (result.input_format == InputFormat::Csv && initial_joint_state_stream_set) {
     throw data::DataError(
-            data::DataErrorCode::InvalidArgument,
-            "--initial-joint-state-stream is only valid with --input-format mcap");
+      data::DataErrorCode::InvalidArgument,
+      "--initial-joint-state-stream is only valid with --input-format mcap");
   }
-  if (require_urdf && result.input_format == InputFormat::Mcap &&
-      !initial_joint_state_stream_set) {
+  if (require_urdf && result.input_format == InputFormat::Mcap && !initial_joint_state_stream_set) {
     result.initial_joint_state_stream = "/mc/ik/joint_states";
   }
   if (result.pairing_policy == data::PairingPolicy::Exact && result.nearest_tolerance_ns != 0) {
     throw data::DataError(
-            data::DataErrorCode::InvalidArgument,
-            "--nearest-tolerance-ms requires --pairing-policy nearest");
+      data::DataErrorCode::InvalidArgument,
+      "--nearest-tolerance-ms requires --pairing-policy nearest");
   }
   if (result.output_dir.empty()) {
     throw data::DataError(data::DataErrorCode::InvalidArgument, "--output-dir must be non-empty");
@@ -302,27 +282,20 @@ ReplayOptions parseReplayOptions(int argc, char ** argv, bool require_urdf)
   }
   if (result.output_dir_explicit && result.output_root.has_value()) {
     throw data::DataError(
-            data::DataErrorCode::InvalidArgument,
-            "--output-dir and --output-root are mutually exclusive");
+      data::DataErrorCode::InvalidArgument,
+      "--output-dir and --output-root are mutually exclusive");
   }
   if (result.output_dir_explicit && result.run_id.has_value()) {
     throw data::DataError(
-            data::DataErrorCode::InvalidArgument,
-            "--run-id cannot be combined with --output-dir");
+      data::DataErrorCode::InvalidArgument, "--run-id cannot be combined with --output-dir");
   }
-  if (!require_urdf && (result.output_root.has_value() || result.run_id.has_value() ||
-      result.visualize || result.record_visualization_mcap || wait_for_space_set)) {
+  if (
+    !require_urdf && (result.output_root.has_value() || result.run_id.has_value() ||
+                      result.visualization_mcap_path.has_value())) {
     throw data::DataError(
-            data::DataErrorCode::InvalidArgument,
-            "experiment output and visualization options are only valid for the IK runner");
-  }
-  if (result.record_visualization_mcap && !result.visualize) {
-    throw data::DataError(
-            data::DataErrorCode::InvalidArgument,
-            "--record-visualization-mcap requires --visualize");
-  }
-  if (result.visualize && !wait_for_space_set) {
-    result.wait_for_space = true;
+      data::DataErrorCode::InvalidArgument,
+      "experiment output and visualization options are "
+      "only valid for the IK runner");
   }
   return result;
 }
@@ -332,51 +305,46 @@ std::string replayHelp(const std::string & program, bool include_urdf)
   std::ostringstream output;
   output << "Usage: " << program << " [options]\n";
   if (include_urdf) {
-    output
-      << "  --urdf <path>                    R1 URDF (required)\n"
-      << "  --initial-joint-state-stream <name>\n"
-      << "                                   First MCAP JointState initializes the robot\n"
-      << "                                   (default /mc/ik/joint_states)\n"
-      << "  --output-root <path>             Parent of an auto-named append-only E02 run\n"
-      << "  --run-id <id>                    Override the auto-generated E02 run ID\n"
-      << "  --visualize                      Publish live Foxglove frames; waits by default\n"
-      << "  --viz-host <address>             Foxglove bind address (default 127.0.0.1)\n"
-      << "  --viz-port <port>                Foxglove port (default 8765)\n"
-      << "  --record-visualization-mcap      Save visualization.mcap in the run directory\n"
-      << "  --wait-for-space                 Wait for a raw space key before starting clock\n"
-      << "  --no-wait-for-space              Disable the wait implied by --visualize\n";
+    output << "  --urdf <path>                    Robot URDF (required)\n"
+           << "  --initial-joint-state-stream <name>\n"
+           << "                                   First MCAP JointState "
+              "initializes the robot\n"
+           << "                                   (default /mc/ik/joint_states)\n"
+           << "  --output-root <path>             Parent of an auto-named "
+              "append-only E02 run\n"
+           << "  --run-id <id>                    Override the auto-generated E02 "
+              "run ID\n"
+           << "  --ui tui|none                    User interface mode (default "
+              "tui)\n"
+           << "  --host <address>                 Foxglove bind address (default "
+              "127.0.0.1)\n"
+           << "  --port <port>                    Foxglove port (default 8765)\n"
+           << "  --mcap <path>                    Record visualization MCAP\n"
+           << "  --no-mcap                        Disable visualization MCAP "
+              "(default)\n";
   }
-  output
-    << "  --input <path>                   MCAP or CSV input (required)\n"
-    << "  --input-format mcap|csv          Physical source backend\n"
-    << "  --left-stream <name>             Left logical stream/topic\n"
-    << "  --right-stream <name>            Right logical stream/topic\n"
-    << "  --csv-mapping <json>             Optional CSV pose column mapping\n"
-    << "  --timestamp-source header_stamp|log_time|publish_time|csv_timestamp\n"
-    << "  --timestamp-policy preserve|fixed-period\n"
-    << "  --period-ms <ms>                 Fixed retime period (default 10)\n"
-    << "  --pairing-policy exact|nearest   Original-time pairing (default exact)\n"
-    << "  --nearest-tolerance-ms <ms>      Nearest pairing tolerance\n"
-    << "  --unmatched-policy error|drop_with_diagnostics\n"
-    << "  --execution-mode batch|realtime\n"
-    << "  --playback-rate <rate>           Positive replay rate (default 1)\n"
-    << "  --state-policy previous_solution|fixed_initial_state\n"
-    << "  --servo-period-ms <ms>           Core control horizon (default 10)\n"
-    << "  --output-dir <path>              Exact new artifact directory (legacy/manual)\n"
-    << "  --help                           Show this help\n";
+  output << "  --input <path>                   MCAP or CSV input (required)\n"
+         << "  --input-format mcap|csv          Physical source backend\n"
+         << "  --left-stream <name>             Left logical stream/topic\n"
+         << "  --right-stream <name>            Right logical stream/topic\n"
+         << "  --csv-mapping <json>             Optional CSV pose column mapping\n"
+         << "  --timestamp-source "
+            "header_stamp|log_time|publish_time|csv_timestamp\n"
+         << "  --target-period-ms <ms>          Required fixed projected frame "
+            "period\n"
+         << "  --pairing-policy exact|nearest   Original-time pairing (default "
+            "exact)\n"
+         << "  --nearest-tolerance-ms <ms>      Nearest pairing tolerance\n"
+         << "  --unmatched-policy error|drop_with_diagnostics\n"
+         << "  --execution-mode batch|realtime\n"
+         << "  --playback-rate <rate>           Positive replay rate (default 1)\n"
+         << "  --output-dir <path>              Exact new artifact directory "
+            "(legacy/manual)\n"
+         << "  --help                           Show this help\n";
   return output.str();
 }
 
-std::string toString(InputFormat format)
-{
-  return format == InputFormat::Mcap ? "mcap" : "csv";
-}
-
-std::string toString(StatePolicy policy)
-{
-  return policy == StatePolicy::PreviousSolution
-    ? "previous_solution" : "fixed_initial_state";
-}
+std::string toString(InputFormat format) { return format == InputFormat::Mcap ? "mcap" : "csv"; }
 
 LoadedReplay loadReplay(const ReplayOptions & options)
 {
@@ -395,8 +363,8 @@ LoadedReplay loadReplay(const ReplayOptions & options)
 
     if (options.initial_joint_state_stream.has_value()) {
       const data::Ros2JointStateCdrDecoder joint_state_decoder;
-      auto initial_cursor = source->select(
-        {*options.initial_joint_state_stream, std::nullopt, std::nullopt});
+      auto initial_cursor =
+        source->select({*options.initial_joint_state_stream, std::nullopt, std::nullopt});
       auto initial_states = data::decodeStream(
         *initial_cursor, *options.initial_joint_state_stream, joint_state_decoder);
       loaded.initial_joint_state = std::move(initial_states.samples.at(0));
@@ -405,16 +373,15 @@ LoadedReplay loadReplay(const ReplayOptions & options)
     }
   } else {
     source = std::make_unique<data::CsvSource>(
-      options.input_path,
-      std::vector<std::string>{options.left_stream, options.right_stream});
+      options.input_path, std::vector<std::string>{options.left_stream, options.right_stream});
     data::CsvPoseMapping left_mapping;
     data::CsvPoseMapping right_mapping;
     if (options.csv_mapping_path.has_value()) {
       const auto mapping = loadJson(*options.csv_mapping_path);
-      left_mapping = parseMapping(
-        mapping, options.left_stream, "csv_pose:left", options.timestamp_source);
-      right_mapping = parseMapping(
-        mapping, options.right_stream, "csv_pose:right", options.timestamp_source);
+      left_mapping =
+        parseMapping(mapping, options.left_stream, "csv_pose:left", options.timestamp_source);
+      right_mapping =
+        parseMapping(mapping, options.right_stream, "csv_pose:right", options.timestamp_source);
     } else {
       left_mapping = defaultMapping("csv_pose:left", "left_", options.timestamp_source);
       right_mapping = defaultMapping("csv_pose:right", "right_", options.timestamp_source);
@@ -446,8 +413,7 @@ void createOutputDirectory(const std::filesystem::path & output_dir)
 {
   if (std::filesystem::exists(output_dir)) {
     throw data::DataError(
-            data::DataErrorCode::Io,
-            "refusing to overwrite output directory: " + output_dir.string());
+      data::DataErrorCode::Io, "refusing to overwrite output directory: " + output_dir.string());
   }
   std::filesystem::create_directories(output_dir);
 }
@@ -483,16 +449,14 @@ std::string optionalTimestamp(const std::optional<std::int64_t> & value)
 }
 
 Json::Value makeReplayManifest(
-  const ReplayOptions & options,
-  const LoadedReplay & loaded,
-  std::size_t deadline_miss_count,
-  std::size_t accepted_count,
-  const std::string & trace_sha256)
+  const ReplayOptions & options, const LoadedReplay & loaded,
+  const ReplayExecutionMetadata & execution, const std::string & trace_sha256)
 {
   Json::Value manifest;
-  manifest["schema_version"] = "dual_arm_replay_manifest.v1";
+  manifest["schema_version"] = "ik_replay_manifest.v2";
   manifest["dependencies"]["mcap"] =
-    "foxglove/mcap releases/cpp/v2.1.3@1420296ffcfdcde4b6894c0c1aba0ad083f93dde";
+    "foxglove/mcap "
+    "releases/cpp/v2.1.3@1420296ffcfdcde4b6894c0c1aba0ad083f93dde";
   manifest["input"]["path"] = pathString(options.input_path);
   manifest["input"]["sha256"] = sha256_file(options.input_path);
   manifest["input"]["format"] = toString(options.input_format);
@@ -508,27 +472,57 @@ Json::Value makeReplayManifest(
   manifest["timestamp"]["period_ns"] = asJsonInt64(options.timestamp_projection.period_ns);
   manifest["execution"]["mode"] = data::toString(options.execution_mode);
   manifest["execution"]["playback_rate"] = options.playback_rate;
-  manifest["execution"]["state_policy"] = toString(options.state_policy);
-  manifest["execution"]["servo_period_ns"] = asJsonInt64(options.servo_period_ns);
+  manifest["execution"]["app"] = execution.app;
+  manifest["execution"]["topology"] = execution.topology;
+  manifest["execution"]["solver"] = execution.solver;
+  manifest["execution"]["backend"] = execution.backend;
+  manifest["execution"]["ui"] = options.ui_mode;
+  manifest["execution"]["rate_hz"] = execution.rate_hz;
+  manifest["execution"]["red_rate_hz"] = execution.red_rate_hz;
+  manifest["execution"]["yellow_rate_hz"] = execution.yellow_rate_hz;
   manifest["execution"]["hard_realtime"] = false;
   manifest["statistics"]["frames"] = Json::UInt64(loaded.timeline.timeline.size());
   manifest["statistics"]["left_input"] = Json::UInt64(loaded.timeline.pairing.left_input_count);
   manifest["statistics"]["right_input"] = Json::UInt64(loaded.timeline.pairing.right_input_count);
   manifest["statistics"]["matched"] = Json::UInt64(loaded.timeline.pairing.matched_count);
-  manifest["statistics"]["unmatched_left"] = Json::UInt64(loaded.timeline.pairing.unmatched_left_count);
-  manifest["statistics"]["unmatched_right"] = Json::UInt64(loaded.timeline.pairing.unmatched_right_count);
+  manifest["statistics"]["unmatched_left"] =
+    Json::UInt64(loaded.timeline.pairing.unmatched_left_count);
+  manifest["statistics"]["unmatched_right"] =
+    Json::UInt64(loaded.timeline.pairing.unmatched_right_count);
   manifest["statistics"]["maximum_pair_delta_ns"] =
     asJsonInt64(loaded.timeline.pairing.maximum_pair_delta_ns);
   manifest["statistics"]["decoder_diagnostics"] = Json::UInt64(loaded.decoder_diagnostic_count);
-  manifest["statistics"]["deadline_misses"] = Json::UInt64(deadline_miss_count);
-  manifest["statistics"]["accepted_solves"] = Json::UInt64(accepted_count);
+  manifest["statistics"]["source_frames"] = Json::UInt64(loaded.timeline.timeline.size());
+  manifest["statistics"]["consumed_frames"] = Json::UInt64(execution.consumed_frame_count);
+  manifest["statistics"]["dropped_frames"] = Json::UInt64(execution.dropped_frame_count);
+  manifest["statistics"]["deadline_misses"] = Json::UInt64(execution.deadline_miss_count);
+  manifest["statistics"]["accepted_solves"] = Json::UInt64(execution.accepted_count);
+  manifest["statistics"]["rejected_solves"] = Json::UInt64(execution.rejected_count);
   manifest["artifacts"]["trace.csv"]["sha256"] = trace_sha256;
   return manifest;
 }
 
-void writeReplayPlanArtifacts(
-  const ReplayOptions & options,
-  const LoadedReplay & loaded)
+Json::Value makeReplayStatus(
+  const LoadedReplay & loaded, const ReplayExecutionMetadata & execution, const std::string & state,
+  const std::string & error)
+{
+  Json::Value status;
+  status["schema_version"] = "ik_replay_status.v2";
+  status["state"] = state;
+  status["app"] = execution.app;
+  status["source_frame_count"] = Json::UInt64(loaded.timeline.timeline.size());
+  status["consumed_frame_count"] = Json::UInt64(execution.consumed_frame_count);
+  status["dropped_frame_count"] = Json::UInt64(execution.dropped_frame_count);
+  status["accepted_count"] = Json::UInt64(execution.accepted_count);
+  status["rejected_count"] = Json::UInt64(execution.rejected_count);
+  status["deadline_miss_count"] = Json::UInt64(execution.deadline_miss_count);
+  if (!error.empty()) {
+    status["error"] = error;
+  }
+  return status;
+}
+
+void writeReplayPlanArtifacts(const ReplayOptions & options, const LoadedReplay & loaded)
 {
   createOutputDirectory(options.output_dir);
   std::ostringstream trace;
@@ -537,25 +531,23 @@ void writeReplayPlanArtifacts(
            "left_header_stamp_ns,left_log_time_ns,left_publish_time_ns,"
            "right_header_stamp_ns,right_log_time_ns,right_publish_time_ns\n";
   for (const auto & frame : loaded.timeline.timeline) {
-    const auto scheduled = static_cast<std::int64_t>(std::llround(
-      static_cast<long double>(frame.projected_time_ns) / options.playback_rate));
-    trace
-      << frame.sequence << ','
-      << frame.original_logical_time_ns << ','
-      << frame.source_time_from_start_ns << ','
-      << frame.projected_time_ns << ','
-      << scheduled << ','
-      << optionalTimestamp(frame.value.left.time.header_stamp_ns) << ','
-      << optionalTimestamp(frame.value.left.time.log_time_ns) << ','
-      << optionalTimestamp(frame.value.left.time.publish_time_ns) << ','
-      << optionalTimestamp(frame.value.right.time.header_stamp_ns) << ','
-      << optionalTimestamp(frame.value.right.time.log_time_ns) << ','
-      << optionalTimestamp(frame.value.right.time.publish_time_ns) << '\n';
+    const auto scheduled = static_cast<std::int64_t>(
+      std::llround(static_cast<long double>(frame.projected_time_ns) / options.playback_rate));
+    trace << frame.sequence << ',' << frame.original_logical_time_ns << ','
+          << frame.source_time_from_start_ns << ',' << frame.projected_time_ns << ',' << scheduled
+          << ',' << optionalTimestamp(frame.value.left.time.header_stamp_ns) << ','
+          << optionalTimestamp(frame.value.left.time.log_time_ns) << ','
+          << optionalTimestamp(frame.value.left.time.publish_time_ns) << ','
+          << optionalTimestamp(frame.value.right.time.header_stamp_ns) << ','
+          << optionalTimestamp(frame.value.right.time.log_time_ns) << ','
+          << optionalTimestamp(frame.value.right.time.publish_time_ns) << '\n';
   }
   const auto trace_path = options.output_dir / "trace.csv";
   writeTextFile(trace_path, trace.str());
-  const auto manifest = makeReplayManifest(
-    options, loaded, 0, 0, sha256_file(trace_path));
+  ReplayExecutionMetadata execution;
+  execution.app = "mcl_replay_plan";
+  execution.topology = "plan-only";
+  const auto manifest = makeReplayManifest(options, loaded, execution, sha256_file(trace_path));
   writeTextFile(options.output_dir / "manifest.json", jsonString(manifest));
 }
 

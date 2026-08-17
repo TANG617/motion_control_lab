@@ -1,12 +1,12 @@
-#define MCL_DUAL_ARM_IK_SERVO_STEP_TESTING
-#include "../apps/dual_arm_ik_servo_step/main.cpp"
-
+#define MCL_SERVO_STEP_TESTING
 #include <cmath>
 #include <cstdlib>
 #include <iostream>
 #include <stdexcept>
 #include <string>
 #include <vector>
+
+#include "../apps/servo_step/main.cpp"
 
 namespace
 {
@@ -24,16 +24,13 @@ const motion_control_lab::Pose & poseForSide(
 {
   const auto found = std::find_if(
     poses.begin(), poses.end(),
-    [side](const motion_control_lab::ArmForwardKinematics & pose) {
-      return pose.side == side;
-    });
+    [side](const motion_control_lab::ArmForwardKinematics & pose) { return pose.side == side; });
   require(found != poses.end(), "missing arm FK");
   return found->pose;
 }
 
 void validatePositionAndVelocityLimits(
-  const ServoSolveResult & result,
-  placo::model::RobotWrapper & model,
+  const ServoSolveResult & result, placo::model::RobotWrapper & model,
   const motion_control_lab::R1RobotConfig & robot)
 {
   require(result.positions.size() == robot.joint_names.size(), "position size mismatch");
@@ -43,7 +40,7 @@ void validatePositionAndVelocityLimits(
     const auto position_limits = model.get_joint_limits(joint_name);
     require(
       result.positions[index] >= position_limits.first + kJointPositionMargin - 1.0e-8 &&
-      result.positions[index] <= position_limits.second - kJointPositionMargin + 1.0e-8,
+        result.positions[index] <= position_limits.second - kJointPositionMargin + 1.0e-8,
       joint_name + " violated its position limit margin");
     const int velocity_index = model.get_joint_v_offset(joint_name);
     require(velocity_index >= 0, joint_name + " has no velocity index");
@@ -54,20 +51,15 @@ void validatePositionAndVelocityLimits(
   }
 }
 
-template<typename Solver>
+template <typename Solver>
 void exerciseServoSolver(
-  Solver & solver,
-  placo::model::RobotWrapper & model,
-  const motion_control_lab::R1RobotConfig & robot,
-  double rate_hz,
-  const std::string & expected_label,
-  const std::string & expected_backend)
+  Solver & solver, placo::model::RobotWrapper & model,
+  const motion_control_lab::R1RobotConfig & robot, double rate_hz,
+  const std::string & expected_label, const std::string & expected_backend)
 {
   std::vector<motion_control_lab::ArmTarget> targets{
-    {motion_control_lab::ArmSide::Left,
-     solver.currentPose(motion_control_lab::ArmSide::Left)},
-    {motion_control_lab::ArmSide::Right,
-     solver.currentPose(motion_control_lab::ArmSide::Right)}};
+    {motion_control_lab::ArmSide::Left, solver.currentPose(motion_control_lab::ArmSide::Left)},
+    {motion_control_lab::ArmSide::Right, solver.currentPose(motion_control_lab::ArmSide::Right)}};
 
   const auto initial = solver.solve(targets);
   require(initial.solver_debug.label == expected_label, "unexpected solver label");
@@ -83,13 +75,13 @@ void exerciseServoSolver(
   validatePositionAndVelocityLimits(initial, model, robot);
   require(
     poseForSide(initial.forward_kinematics, motion_control_lab::ArmSide::Left)
-    .matrix().isApprox(
-      solver.currentPose(motion_control_lab::ArmSide::Left).matrix(), 1.0e-10),
+      .matrix()
+      .isApprox(solver.currentPose(motion_control_lab::ArmSide::Left).matrix(), 1.0e-10),
     "left FK is not coherent with accepted state");
   require(
     poseForSide(initial.forward_kinematics, motion_control_lab::ArmSide::Right)
-    .matrix().isApprox(
-      solver.currentPose(motion_control_lab::ArmSide::Right).matrix(), 1.0e-10),
+      .matrix()
+      .isApprox(solver.currentPose(motion_control_lab::ArmSide::Right).matrix(), 1.0e-10),
     "right FK is not coherent with accepted state");
 
   const auto previous_positions = solver.positions();
@@ -119,37 +111,37 @@ int main(int argc, char ** argv)
 
     placo::model::RobotWrapper limit_model(
       options.urdf_path,
-      placo::model::RobotWrapper::IGNORE_COLLISIONS |
-      placo::model::RobotWrapper::IGNORE_GEOMETRY);
+      placo::model::RobotWrapper::IGNORE_COLLISIONS | placo::model::RobotWrapper::IGNORE_GEOMETRY);
     MccServoSolver mcc_proxqp_solver(options, robot, MccBackend::Proxqp);
     MccServoSolver mcc_eiquadprog_solver(options, robot, MccBackend::Eiquadprog);
     PlacoServoSolver placo_solver(options, robot);
     require(
-      mcc_proxqp_solver.currentPose(motion_control_lab::ArmSide::Left).matrix().isApprox(
-        placo_solver.currentPose(motion_control_lab::ArmSide::Left).matrix(), 1.0e-6),
+      mcc_proxqp_solver.currentPose(motion_control_lab::ArmSide::Left)
+        .matrix()
+        .isApprox(placo_solver.currentPose(motion_control_lab::ArmSide::Left).matrix(), 1.0e-6),
       "MCC/ProxQP and PlaCo left initial FK differ");
     require(
-      mcc_proxqp_solver.currentPose(motion_control_lab::ArmSide::Right).matrix().isApprox(
-        placo_solver.currentPose(motion_control_lab::ArmSide::Right).matrix(), 1.0e-6),
+      mcc_proxqp_solver.currentPose(motion_control_lab::ArmSide::Right)
+        .matrix()
+        .isApprox(placo_solver.currentPose(motion_control_lab::ArmSide::Right).matrix(), 1.0e-6),
       "MCC/ProxQP and PlaCo right initial FK differ");
     require(
-      mcc_eiquadprog_solver.currentPose(motion_control_lab::ArmSide::Left).matrix().isApprox(
-        placo_solver.currentPose(motion_control_lab::ArmSide::Left).matrix(), 1.0e-6),
+      mcc_eiquadprog_solver.currentPose(motion_control_lab::ArmSide::Left)
+        .matrix()
+        .isApprox(placo_solver.currentPose(motion_control_lab::ArmSide::Left).matrix(), 1.0e-6),
       "MCC/eiquadprog and PlaCo left initial FK differ");
     require(
-      mcc_eiquadprog_solver.currentPose(motion_control_lab::ArmSide::Right).matrix().isApprox(
-        placo_solver.currentPose(motion_control_lab::ArmSide::Right).matrix(), 1.0e-6),
+      mcc_eiquadprog_solver.currentPose(motion_control_lab::ArmSide::Right)
+        .matrix()
+        .isApprox(placo_solver.currentPose(motion_control_lab::ArmSide::Right).matrix(), 1.0e-6),
       "MCC/eiquadprog and PlaCo right initial FK differ");
 
     exerciseServoSolver(
-      mcc_proxqp_solver, limit_model, robot, options.rate_hz,
-      "MCC/ProxQP", "proxqp");
+      mcc_proxqp_solver, limit_model, robot, options.rate_hz, "MCC/ProxQP", "proxqp");
     exerciseServoSolver(
-      mcc_eiquadprog_solver, limit_model, robot, options.rate_hz,
-      "MCC/eiquadprog", "eiquadprog");
+      mcc_eiquadprog_solver, limit_model, robot, options.rate_hz, "MCC/eiquadprog", "eiquadprog");
     exerciseServoSolver(
-      placo_solver, limit_model, robot, options.rate_hz,
-      "PlaCo/eiquadprog", "eiquadprog");
+      placo_solver, limit_model, robot, options.rate_hz, "PlaCo/eiquadprog", "eiquadprog");
     return EXIT_SUCCESS;
   } catch (const std::exception & error) {
     std::cerr << "dual_arm_servo_solver_semantics: " << error.what() << '\n';

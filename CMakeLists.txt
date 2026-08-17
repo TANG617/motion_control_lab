@@ -15,23 +15,28 @@ include(CTest)
 include(GNUInstallDirs)
 
 option(
-  MCL_BUILD_SINGLE_ARM_IK
+  MCL_BUILD_SINGLE_ARM_SERVO_STEP
   "Build the single-arm interactive IK application"
   ON
 )
 option(
-  MCL_BUILD_DUAL_ARM_IK_SERVO_STEP
+  MCL_BUILD_SERVO_STEP
   "Build the dual-arm ServoStep interactive IK application"
   ON
 )
 option(
-  MCL_BUILD_DUAL_ARM_IK_TARGET_SOLVE
+  MCL_BUILD_TARGET_SOLVE
   "Build the dual-arm TargetSolve interactive IK application"
   ON
 )
 option(
-  MCL_BUILD_GROUPED_DUAL_ARM_IK
+  MCL_BUILD_GROUPED_SERVO_STEP
   "Build the Red/Yellow dual-arm IK application"
+  ON
+)
+option(
+  MCL_BUILD_PLANNED_GROUPED_SERVO_STEP
+  "Build the online-planned Red/Yellow dual-arm IK application"
   ON
 )
 option(
@@ -45,11 +50,6 @@ option(
   ON
 )
 option(
-  MCL_BUILD_DUAL_ARM_REPLAY_IK
-  "Build the canonical, headless dual-arm replay IK runner"
-  ON
-)
-option(
   MCL_BUILD_E03_BATCH_REPLAY_IK
   "Build the E03 PSI R1 motion-library batch replay IK runner"
   ON
@@ -60,8 +60,8 @@ option(
   OFF
 )
 option(
-  MCL_BUILD_DUAL_ARM_REPLAY_VISUALIZATION
-  "Build optional Foxglove live visualization into the dual-arm replay IK runner"
+  MCL_BUILD_E03_REPLAY_VISUALIZATION
+  "Build optional Foxglove live visualization into the E03 legacy replay runner"
   OFF
 )
 option(
@@ -74,8 +74,8 @@ if(MCL_ENABLE_CPU_AFFINITY AND NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
   message(FATAL_ERROR "MCL_ENABLE_CPU_AFFINITY is supported only on Linux")
 endif()
 
-if(MCL_BUILD_DUAL_ARM_REPLAY_VISUALIZATION AND
-   NOT (MCL_BUILD_DUAL_ARM_REPLAY_IK OR MCL_BUILD_E03_BATCH_REPLAY_IK))
+if(MCL_BUILD_E03_REPLAY_VISUALIZATION AND
+   NOT MCL_BUILD_E03_BATCH_REPLAY_IK)
   message(
     FATAL_ERROR
     "Replay visualization requires an enabled replay IK runner"
@@ -83,8 +83,9 @@ if(MCL_BUILD_DUAL_ARM_REPLAY_VISUALIZATION AND
 endif()
 
 set(MCL_BUILD_ANY_INTERACTIVE_IK OFF)
-if(MCL_BUILD_SINGLE_ARM_IK OR MCL_BUILD_DUAL_ARM_IK_SERVO_STEP OR
-   MCL_BUILD_DUAL_ARM_IK_TARGET_SOLVE OR MCL_BUILD_GROUPED_DUAL_ARM_IK)
+if(MCL_BUILD_SINGLE_ARM_SERVO_STEP OR MCL_BUILD_SERVO_STEP OR
+   MCL_BUILD_TARGET_SOLVE OR MCL_BUILD_GROUPED_SERVO_STEP OR
+   MCL_BUILD_PLANNED_GROUPED_SERVO_STEP)
   set(MCL_BUILD_ANY_INTERACTIVE_IK ON)
 endif()
 
@@ -102,12 +103,12 @@ if(MCL_BUILD_E04_OPENSOT_SMOKE)
 endif()
 
 if(MCL_BUILD_ANY_INTERACTIVE_IK OR MCL_BUILD_MCC_PLOTS OR MCL_BUILD_CARTESIAN_PLANNING OR
-   MCL_BUILD_DUAL_ARM_REPLAY_IK OR MCL_BUILD_E03_BATCH_REPLAY_IK)
+   MCL_BUILD_E03_BATCH_REPLAY_IK)
   find_package(motion_control_core CONFIG REQUIRED)
 endif()
 
 if(MCL_BUILD_ANY_INTERACTIVE_IK OR MCL_BUILD_CARTESIAN_PLANNING OR
-   MCL_BUILD_DUAL_ARM_REPLAY_VISUALIZATION)
+   MCL_BUILD_E03_REPLAY_VISUALIZATION)
   find_package(motion_control_viz 0.3 CONFIG REQUIRED)
 endif()
 
@@ -152,6 +153,33 @@ target_link_libraries(
   PUBLIC Eigen3::Eigen motion_control_lab::mcap Threads::Threads
 )
 
+add_library(
+  mcl_run_artifacts
+  adapters/execution/src/run_artifacts.cpp
+  adapters/execution/src/sha256.cpp
+)
+add_library(motion_control_lab::run_artifacts ALIAS mcl_run_artifacts)
+target_include_directories(
+  mcl_run_artifacts
+  PUBLIC
+    "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/adapters/execution/include>"
+)
+target_link_libraries(mcl_run_artifacts PUBLIC jsoncpp_lib)
+
+add_library(
+  mcl_replay_support
+  adapters/replay/replay_support.cpp
+)
+add_library(motion_control_lab::replay_support ALIAS mcl_replay_support)
+target_include_directories(
+  mcl_replay_support
+  PUBLIC "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>"
+)
+target_link_libraries(
+  mcl_replay_support
+  PUBLIC motion_control_lab::data motion_control_lab::run_artifacts jsoncpp_lib
+)
+
 if(MCL_BUILD_ANY_INTERACTIVE_IK)
 
   add_library(
@@ -162,7 +190,8 @@ if(MCL_BUILD_ANY_INTERACTIVE_IK)
     adapters/interactive/src/runtime/rolling_percentiles.cpp
     adapters/interactive/src/sinks/ik_visualization.cpp
     adapters/interactive/src/sinks/visualization_sink_factory.cpp
-    adapters/interactive/src/teleop/tui_teleop_source.cpp
+    adapters/interactive/src/controls/tui_source_controls.cpp
+    adapters/interactive/src/console/tui_console.cpp
   )
   add_library(motion_control_lab::interactive_support ALIAS mcl_interactive_support)
   target_include_directories(
@@ -196,17 +225,20 @@ if(MCL_BUILD_ANY_INTERACTIVE_IK)
     )
   endif()
 
-  if(MCL_BUILD_SINGLE_ARM_IK)
-    add_subdirectory(apps/single_arm_ik)
+  if(MCL_BUILD_SINGLE_ARM_SERVO_STEP)
+    add_subdirectory(apps/single_arm_servo_step)
   endif()
-  if(MCL_BUILD_DUAL_ARM_IK_SERVO_STEP)
-    add_subdirectory(apps/dual_arm_ik_servo_step)
+  if(MCL_BUILD_SERVO_STEP)
+    add_subdirectory(apps/servo_step)
   endif()
-  if(MCL_BUILD_DUAL_ARM_IK_TARGET_SOLVE)
-    add_subdirectory(apps/dual_arm_ik_target_solve)
+  if(MCL_BUILD_TARGET_SOLVE)
+    add_subdirectory(apps/target_solve)
   endif()
-  if(MCL_BUILD_GROUPED_DUAL_ARM_IK)
-    add_subdirectory(apps/grouped_dual_arm_ik)
+  if(MCL_BUILD_GROUPED_SERVO_STEP)
+    add_subdirectory(apps/grouped_servo_step)
+  endif()
+  if(MCL_BUILD_PLANNED_GROUPED_SERVO_STEP)
+    add_subdirectory(apps/planned_grouped_servo_step)
   endif()
 endif()
 
@@ -253,45 +285,21 @@ if(MCL_BUILD_MCC_PLOTS)
   add_subdirectory(apps/plot_core_planning)
 endif()
 
-add_library(
-  mcl_run_artifacts
-  adapters/execution/src/run_artifacts.cpp
-  adapters/execution/src/sha256.cpp
-)
-add_library(motion_control_lab::run_artifacts ALIAS mcl_run_artifacts)
-target_include_directories(
-  mcl_run_artifacts
-  PUBLIC
-    "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/adapters/execution/include>"
-)
-target_link_libraries(mcl_run_artifacts PUBLIC jsoncpp_lib)
-
-add_library(
-  mcl_replay_support
-  apps/dual_arm_replay_ik/replay_support.cpp
-)
-add_library(motion_control_lab::replay_support ALIAS mcl_replay_support)
-target_include_directories(
-  mcl_replay_support
-  PUBLIC "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>"
-)
-target_link_libraries(
-  mcl_replay_support
-  PUBLIC motion_control_lab::data motion_control_lab::run_artifacts jsoncpp_lib
-)
-
-if(MCL_BUILD_DUAL_ARM_REPLAY_IK OR MCL_BUILD_E03_BATCH_REPLAY_IK)
+if(MCL_BUILD_E03_BATCH_REPLAY_IK)
   add_library(
-    mcl_replay_ik_engine
-    apps/dual_arm_replay_ik/replay_ik_engine.cpp
+    mcl_e03_legacy_replay_ik_engine
+    experiments/E03_psi_r1_dual_arm_motion_library_replay_ik/src/legacy_replay/replay_ik_engine.cpp
   )
-  add_library(motion_control_lab::replay_ik_engine ALIAS mcl_replay_ik_engine)
+  add_library(
+    motion_control_lab::e03_legacy_replay_ik_engine
+    ALIAS mcl_e03_legacy_replay_ik_engine
+  )
   target_include_directories(
-    mcl_replay_ik_engine
+    mcl_e03_legacy_replay_ik_engine
     PUBLIC "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>"
   )
   target_link_libraries(
-    mcl_replay_ik_engine
+    mcl_e03_legacy_replay_ik_engine
     PUBLIC
       motion_control_lab::replay_support
       motion_control_lab::r1_robot_config
@@ -300,9 +308,6 @@ if(MCL_BUILD_DUAL_ARM_REPLAY_IK OR MCL_BUILD_E03_BATCH_REPLAY_IK)
 endif()
 
 add_subdirectory(apps/replay_plan)
-if(MCL_BUILD_DUAL_ARM_REPLAY_IK)
-  add_subdirectory(apps/dual_arm_replay_ik)
-endif()
 
 set(MCL_SOURCE_REVISION "unborn")
 set(MCL_SOURCE_DIRTY true)
@@ -670,28 +675,63 @@ if(BUILD_TESTING)
         "$<TARGET_FILE:test_tui_console>"
         --fault-hold
     )
+    add_test(
+      NAME interactive.tui_replay_controls_pty
+      COMMAND
+        "${Python3_EXECUTABLE}"
+        "${CMAKE_CURRENT_SOURCE_DIR}/tests/run_tui_pty.py"
+        "$<TARGET_FILE:test_tui_console>"
+        --replay
+    )
     set_tests_properties(
       interactive.tui_console_pty
       interactive.tui_exception_pty
       interactive.tui_fault_hold_pty
+      interactive.tui_replay_controls_pty
       PROPERTIES TIMEOUT 15
     )
 
     foreach(MCL_DUAL_ARM_TARGET IN ITEMS
-        mcl_dual_arm_ik_servo_step
-        mcl_dual_arm_ik_target_solve)
+        mcl_servo_step
+        mcl_target_solve)
       if(TARGET ${MCL_DUAL_ARM_TARGET})
+        if(MCL_DUAL_ARM_TARGET STREQUAL "mcl_servo_step")
+          set(MCL_DUAL_ARM_SUBCOMMAND teleop)
+        else()
+          set(MCL_DUAL_ARM_SUBCOMMAND "")
+        endif()
         add_test(
           NAME apps.${MCL_DUAL_ARM_TARGET}_solver_cli
           COMMAND
             "${CMAKE_COMMAND}"
             "-DAPP=$<TARGET_FILE:${MCL_DUAL_ARM_TARGET}>"
+            "-DSUBCOMMAND=${MCL_DUAL_ARM_SUBCOMMAND}"
             -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/check_dual_arm_solver_cli.cmake"
         )
       endif()
     endforeach()
 
-    if(TARGET mcl_dual_arm_ik_servo_step)
+    foreach(MCL_SERVO_TARGET IN ITEMS
+        mcl_servo_step
+        mcl_grouped_servo_step
+        mcl_planned_grouped_servo_step)
+      if(TARGET ${MCL_SERVO_TARGET})
+        set(MCL_SERVO_PLANNED OFF)
+        if(MCL_SERVO_TARGET STREQUAL "mcl_planned_grouped_servo_step")
+          set(MCL_SERVO_PLANNED ON)
+        endif()
+        add_test(
+          NAME apps.${MCL_SERVO_TARGET}_subcommands
+          COMMAND
+            "${CMAKE_COMMAND}"
+            "-DAPP=$<TARGET_FILE:${MCL_SERVO_TARGET}>"
+            "-DPLANNED=${MCL_SERVO_PLANNED}"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/check_servo_subcommands.cmake"
+        )
+      endif()
+    endforeach()
+
+    if(TARGET mcl_servo_step)
       add_executable(
         test_dual_arm_servo_solver_semantics
         tests/dual_arm_servo_solver_semantics.cpp
@@ -703,14 +743,15 @@ if(BUILD_TESTING)
           motion_control_lab::app_common
           motion_control_core::motion_control_core
           motion_control_lab::interactive_support
+          motion_control_lab::replay_support
           libplaco
       )
       add_test(
-        NAME apps.mcl_dual_arm_ik_servo_step_semantics
+        NAME apps.mcl_servo_step_semantics
         COMMAND test_dual_arm_servo_solver_semantics "${E01_MODEL}"
       )
       set_tests_properties(
-        apps.mcl_dual_arm_ik_servo_step_semantics
+        apps.mcl_servo_step_semantics
         PROPERTIES
           TIMEOUT 20
           ENVIRONMENT_MODIFICATION
@@ -718,7 +759,7 @@ if(BUILD_TESTING)
       )
     endif()
 
-    if(TARGET mcl_dual_arm_ik_target_solve)
+    if(TARGET mcl_target_solve)
       add_executable(
         test_dual_arm_target_solver_semantics
         tests/dual_arm_target_solver_semantics.cpp
@@ -733,11 +774,11 @@ if(BUILD_TESTING)
           libplaco
       )
       add_test(
-        NAME apps.mcl_dual_arm_ik_target_solve_semantics
+        NAME apps.mcl_target_solve_semantics
         COMMAND test_dual_arm_target_solver_semantics "${E01_MODEL}"
       )
       set_tests_properties(
-        apps.mcl_dual_arm_ik_target_solve_semantics
+        apps.mcl_target_solve_semantics
         PROPERTIES
           TIMEOUT 20
           ENVIRONMENT_MODIFICATION
@@ -746,8 +787,8 @@ if(BUILD_TESTING)
     endif()
 
     foreach(MCL_DUAL_ARM_TARGET IN ITEMS
-        mcl_dual_arm_ik_servo_step
-        mcl_dual_arm_ik_target_solve)
+        mcl_servo_step
+        mcl_target_solve)
       if(TARGET ${MCL_DUAL_ARM_TARGET})
         foreach(MCL_SOLVER_TEST IN ITEMS default mcc_proxqp mcc_eiquadprog placo_ignored_backend)
           if(MCL_SOLVER_TEST STREQUAL "default")

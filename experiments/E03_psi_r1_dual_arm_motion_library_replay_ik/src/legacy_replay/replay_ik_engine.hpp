@@ -7,11 +7,25 @@
 #include <string>
 #include <vector>
 
-#include "apps/dual_arm_replay_ik/replay_support.hpp"
+#include "adapters/replay/replay_support.hpp"
 #include "r1_robot_config.hpp"
 
 namespace motion_control_lab::replay
 {
+
+enum class LegacyStatePolicy
+{
+  PreviousSolution,
+  FixedInitialState
+};
+
+struct LegacyReplayIkOptions : ReplayOptions
+{
+  LegacyStatePolicy state_policy{LegacyStatePolicy::PreviousSolution};
+  std::int64_t servo_period_ns{10'000'000};
+};
+
+std::string toString(LegacyStatePolicy policy);
 
 struct ReplayIkVisualizationSample
 {
@@ -65,6 +79,6 @@ struct ReplayIkCaseResult
 std::string replayIkTraceHeader();
 
 ReplayIkCaseResult executeReplayIkCase(
-  const ReplayOptions & options, const ReplayIkExecutionConfig & execution_config = {});
+  const LegacyReplayIkOptions & options, const ReplayIkExecutionConfig & execution_config = {});
 
 }  // namespace motion_control_lab::replay

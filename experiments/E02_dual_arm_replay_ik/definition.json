@@ -17,9 +17,11 @@
     "pairing_policy": "nearest",
     "nearest_tolerance_ms": 5.0,
     "unmatched_policy": "drop_with_diagnostics",
-    "timestamp_projection": "preserve",
-    "state_policy": "previous_solution",
-    "servo_period_ms": 10.0,
+    "executor": "mcl_servo_step replay",
+    "timestamp_projection": "fixed-period",
+    "target_period_ms": 10.0,
+    "solver_rate_hz": 100.0,
+    "state_feedback": "accepted_solution",
     "tcp_offset_m": {
       "left": [0.0, 0.0, 0.1],
       "right": [0.0, 0.0, 0.1]
@@ -43,7 +45,7 @@
   "arms": [
     {
       "arm_id": "mcc_red_only",
-      "method": "motion_control_core_grouped_inverse_kinematics",
+      "method": "mcl_servo_step_motion_control_core",
       "required": true
     }
   ],
