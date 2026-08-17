@@ -9,6 +9,9 @@ replay 还是实验 runner，都必须使用相同 topic 和语义。非 IK app 
 C++ 入口位于
 [`contracts/visualization/foxglove_ik_v1.hpp`](../contracts/visualization/foxglove_ik_v1.hpp)。
 
+`mcl_planned_grouped_servo_step` 另外发布在线规划后实际提交给 Red 的 reference；其独立扩展
+合同见 [`foxglove_planned_grouped_servo_step_contract.md`](./foxglove_planned_grouped_servo_step_contract.md)。
+
 ## 必需数据流
 
 | Topic | Foxglove schema | 语义 |

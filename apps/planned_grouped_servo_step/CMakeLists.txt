@@ -16,6 +16,19 @@ target_link_libraries(
 install(TARGETS mcl_planned_grouped_servo_step RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 
 if(BUILD_TESTING)
+  add_executable(
+    test_planned_grouped_servo_step_visualization
+    "${PROJECT_SOURCE_DIR}/tests/planned_grouped_servo_step_visualization.cpp"
+  )
+  target_link_libraries(
+    test_planned_grouped_servo_step_visualization
+    PRIVATE motion_control_lab::interactive_support
+  )
+  add_test(
+    NAME apps.mcl_planned_grouped_servo_step_visualization
+    COMMAND test_planned_grouped_servo_step_visualization
+  )
+
   add_test(
     NAME apps.mcl_planned_grouped_servo_step_help
     COMMAND

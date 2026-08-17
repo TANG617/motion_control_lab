@@ -30,6 +30,7 @@
 #include "ik_app_utils.hpp"
 #include "motion_control_lab/run_artifacts.hpp"
 #include "motion_control_lab/sha256.hpp"
+#include "planning_request_visualization.hpp"
 #include "r1_interactive_config.hpp"
 #include "r1_robot_config.hpp"
 #include "runtime/grouped_worker.hpp"
@@ -52,9 +53,9 @@ using mcl::toStdVector;
 
 constexpr const char * kProgramId = "mcl_planned_grouped_servo_step";
 constexpr const char * kTitle = "Motion Control Planned Grouped ServoStep";
-constexpr std::array<unsigned int, 1> kUiCpuAffinity{29};
-constexpr std::array<unsigned int, 1> kRedCpuAffinity{31};
-constexpr std::array<unsigned int, 1> kYellowCpuAffinity{30};
+constexpr std::array<unsigned int, 1> kUiCpuAffinity{5};
+constexpr std::array<unsigned int, 1> kRedCpuAffinity{6};
+constexpr std::array<unsigned int, 1> kYellowCpuAffinity{7};
 constexpr double kMaximumAcceptedHardViolation = 5.0e-4;
 constexpr double kJointPositionLimitMarginRad = 1.0e-2;
 constexpr double kCartesianProgressWeight = 3.0;
@@ -64,8 +65,8 @@ constexpr double kYellowPostureWeight = 1.0;
 constexpr double kDefaultPostureJointWeightMultiplier = 1.0e-3;
 constexpr double kArmJoint4PostureWeightMultiplier = 1.0e-1;
 constexpr double kYellowToRedCouplingWeight = 10.0;
-constexpr double kMinimumCollisionDistanceM = 0.3;
-constexpr double kCollisionInfluenceDistanceM = 0.35;
+constexpr double kMinimumCollisionDistanceM = 0.1;
+constexpr double kCollisionInfluenceDistanceM = 0.15;
 constexpr double kCollisionDampingGainPerS = 2.0;
 constexpr double kCollisionWeight = 100.0;
 constexpr std::array<double, 20> kRedMaximumJointAccelerationsRadPerS2{
@@ -110,12 +111,12 @@ struct TargetSnapshot
 
 struct PlanningLimitOptions
 {
-  double max_linear_velocity_mps{0.05};
-  double max_linear_acceleration_mps2{0.10};
-  double max_linear_jerk_mps3{0.50};
-  double max_angular_velocity_rps{0.10};
-  double max_angular_acceleration_rps2{0.20};
-  double max_angular_jerk_rps3{1.0};
+  double max_linear_velocity_mps{ 0.8};
+  double max_linear_acceleration_mps2{4.0};
+  double max_linear_jerk_mps3{20.0};
+  double max_angular_velocity_rps{1.00};
+  double max_angular_acceleration_rps2{2.00};
+  double max_angular_jerk_rps3{10.0};
 };
 
 enum class SourceMode
@@ -321,6 +322,7 @@ struct RedAttemptSnapshot
 {
   RedAttemptState state{RedAttemptState::Accepted};
   TargetSnapshot target;
+  TargetSnapshot attempted_reference;
   mcl::SolverDebug solver_debug;
   std::string detail;
 };
@@ -1001,6 +1003,7 @@ int run(int argc, char ** argv, std::string & normal_exit_detail)
 
   RedAttemptSnapshot initial_red_attempt;
   initial_red_attempt.target = initial_target;
+  initial_red_attempt.attempted_reference = warmup_target;
   initial_red_attempt.solver_debug = initial_output.solver_debug;
 
   const auto initial_red_affinity = affinity_domain.describe(kProgramId, "red", kRedCpuAffinity);
@@ -1208,6 +1211,7 @@ int run(int argc, char ** argv, std::string & normal_exit_detail)
         reference.left = staged_planner_sample->frames.at(0).pose;
         reference.right = staged_planner_sample->frames.at(1).pose;
         const mcc::CartesianTrajectorySample staged_for_attempt = *staged_planner_sample;
+        attempt.attempted_reference = reference;
         request.captured_state = capturedState(state);
         addCartesianTargets(handles.red, reference, request);
         const auto status =
@@ -1323,8 +1327,6 @@ int run(int argc, char ** argv, std::string & normal_exit_detail)
   std::optional<RedAttemptSnapshot> last_recoverable_rejection;
   std::optional<mcl::GroupedWorkerFault> held_fault;
   std::uint64_t handled_rejected_target_revision = 0;
-  std::optional<mcl::IkRuntimeState> last_visualized_runtime_state;
-  std::uint64_t last_visualized_rejected_target_revision = 0;
   std::size_t publish_count = 0;
   std::size_t replay_source_index = 0;
   std::int64_t replay_timeline_time_ns = 0;
@@ -1575,19 +1577,16 @@ int run(int argc, char ** argv, std::string & normal_exit_detail)
       frame.paused = command.paused;
       frame.selected_side = command.selected_side;
 
-      const std::uint64_t rejected_revision =
-        rejected_target.has_value() ? rejected_target->revision : 0;
-      const bool visualization_state_changed =
-        !last_visualized_runtime_state.has_value() ||
-        frame.runtime_state != *last_visualized_runtime_state ||
-        rejected_revision != last_visualized_rejected_target_revision;
-      if (frame.runtime_state == mcl::IkRuntimeState::Running || visualization_state_changed) {
-        visualization_sink->write(mcl::makeIkVisualizationFrame(
-          frame, presentation, publish_count, schedule->sample_time_ns, schedule->emit_time_ns));
-        last_visualized_runtime_state = frame.runtime_state;
-        last_visualized_rejected_target_revision = rejected_revision;
-        ++publish_count;
-      }
+      mcl::IkDebugFrame visualization_debug_frame = frame;
+      visualization_debug_frame.targets = armTargets(latest_red_attempt.target);
+      auto visualization_frame = mcl::makeIkVisualizationFrame(
+        visualization_debug_frame, presentation, publish_count, schedule->sample_time_ns,
+        schedule->emit_time_ns);
+      mcl::planned_grouped_servo_step::appendPlanningRequestPoses(
+        visualization_frame, robot.base_frame, latest_red_attempt.attempted_reference.left,
+        latest_red_attempt.attempted_reference.right);
+      visualization_sink->write(visualization_frame);
+      ++publish_count;
       tui.render(frame, publish_count, visualization_sink->status());
 
       if (

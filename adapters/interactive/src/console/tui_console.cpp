@@ -530,7 +530,7 @@ private:
                separator(),
                labelledParagraph("status: ", source_.command_.status),
              }) |
-             border;
+             borderRounded;
     }
 
     auto body =
@@ -549,7 +549,7 @@ private:
              separator(),
              vbox(std::move(footer)),
            }) |
-           border;
+           borderRounded;
   }
 
   ftxui::Element renderPage() const
@@ -578,9 +578,9 @@ private:
       return vbox({
         hbox({
           renderCartesianPanel(false) | flex,
-          separator(),
+          separatorEmpty(),
           renderSolverSummaryPanel() | flex,
-          separator(),
+          separatorEmpty(),
           renderRuntimeSummaryPanel() | flex,
         }),
         renderAllJointsCompactPanel(false),
@@ -590,12 +590,12 @@ private:
       return vbox({
         hbox({
           renderCartesianPanel(false) | flex,
-          separator(),
+          separatorEmpty(),
           renderSolverSummaryPanel() | flex,
         }),
         hbox({
           renderAllJointsCompactPanel(false) | flex,
-          separator(),
+          separatorEmpty(),
           renderRuntimeSummaryPanel() | flex,
         }),
       });

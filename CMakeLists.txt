@@ -580,6 +580,14 @@ if(BUILD_TESTING)
       "${CMAKE_CURRENT_SOURCE_DIR}/contracts/visualization/foxglove_ik.v1.json"
   )
 
+  add_test(
+    NAME contracts.foxglove_planned_grouped_servo_step
+    COMMAND
+      "${Python3_EXECUTABLE}"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/validate_foxglove_planned_grouped_servo_step_contract.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/contracts/visualization/foxglove_planned_grouped_servo_step.v1.json"
+  )
+
   add_executable(
     test_data_pipeline
     tests/data_pipeline.cpp
