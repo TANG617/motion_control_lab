@@ -42,7 +42,7 @@ option(
 option(
   MCL_BUILD_CARTESIAN_PLANNING
   "Build the JSON-driven Cartesian MoveLine visualization application"
-  OFF
+  ON
 )
 option(
   MCL_BUILD_DUAL_ARM_REPLAY_IK
@@ -64,6 +64,15 @@ option(
   "Build optional Foxglove live visualization into the dual-arm replay IK runner"
   OFF
 )
+option(
+  MCL_ENABLE_CPU_AFFINITY
+  "Compile Linux CPU affinity into IK applications"
+  OFF
+)
+
+if(MCL_ENABLE_CPU_AFFINITY AND NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
+  message(FATAL_ERROR "MCL_ENABLE_CPU_AFFINITY is supported only on Linux")
+endif()
 
 if(MCL_BUILD_DUAL_ARM_REPLAY_VISUALIZATION AND
    NOT (MCL_BUILD_DUAL_ARM_REPLAY_IK OR MCL_BUILD_E03_BATCH_REPLAY_IK))
@@ -150,6 +159,7 @@ if(MCL_BUILD_ANY_INTERACTIVE_IK)
     adapters/interactive/src/config/interactive_ik_options.cpp
     adapters/interactive/src/runtime/grouped_worker.cpp
     adapters/interactive/src/runtime/interactive_scheduler.cpp
+    adapters/interactive/src/runtime/rolling_percentiles.cpp
     adapters/interactive/src/sinks/ik_visualization.cpp
     adapters/interactive/src/sinks/visualization_sink_factory.cpp
     adapters/interactive/src/teleop/tui_teleop_source.cpp
@@ -575,6 +585,16 @@ if(BUILD_TESTING)
   )
   add_test(NAME data.pipeline COMMAND test_data_pipeline)
 
+  add_executable(
+    test_cpu_affinity
+    tests/cpu_affinity.cpp
+  )
+  target_link_libraries(
+    test_cpu_affinity
+    PRIVATE motion_control_lab::cpu_affinity
+  )
+  add_test(NAME apps.cpu_affinity COMMAND test_cpu_affinity)
+
   if(MCL_BUILD_ANY_INTERACTIVE_IK)
     add_executable(
       test_interactive_ik_configuration
@@ -589,6 +609,19 @@ if(BUILD_TESTING)
     add_test(
       NAME interactive.ik_configuration
       COMMAND test_interactive_ik_configuration
+    )
+
+    add_executable(
+      test_rolling_percentiles
+      tests/rolling_percentiles.cpp
+    )
+    target_link_libraries(
+      test_rolling_percentiles
+      PRIVATE motion_control_lab::interactive_support
+    )
+    add_test(
+      NAME interactive.rolling_percentiles
+      COMMAND test_rolling_percentiles
     )
 
     add_executable(
@@ -643,6 +676,113 @@ if(BUILD_TESTING)
       interactive.tui_fault_hold_pty
       PROPERTIES TIMEOUT 15
     )
+
+    foreach(MCL_DUAL_ARM_TARGET IN ITEMS
+        mcl_dual_arm_ik_servo_step
+        mcl_dual_arm_ik_target_solve)
+      if(TARGET ${MCL_DUAL_ARM_TARGET})
+        add_test(
+          NAME apps.${MCL_DUAL_ARM_TARGET}_solver_cli
+          COMMAND
+            "${CMAKE_COMMAND}"
+            "-DAPP=$<TARGET_FILE:${MCL_DUAL_ARM_TARGET}>"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/check_dual_arm_solver_cli.cmake"
+        )
+      endif()
+    endforeach()
+
+    if(TARGET mcl_dual_arm_ik_servo_step)
+      add_executable(
+        test_dual_arm_servo_solver_semantics
+        tests/dual_arm_servo_solver_semantics.cpp
+      )
+      target_link_libraries(
+        test_dual_arm_servo_solver_semantics
+        PRIVATE
+          motion_control_lab::cpu_affinity
+          motion_control_lab::app_common
+          motion_control_core::motion_control_core
+          motion_control_lab::interactive_support
+          libplaco
+      )
+      add_test(
+        NAME apps.mcl_dual_arm_ik_servo_step_semantics
+        COMMAND test_dual_arm_servo_solver_semantics "${E01_MODEL}"
+      )
+      set_tests_properties(
+        apps.mcl_dual_arm_ik_servo_step_semantics
+        PROPERTIES
+          TIMEOUT 20
+          ENVIRONMENT_MODIFICATION
+            "LD_LIBRARY_PATH=path_list_prepend:$<TARGET_FILE_DIR:libplaco>"
+      )
+    endif()
+
+    if(TARGET mcl_dual_arm_ik_target_solve)
+      add_executable(
+        test_dual_arm_target_solver_semantics
+        tests/dual_arm_target_solver_semantics.cpp
+      )
+      target_link_libraries(
+        test_dual_arm_target_solver_semantics
+        PRIVATE
+          motion_control_lab::cpu_affinity
+          motion_control_lab::app_common
+          motion_control_core::motion_control_core
+          motion_control_lab::interactive_support
+          libplaco
+      )
+      add_test(
+        NAME apps.mcl_dual_arm_ik_target_solve_semantics
+        COMMAND test_dual_arm_target_solver_semantics "${E01_MODEL}"
+      )
+      set_tests_properties(
+        apps.mcl_dual_arm_ik_target_solve_semantics
+        PROPERTIES
+          TIMEOUT 20
+          ENVIRONMENT_MODIFICATION
+            "LD_LIBRARY_PATH=path_list_prepend:$<TARGET_FILE_DIR:libplaco>"
+      )
+    endif()
+
+    foreach(MCL_DUAL_ARM_TARGET IN ITEMS
+        mcl_dual_arm_ik_servo_step
+        mcl_dual_arm_ik_target_solve)
+      if(TARGET ${MCL_DUAL_ARM_TARGET})
+        foreach(MCL_SOLVER_TEST IN ITEMS default mcc_proxqp mcc_eiquadprog placo_ignored_backend)
+          if(MCL_SOLVER_TEST STREQUAL "default")
+            set(MCL_SOLVER_ARGUMENT default)
+            set(MCL_BACKEND_ARGUMENT default)
+          elseif(MCL_SOLVER_TEST STREQUAL "mcc_proxqp")
+            set(MCL_SOLVER_ARGUMENT mcc)
+            set(MCL_BACKEND_ARGUMENT proxqp)
+          elseif(MCL_SOLVER_TEST STREQUAL "mcc_eiquadprog")
+            set(MCL_SOLVER_ARGUMENT mcc)
+            set(MCL_BACKEND_ARGUMENT eiquadprog)
+          else()
+            set(MCL_SOLVER_ARGUMENT placo)
+            set(MCL_BACKEND_ARGUMENT proxqp)
+          endif()
+          add_test(
+            NAME apps.${MCL_DUAL_ARM_TARGET}_${MCL_SOLVER_TEST}_pty
+            COMMAND
+              "${Python3_EXECUTABLE}"
+              "${CMAKE_CURRENT_SOURCE_DIR}/tests/run_dual_arm_solver_pty.py"
+              "$<TARGET_FILE:${MCL_DUAL_ARM_TARGET}>"
+              "${MCL_SOLVER_ARGUMENT}"
+              "${MCL_BACKEND_ARGUMENT}"
+              "${E01_MODEL}"
+          )
+          set_tests_properties(
+            apps.${MCL_DUAL_ARM_TARGET}_${MCL_SOLVER_TEST}_pty
+            PROPERTIES
+              TIMEOUT 20
+              ENVIRONMENT_MODIFICATION
+                "LD_LIBRARY_PATH=path_list_prepend:$<TARGET_FILE_DIR:libplaco>"
+          )
+        endforeach()
+      endif()
+    endforeach()
   endif()
 
   add_test(

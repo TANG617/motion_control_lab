@@ -198,11 +198,21 @@ bool testDeadlineAndCooperativeStop()
         mcl::WorkerIterationOutcome::Accepted, 1, 20.0, {}};
     });
   const auto deadline = deadline_fault.snapshot();
+  const auto deadline_statistics = deadline_diagnostics.snapshot();
   if (!deadline || deadline->failure != mcl::WorkerFailureKind::DeadlineMiss ||
       deadline->release_lateness_ms < 0.0 || deadline->execution_ms < 20.0 ||
       deadline->release_to_finish_ms < deadline->execution_ms ||
       deadline->deadline_ms != 10.0 || deadline->overrun_ms <= 0.0 ||
-      deadline->solver_ms != 20.0)
+      deadline->solver_ms != 20.0 ||
+      deadline_statistics.latest_solver_ms != 20.0 ||
+      deadline_statistics.latest_execution_ms != deadline_statistics.maximum_execution_ms ||
+      deadline_statistics.latest_release_lateness_ms !=
+      deadline_statistics.maximum_release_lateness_ms ||
+      deadline_statistics.latest_release_to_finish_ms !=
+      deadline_statistics.maximum_release_to_finish_ms ||
+      deadline_statistics.latest_overrun_ms != deadline_statistics.maximum_overrun_ms ||
+      deadline_statistics.latest_non_solver_execution_ms !=
+      deadline_statistics.maximum_non_solver_execution_ms)
   {
     return false;
   }

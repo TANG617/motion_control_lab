@@ -1,22 +1,31 @@
 #include "ik_app_utils.hpp"
+#include "cpu_affinity.hpp"
 #include "r1_interactive_config.hpp"
 #include "r1_robot_config.hpp"
 
 #include "config/interactive_ik_options.hpp"
 #include "runtime/interactive_scheduler.hpp"
 #include "runtime/interactive_types.hpp"
+#include "runtime/rolling_percentiles.hpp"
 #include "sinks/ik_visualization.hpp"
 #include "sinks/visualization_sink_factory.hpp"
 #include "teleop/tui_teleop_source.hpp"
 
 #include <motion_control_core/motion_control_core.hpp>
 
+#include "placo/kinematics/kinematics_solver.h"
+#include "placo/model/robot_wrapper.h"
+
 #include <algorithm>
+#include <array>
+#include <chrono>
 #include <cstdlib>
 #include <iostream>
 #include <memory>
+#include <set>
 #include <stdexcept>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace
@@ -27,6 +36,42 @@ namespace mcl = motion_control_lab;
 
 constexpr const char * kProgramId = "mcl_dual_arm_ik_servo_step";
 constexpr const char * kTitle = "Dual-arm IK — ServoStep";
+constexpr double kPositionToleranceM = 1.0e-4;
+constexpr double kOrientationToleranceRad = 1.0e-4;
+constexpr double kJointPositionMargin = 1.0e-3;
+constexpr double kNumericalRegularization = 1.0e-4;
+constexpr std::array<unsigned int, 1> kMainCpuAffinity{31};
+
+enum class SolverKind
+{
+  Mcc,
+  Placo,
+};
+
+enum class MccBackend
+{
+  Proxqp,
+  Eiquadprog,
+};
+
+struct AppOptions
+{
+  SolverKind solver{SolverKind::Mcc};
+  MccBackend backend{MccBackend::Proxqp};
+  mcl::InteractiveIkOptions interactive;
+};
+
+struct ServoSolveResult
+{
+  std::vector<double> positions;
+  std::vector<double> velocities;
+  std::vector<mcl::ArmForwardKinematics> forward_kinematics;
+  std::vector<mcl::ArmTargetError> target_errors;
+  mcl::SolverDebug solver_debug;
+  int iterations{0};
+  bool converged{false};
+  double solve_time_ms{0.0};
+};
 
 void throwIfError(const mcc::Status & status)
 {
@@ -44,121 +89,437 @@ const mcc::Pose & poseForFrame(
     [&](const mcc::FramePose & pose) { return pose.frame_name == frame_name; })->pose;
 }
 
-int run(int argc, char ** argv)
+mcl::Pose toPose(const Eigen::Affine3d & affine)
 {
-  const auto options = mcl::parseInteractiveIkOptions(argc, argv);
+  mcl::Pose pose = mcl::Pose::Identity();
+  pose.matrix() = affine.matrix();
+  return pose;
+}
+
+double orientationError(const mcl::Pose & target, const mcl::Pose & actual)
+{
+  return Eigen::AngleAxisd(target.linear() * actual.linear().transpose()).angle();
+}
+
+const char * mccSolverTitle(MccBackend backend)
+{
+  return backend == MccBackend::Proxqp ? "MCC/ProxQP" : "MCC/eiquadprog";
+}
+
+mcc::QpBackend mccQpBackend(MccBackend backend)
+{
+  if (backend == MccBackend::Proxqp) {
+    return mcc::QpBackend::ProxQp;
+  }
+  return mcc::QpBackend::Eiquadprog;
+}
+
+void printUsage(const char * program)
+{
+  mcl::printInteractiveIkUsage(program);
+  std::cout
+    << "\nSolver selection:\n"
+    << "  --solver <mcc|placo>              IK implementation (default: mcc)\n"
+    << "  --backend <proxqp|eiquadprog>     MCC QP backend (default: proxqp; "
+       "ignored for placo)\n";
+}
+
+AppOptions parseAppOptions(int argc, char ** argv)
+{
+  AppOptions result;
+  std::vector<char *> interactive_argv;
+  interactive_argv.reserve(static_cast<std::size_t>(argc));
+  interactive_argv.push_back(argv[0]);
+
+  for (int index = 1; index < argc; ++index) {
+    const std::string argument{argv[index]};
+    if (argument == "--help" || argument == "-h") {
+      printUsage(argv[0]);
+      std::exit(EXIT_SUCCESS);
+    }
+    if (argument == "--solver") {
+      if (index + 1 >= argc) {
+        throw std::runtime_error("--solver requires a value");
+      }
+      const std::string value{argv[++index]};
+      if (value == "mcc") {
+        result.solver = SolverKind::Mcc;
+      } else if (value == "placo") {
+        result.solver = SolverKind::Placo;
+      } else {
+        throw std::runtime_error("--solver must be either 'mcc' or 'placo'");
+      }
+      continue;
+    }
+    if (argument == "--backend") {
+      if (index + 1 >= argc) {
+        throw std::runtime_error("--backend requires a value");
+      }
+      const std::string value{argv[++index]};
+      if (value == "proxqp") {
+        result.backend = MccBackend::Proxqp;
+      } else if (value == "eiquadprog") {
+        result.backend = MccBackend::Eiquadprog;
+      } else {
+        throw std::runtime_error(
+                "--backend must be either 'proxqp' or 'eiquadprog'");
+      }
+      continue;
+    }
+    interactive_argv.push_back(argv[index]);
+  }
+
+  result.interactive = mcl::parseInteractiveIkOptions(
+    static_cast<int>(interactive_argv.size()), interactive_argv.data());
+  return result;
+}
+
+class MccServoSolver
+{
+public:
+  MccServoSolver(
+    const mcl::InteractiveIkOptions & options,
+    const mcl::R1RobotConfig & robot,
+    MccBackend backend)
+  : robot_(robot), backend_(backend), positions_(robot.default_positions),
+    velocities_(positions_.size(), 0.0)
+  {
+    mcc::RobotModelDescription model_description;
+    model_description.urdf_path = options.urdf_path;
+    model_description.kinematics_reference_frame = robot.base_frame;
+    model_description.joint_names = robot.joint_names;
+    throwIfError(mcc::RobotModel::load(model_description, model_));
+
+    mcc::KinematicsSolverConfig solver_config;
+    solver_config.mode = mcc::IkSolveMode::ServoStep;
+    solver_config.servo_period = 1.0 / options.rate_hz;
+    solver_config.joint_limit_policy = mcc::KinematicsJointLimitPolicy::ExplicitRequirements;
+    solver_config.qp.backend = mccQpBackend(backend_);
+    solver_config.qp.regularization = kNumericalRegularization;
+    solver_config.maximum_iterations = 1;
+    solver_config.soft_solve_time_budget_ms = 100.0;
+    solver_config.position_tolerance_m = kPositionToleranceM;
+    solver_config.orientation_tolerance_rad = kOrientationToleranceRad;
+    solver_config.minimum_position_improvement_m = 1.0e-8;
+    solver_config.minimum_orientation_improvement_rad = 1.0e-8;
+
+    mcc::KinematicsSolverBuilder builder;
+    throwIfError(builder.configure(model_, robot.joint_names, solver_config));
+
+    mcc::PositionTaskConfig left_position_config;
+    left_position_config.name = "left-position";
+    left_position_config.enforcement = mcc::HardEnforcement{};
+    throwIfError(builder.addPositionTask(
+      robot.left_end_effector_frame, left_position_config, left_position_task_));
+
+    mcc::OrientationTaskConfig left_orientation_config;
+    left_orientation_config.name = "left-orientation";
+    left_orientation_config.enforcement = mcc::HardEnforcement{};
+    throwIfError(builder.addOrientationTask(
+      robot.left_end_effector_frame, left_orientation_config, left_orientation_task_));
+
+    mcc::PositionTaskConfig right_position_config;
+    right_position_config.name = "right-position";
+    right_position_config.enforcement = mcc::HardEnforcement{};
+    throwIfError(builder.addPositionTask(
+      robot.right_end_effector_frame, right_position_config, right_position_task_));
+
+    mcc::OrientationTaskConfig right_orientation_config;
+    right_orientation_config.name = "right-orientation";
+    right_orientation_config.enforcement = mcc::HardEnforcement{};
+    throwIfError(builder.addOrientationTask(
+      robot.right_end_effector_frame, right_orientation_config, right_orientation_task_));
+
+    mcc::JointPositionLimitConfig joint_limit_config;
+    joint_limit_config.margin = kJointPositionMargin;
+    joint_limit_config.enforcement = mcc::HardEnforcement{};
+    mcc::JointPositionLimitHandle joint_limits;
+    throwIfError(builder.addJointPositionLimits(joint_limit_config, joint_limits));
+
+    mcc::JointVelocityLimitConfig velocity_limit_config;
+    velocity_limit_config.enforcement = mcc::HardEnforcement{};
+    mcc::JointVelocityLimitHandle velocity_limits;
+    throwIfError(builder.addJointVelocityLimits(velocity_limit_config, velocity_limits));
+
+    throwIfError(builder.finalize(solver_));
+  }
+
+  const std::vector<double> & positions() const {return positions_;}
+  const std::vector<double> & velocities() const {return velocities_;}
+
+  mcl::Pose currentPose(mcl::ArmSide side)
+  {
+    mcc::ForwardKinematicsRequest request;
+    request.state = mcl::makeRobotState(positions_, velocities_);
+    request.frame_names = {mcl::frameForSide(robot_, side)};
+    request.reference_frame_name = robot_.base_frame;
+    mcc::ForwardKinematicsSolution solution;
+    mcc::ForwardKinematicsDiagnostics diagnostics;
+    throwIfError(solver_.computeForwardKinematics(request, solution, diagnostics));
+    return solution.poses.at(0).pose;
+  }
+
+  ServoSolveResult solve(const std::vector<mcl::ArmTarget> & targets)
+  {
+    const auto & left_target = targets.at(0);
+    const auto & right_target = targets.at(1);
+    mcc::InverseKinematicsRequest request;
+    request.reference_frame_name = robot_.base_frame;
+    request.state = mcl::makeRobotState(positions_, velocities_);
+    request.position_targets.push_back(
+      {left_position_task_, left_target.target_pose.translation(), true});
+    request.orientation_targets.push_back(
+      {left_orientation_task_, left_target.target_pose.linear(), true});
+    request.position_targets.push_back(
+      {right_position_task_, right_target.target_pose.translation(), true});
+    request.orientation_targets.push_back(
+      {right_orientation_task_, right_target.target_pose.linear(), true});
+
+    mcc::InverseKinematicsSolution solution;
+    mcc::InverseKinematicsDiagnostics diagnostics;
+    const auto status = solver_.solveInverseKinematics(request, solution, diagnostics);
+    throwIfError(status);
+    if (!mcc::isAccepted(solution.disposition)) {
+      throw std::runtime_error("IK candidate rejected");
+    }
+
+    positions_ = mcl::toStdVector(solution.joint_positions);
+    velocities_ = mcl::toStdVector(solution.joint_velocities);
+
+    ServoSolveResult result;
+    result.positions = positions_;
+    result.velocities = velocities_;
+    result.forward_kinematics = {
+      {mcl::ArmSide::Left, poseForFrame(
+          solution.solved_poses, robot_.left_end_effector_frame)},
+      {mcl::ArmSide::Right, poseForFrame(
+          solution.solved_poses, robot_.right_end_effector_frame)}};
+    result.solver_debug = mcl::makeSolverDebug(
+      mccSolverTitle(backend_), diagnostics, solution.disposition);
+    result.iterations = diagnostics.iterations;
+    result.converged = diagnostics.converged;
+    result.solve_time_ms = diagnostics.solve_time_ms;
+
+    mcl::ArmTargetError left_error;
+    left_error.side = mcl::ArmSide::Left;
+    mcl::ArmTargetError right_error;
+    right_error.side = mcl::ArmSide::Right;
+    for (const auto & error : diagnostics.position_errors) {
+      if (error.handle.value == left_position_task_.value) {
+        left_error.position_m = error.norm_m;
+      } else if (error.handle.value == right_position_task_.value) {
+        right_error.position_m = error.norm_m;
+      }
+    }
+    for (const auto & error : diagnostics.orientation_errors) {
+      if (error.handle.value == left_orientation_task_.value) {
+        left_error.orientation_rad = error.norm_rad;
+      } else if (error.handle.value == right_orientation_task_.value) {
+        right_error.orientation_rad = error.norm_rad;
+      }
+    }
+    result.target_errors = {left_error, right_error};
+    return result;
+  }
+
+private:
+  const mcl::R1RobotConfig & robot_;
+  MccBackend backend_;
+  std::vector<double> positions_;
+  std::vector<double> velocities_;
+  std::shared_ptr<const mcc::RobotModel> model_;
+  mcc::KinematicsSolver solver_;
+  mcc::PositionTaskHandle left_position_task_;
+  mcc::OrientationTaskHandle left_orientation_task_;
+  mcc::PositionTaskHandle right_position_task_;
+  mcc::OrientationTaskHandle right_orientation_task_;
+};
+
+class PlacoServoSolver
+{
+public:
+  PlacoServoSolver(
+    const mcl::InteractiveIkOptions & options,
+    const mcl::R1RobotConfig & robot)
+  : robot_config_(robot),
+    positions_(robot.default_positions),
+    velocities_(positions_.size(), 0.0),
+    robot_(
+      options.urdf_path,
+      placo::model::RobotWrapper::IGNORE_COLLISIONS |
+      placo::model::RobotWrapper::IGNORE_GEOMETRY),
+    solver_(robot_)
+  {
+    robot_.reset();
+    const std::set<std::string> controlled_joints(
+      robot.joint_names.begin(), robot.joint_names.end());
+    for (const auto & joint_name : robot_.joint_names()) {
+      if (controlled_joints.count(joint_name) == 0U) {
+        solver_.mask_dof(joint_name);
+      }
+    }
+    solver_.mask_fbase(true);
+    solver_.problem.rewrite_equalities = false;
+    solver_.dt = 1.0 / options.rate_hz;
+    solver_.problem.regularization = kNumericalRegularization;
+    solver_.enable_joint_limits(true);
+    solver_.enable_velocity_limits(true);
+
+    for (std::size_t index = 0; index < robot.joint_names.size(); ++index) {
+      const auto & joint_name = robot.joint_names[index];
+      const auto limits = robot_.get_joint_limits(joint_name);
+      robot_.set_joint_limits(
+        joint_name, limits.first + kJointPositionMargin,
+        limits.second - kJointPositionMargin);
+      robot_.set_joint(joint_name, positions_[index]);
+      robot_.set_joint_velocity(joint_name, velocities_[index]);
+    }
+    robot_.update_kinematics();
+
+    const auto left_pose = currentPose(mcl::ArmSide::Left);
+    const auto right_pose = currentPose(mcl::ArmSide::Right);
+    left_position_task_ = &solver_.add_position_task(
+      robot.left_end_effector_frame, left_pose.translation());
+    left_position_task_->configure("left-position", "hard", 1.0);
+    left_orientation_task_ = &solver_.add_orientation_task(
+      robot.left_end_effector_frame, left_pose.linear());
+    left_orientation_task_->configure("left-orientation", "hard", 1.0);
+    right_position_task_ = &solver_.add_position_task(
+      robot.right_end_effector_frame, right_pose.translation());
+    right_position_task_->configure("right-position", "hard", 1.0);
+    right_orientation_task_ = &solver_.add_orientation_task(
+      robot.right_end_effector_frame, right_pose.linear());
+    right_orientation_task_->configure("right-orientation", "hard", 1.0);
+  }
+
+  const std::vector<double> & positions() const {return positions_;}
+  const std::vector<double> & velocities() const {return velocities_;}
+
+  mcl::Pose currentPose(mcl::ArmSide side)
+  {
+    return toPose(robot_.get_T_world_frame(mcl::frameForSide(robot_config_, side)));
+  }
+
+  ServoSolveResult solve(const std::vector<mcl::ArmTarget> & targets)
+  {
+    const auto started = std::chrono::steady_clock::now();
+    const auto & left_target = targets.at(0).target_pose;
+    const auto & right_target = targets.at(1).target_pose;
+    left_position_task_->target_world = left_target.translation();
+    left_orientation_task_->R_world_frame = left_target.linear();
+    right_position_task_->target_world = right_target.translation();
+    right_orientation_task_->R_world_frame = right_target.linear();
+
+    (void)solver_.solve(true);
+    robot_.update_kinematics();
+
+    for (std::size_t index = 0; index < robot_config_.joint_names.size(); ++index) {
+      positions_[index] = robot_.get_joint(robot_config_.joint_names[index]);
+      velocities_[index] = robot_.get_joint_velocity(robot_config_.joint_names[index]);
+    }
+
+    const auto left_fk = currentPose(mcl::ArmSide::Left);
+    const auto right_fk = currentPose(mcl::ArmSide::Right);
+    mcl::ArmTargetError left_error;
+    left_error.side = mcl::ArmSide::Left;
+    left_error.position_m = (left_target.translation() - left_fk.translation()).norm();
+    left_error.orientation_rad = orientationError(left_target, left_fk);
+    mcl::ArmTargetError right_error;
+    right_error.side = mcl::ArmSide::Right;
+    right_error.position_m = (right_target.translation() - right_fk.translation()).norm();
+    right_error.orientation_rad = orientationError(right_target, right_fk);
+
+    const bool converged =
+      left_error.position_m <= kPositionToleranceM &&
+      right_error.position_m <= kPositionToleranceM &&
+      left_error.orientation_rad <= kOrientationToleranceRad &&
+      right_error.orientation_rad <= kOrientationToleranceRad;
+    const double solve_time_ms = std::chrono::duration<double, std::milli>(
+      std::chrono::steady_clock::now() - started).count();
+
+    ServoSolveResult result;
+    result.positions = positions_;
+    result.velocities = velocities_;
+    result.forward_kinematics = {
+      {mcl::ArmSide::Left, left_fk}, {mcl::ArmSide::Right, right_fk}};
+    result.target_errors = {left_error, right_error};
+    result.iterations = 1;
+    result.converged = converged;
+    result.solve_time_ms = solve_time_ms;
+    result.solver_debug.label = "PlaCo/eiquadprog";
+    result.solver_debug.disposition = "accepted";
+    result.solver_debug.joint_limit_policy = "model-position+velocity (margin 1e-3)";
+    result.solver_debug.termination_reason = converged ? "converged" : "single-iteration";
+    result.solver_debug.ik_iterations = result.iterations;
+    result.solver_debug.converged = converged;
+    result.solver_debug.ik_solve_time_ms = solve_time_ms;
+    result.solver_debug.backend = "eiquadprog";
+    result.solver_debug.qp_status = "solved";
+    result.solver_debug.has_qp_diagnostics = false;
+    return result;
+  }
+
+private:
+  const mcl::R1RobotConfig & robot_config_;
+  std::vector<double> positions_;
+  std::vector<double> velocities_;
+  placo::model::RobotWrapper robot_;
+  placo::kinematics::KinematicsSolver solver_;
+  placo::kinematics::PositionTask * left_position_task_{nullptr};
+  placo::kinematics::OrientationTask * left_orientation_task_{nullptr};
+  placo::kinematics::PositionTask * right_position_task_{nullptr};
+  placo::kinematics::OrientationTask * right_orientation_task_{nullptr};
+};
+
+template<typename Solver>
+int runInteractive(
+  const AppOptions & app_options,
+  const std::string & solver_id,
+  const std::string & solver_title,
+  Solver & solver)
+{
+  const auto & options = app_options.interactive;
   const auto & robot = mcl::r1RobotConfig();
-  const auto & joint_names = robot.joint_names;
-  auto positions = robot.default_positions;
-  std::vector<double> velocities(positions.size(), 0.0);
-
-  mcc::RobotModelDescription model_description;
-  model_description.urdf_path = options.urdf_path;
-  model_description.kinematics_reference_frame = robot.base_frame;
-  model_description.joint_names = joint_names;
-
-  std::shared_ptr<const mcc::RobotModel> model;
-  throwIfError(mcc::RobotModel::load(model_description, model));
-
-  mcc::KinematicsSolverConfig solver_config;
-  solver_config.mode = mcc::IkSolveMode::ServoStep;
-  solver_config.servo_period = 1.0 / options.rate_hz;
-  solver_config.joint_limit_policy = mcc::KinematicsJointLimitPolicy::ExplicitRequirements;
-  solver_config.qp.backend = mcc::QpBackend::ProxQp;
-  solver_config.qp.regularization = 1.0e-4;
-  solver_config.maximum_iterations = 1;
-  solver_config.soft_solve_time_budget_ms = 100.0;
-  solver_config.position_tolerance_m = 1.0e-4;
-  solver_config.orientation_tolerance_rad = 1.0e-4;
-  solver_config.minimum_position_improvement_m = 1.0e-8;
-  solver_config.minimum_orientation_improvement_rad = 1.0e-8;
-
-  mcc::KinematicsSolverBuilder builder;
-  throwIfError(builder.configure(model, joint_names, solver_config));
-
-  mcc::PositionTaskConfig left_position_config;
-  left_position_config.name = "left-position";
-  left_position_config.enforcement = mcc::HardEnforcement{};
-  mcc::PositionTaskHandle left_position_task;
-  throwIfError(builder.addPositionTask(
-    robot.left_end_effector_frame, left_position_config, left_position_task));
-
-  mcc::OrientationTaskConfig left_orientation_config;
-  left_orientation_config.name = "left-orientation";
-  left_orientation_config.enforcement = mcc::HardEnforcement{};
-  mcc::OrientationTaskHandle left_orientation_task;
-  throwIfError(builder.addOrientationTask(
-    robot.left_end_effector_frame, left_orientation_config, left_orientation_task));
-
-  mcc::PositionTaskConfig right_position_config;
-  right_position_config.name = "right-position";
-  right_position_config.enforcement = mcc::HardEnforcement{};
-  mcc::PositionTaskHandle right_position_task;
-  throwIfError(builder.addPositionTask(
-    robot.right_end_effector_frame, right_position_config, right_position_task));
-
-  mcc::OrientationTaskConfig right_orientation_config;
-  right_orientation_config.name = "right-orientation";
-  right_orientation_config.enforcement = mcc::HardEnforcement{};
-  mcc::OrientationTaskHandle right_orientation_task;
-  throwIfError(builder.addOrientationTask(
-    robot.right_end_effector_frame, right_orientation_config, right_orientation_task));
-
-  mcc::JointPositionLimitConfig joint_limit_config;
-  joint_limit_config.margin = 1.0e-3;
-  joint_limit_config.enforcement = mcc::HardEnforcement{};
-  mcc::JointPositionLimitHandle joint_limits;
-  throwIfError(builder.addJointPositionLimits(joint_limit_config, joint_limits));
-
-  mcc::JointVelocityLimitConfig velocity_limit_config;
-  velocity_limit_config.enforcement = mcc::HardEnforcement{};
-  mcc::JointVelocityLimitHandle velocity_limits;
-  throwIfError(builder.addJointVelocityLimits(velocity_limit_config, velocity_limits));
-
-  mcc::KinematicsSolver solver;
-  throwIfError(builder.finalize(solver));
-
-  auto currentTargetPose = [&](mcl::ArmSide side) {
-      mcc::ForwardKinematicsRequest request;
-      request.state = mcl::makeRobotState(positions, velocities);
-      request.frame_names = {mcl::frameForSide(robot, side)};
-      request.reference_frame_name = robot.base_frame;
-      mcc::ForwardKinematicsSolution solution;
-      mcc::ForwardKinematicsDiagnostics diagnostics;
-      throwIfError(solver.computeForwardKinematics(request, solution, diagnostics));
-      return solution.poses.at(0).pose;
-    };
+  const auto affinity_domain = mcl::CpuAffinityDomain::capture();
+  const auto affinity_binding =
+    affinity_domain.bindCurrentThread(kProgramId, "main", kMainCpuAffinity);
 
   const auto presentation = mcl::makeArmPresentation(
     robot, mcl::foxgloveIkVisualizationChannels());
-  const auto initial_left_fk = currentTargetPose(mcl::ArmSide::Left);
-  const auto initial_right_fk = currentTargetPose(mcl::ArmSide::Right);
+  const auto initial_left_fk = solver.currentPose(mcl::ArmSide::Left);
+  const auto initial_right_fk = solver.currentPose(mcl::ArmSide::Right);
   mcl::TuiTeleopSource tui(
-    options.tui, options.rate_hz, kTitle, presentation,
+    options.tui, options.rate_hz, std::string{kTitle} + " [" + solver_title + "]",
+    presentation,
     {{mcl::ArmSide::Left, initial_left_fk}, {mcl::ArmSide::Right, initial_right_fk}}, true);
   auto visualization_sink = mcl::createVisualizationSink(options.visualization, kProgramId);
 
   mcl::installInteractiveSignalHandlers();
   mcl::InteractiveScheduler scheduler({options.rate_hz, options.duration_s});
+  mcl::RollingPercentiles solve_time_percentiles;
+  mcl::SolverRunCounters run_counters;
   std::size_t publish_count = 0;
+  const std::string run_id = "interactive-preview-" + solver_id;
 
   mcl::IkDebugFrame latest_frame;
+  latest_frame.run_id = run_id;
   latest_frame.targets = tui.command().targets;
   latest_frame.forward_kinematics = {
     {mcl::ArmSide::Left, initial_left_fk},
     {mcl::ArmSide::Right, initial_right_fk}};
-  latest_frame.joint_names = joint_names;
-  latest_frame.positions = positions;
-  latest_frame.velocities = velocities;
+  latest_frame.joint_names = robot.joint_names;
+  latest_frame.positions = solver.positions();
+  latest_frame.velocities = solver.velocities();
   latest_frame.selected_side = mcl::parseArmSide(options.tui.side);
+  latest_frame.cpu_affinities = {mcl::makeCpuAffinityDebug(affinity_binding)};
 
-  visualization_sink->open({"interactive-preview", kProgramId});
+  visualization_sink->open({run_id, std::string{kProgramId} + ":" + solver_id});
   while (const auto schedule = scheduler.next()) {
     tui.poll();
     if (const auto reset_side = tui.consumeResetRequest()) {
       tui.setTargetPose(
         *reset_side,
-        currentTargetPose(*reset_side),
+        solver.currentPose(*reset_side),
         std::string{"Reset "} + mcl::armSideName(*reset_side) + " target from current FK");
     }
 
@@ -168,71 +529,24 @@ int run(int argc, char ** argv)
     }
 
     if (schedule->update_due && !command.paused) {
-      const auto & left_target = command.targets.at(0);
-      const auto & right_target = command.targets.at(1);
-      mcc::InverseKinematicsRequest request;
-      request.reference_frame_name = robot.base_frame;
-      request.state = mcl::makeRobotState(positions, velocities);
-      request.position_targets.push_back(
-        {left_position_task, left_target.target_pose.translation(), true});
-      request.orientation_targets.push_back(
-        {left_orientation_task, left_target.target_pose.linear(), true});
-      request.position_targets.push_back(
-        {right_position_task, right_target.target_pose.translation(), true});
-      request.orientation_targets.push_back(
-        {right_orientation_task, right_target.target_pose.linear(), true});
-
-      mcc::InverseKinematicsSolution solution;
-      mcc::InverseKinematicsDiagnostics diagnostics;
-      const auto status = solver.solveInverseKinematics(request, solution, diagnostics);
-      throwIfError(status);
-      if (!mcc::isAccepted(solution.disposition)) {
-        throw std::runtime_error("IK candidate rejected");
-      }
-      positions = mcl::toStdVector(solution.joint_positions);
-      velocities = mcl::toStdVector(solution.joint_velocities);
+      ++run_counters.attempts;
+      auto result = solver.solve(command.targets);
+      ++run_counters.accepted;
+      solve_time_percentiles.record(result.solve_time_ms);
+      result.solver_debug.ik_solve_time_percentiles = solve_time_percentiles.snapshot();
+      result.solver_debug.run_counters = run_counters;
 
       latest_frame.targets = command.targets;
-      latest_frame.forward_kinematics = {
-        {mcl::ArmSide::Left, poseForFrame(
-            solution.solved_poses, robot.left_end_effector_frame)},
-        {mcl::ArmSide::Right, poseForFrame(
-            solution.solved_poses, robot.right_end_effector_frame)}};
-      latest_frame.joint_names = joint_names;
-      latest_frame.positions = positions;
-      latest_frame.velocities = velocities;
+      latest_frame.forward_kinematics = std::move(result.forward_kinematics);
+      latest_frame.positions = std::move(result.positions);
+      latest_frame.velocities = std::move(result.velocities);
       latest_frame.ik_status = "ok";
-      latest_frame.iterations = diagnostics.iterations;
-      latest_frame.converged = diagnostics.converged;
-      latest_frame.solve_time_ms = diagnostics.solve_time_ms;
-      if (latest_frame.solvers.empty()) {
-        latest_frame.solvers.push_back(
-          mcl::makeSolverDebug("IK", diagnostics, solution.disposition));
-      } else {
-        mcl::updateSolverDebug(latest_frame.solvers.front(), diagnostics, solution.disposition);
-      }
-      latest_frame.target_errors.clear();
-
-      mcl::ArmTargetError left_error;
-      left_error.side = mcl::ArmSide::Left;
-      mcl::ArmTargetError right_error;
-      right_error.side = mcl::ArmSide::Right;
-      for (const auto & error : diagnostics.position_errors) {
-        if (error.handle.value == left_position_task.value) {
-          left_error.position_m = error.norm_m;
-        } else if (error.handle.value == right_position_task.value) {
-          right_error.position_m = error.norm_m;
-        }
-      }
-      for (const auto & error : diagnostics.orientation_errors) {
-        if (error.handle.value == left_orientation_task.value) {
-          left_error.orientation_rad = error.norm_rad;
-        } else if (error.handle.value == right_orientation_task.value) {
-          right_error.orientation_rad = error.norm_rad;
-        }
-      }
-      latest_frame.target_errors = {left_error, right_error};
-      latest_frame.status = "IK accepted";
+      latest_frame.iterations = result.iterations;
+      latest_frame.converged = result.converged;
+      latest_frame.solve_time_ms = result.solve_time_ms;
+      latest_frame.solvers = {std::move(result.solver_debug)};
+      latest_frame.target_errors = std::move(result.target_errors);
+      latest_frame.status = "IK accepted [" + solver_id + "]";
       latest_frame.paused = command.paused;
       latest_frame.selected_side = command.selected_side;
       visualization_sink->write(mcl::makeIkVisualizationFrame(
@@ -254,8 +568,22 @@ int run(int argc, char ** argv)
   return EXIT_SUCCESS;
 }
 
+int run(int argc, char ** argv)
+{
+  const auto app_options = parseAppOptions(argc, argv);
+  const auto & robot = mcl::r1RobotConfig();
+  if (app_options.solver == SolverKind::Mcc) {
+    MccServoSolver solver(app_options.interactive, robot, app_options.backend);
+    return runInteractive(
+      app_options, "mcc", mccSolverTitle(app_options.backend), solver);
+  }
+  PlacoServoSolver solver(app_options.interactive, robot);
+  return runInteractive(app_options, "placo", "PlaCo/eiquadprog", solver);
+}
+
 }  // namespace
 
+#ifndef MCL_DUAL_ARM_IK_SERVO_STEP_TESTING
 int main(int argc, char ** argv)
 {
   try {
@@ -268,3 +596,4 @@ int main(int argc, char ** argv)
     return EXIT_FAILURE;
   }
 }
+#endif

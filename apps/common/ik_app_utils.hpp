@@ -1,5 +1,6 @@
 #pragma once
 
+#include "cpu_affinity.hpp"
 #include "runtime/interactive_types.hpp"
 
 #include <motion_control_core/motion_control_core.hpp>
@@ -14,6 +15,8 @@ namespace motion_control_lab
 Eigen::VectorXd toEigen(const std::vector<double> & values);
 
 std::vector<double> toStdVector(const Eigen::VectorXd & values);
+
+CpuAffinityDebug makeCpuAffinityDebug(const CpuAffinityBinding & binding);
 
 motion_control::core::RobotState makeRobotState(
   const std::vector<double> & positions,

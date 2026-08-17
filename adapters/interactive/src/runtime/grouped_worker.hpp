@@ -112,6 +112,13 @@ struct PeriodicWorkerStatistics
   double maximum_release_to_finish_ms{0.0};
   double maximum_overrun_ms{0.0};
   double maximum_solver_ms{0.0};
+  double maximum_non_solver_execution_ms{0.0};
+  double latest_release_lateness_ms{0.0};
+  double latest_execution_ms{0.0};
+  double latest_release_to_finish_ms{0.0};
+  double latest_overrun_ms{0.0};
+  double latest_solver_ms{0.0};
+  double latest_non_solver_execution_ms{0.0};
 };
 
 class PeriodicWorkerDiagnostics
@@ -140,6 +147,13 @@ private:
   std::atomic<double> maximum_release_to_finish_ms_{0.0};
   std::atomic<double> maximum_overrun_ms_{0.0};
   std::atomic<double> maximum_solver_ms_{0.0};
+  std::atomic<double> maximum_non_solver_execution_ms_{0.0};
+  std::atomic<double> latest_release_lateness_ms_{0.0};
+  std::atomic<double> latest_execution_ms_{0.0};
+  std::atomic<double> latest_release_to_finish_ms_{0.0};
+  std::atomic<double> latest_overrun_ms_{0.0};
+  std::atomic<double> latest_solver_ms_{0.0};
+  std::atomic<double> latest_non_solver_execution_ms_{0.0};
 
   friend void runPeriodicWorker(
     PeriodicWorkerOptions,

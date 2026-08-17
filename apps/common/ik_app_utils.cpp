@@ -143,6 +143,7 @@ void updateLocalSolverDebug(
   output.backend = qpBackendName(optimization.backend);
   output.qp_status = qpStatusName(optimization.solver_status);
   output.native_status = optimization.native_status;
+  output.has_qp_diagnostics = true;
   output.objective_value = optimization.objective_value;
   output.primal_residual = optimization.primal_residual;
   output.dual_residual = optimization.dual_residual;
@@ -178,6 +179,16 @@ void updateLocalSolverDebug(
 }
 
 }  // namespace
+
+CpuAffinityDebug makeCpuAffinityDebug(const CpuAffinityBinding & binding)
+{
+  return CpuAffinityDebug{
+    binding.role,
+    binding.enabled,
+    binding.thread_id,
+    binding.requested_cpus,
+    binding.effective_cpus};
+}
 
 Eigen::VectorXd toEigen(const std::vector<double> & values)
 {

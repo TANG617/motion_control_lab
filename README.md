@@ -13,16 +13,18 @@ Motion Control Lab 是面向机器人遥操作 whole-body IK 的可复现实验�
 - 可选、隔离构建的 `E04_opensot_smoke` OpenSoT ROS2 R1 IK smoke；
 - 对实验定义、共享 R1 输入、run manifest、artifact 哈希和求解结果的自动检查。
 
-仓库还提供可选的 MCC 交互预览运行时。单臂入口使用 grouped solver 的 `RedOnly` profile；
-显式区分的双臂 ServoStep/TargetSolve 入口各自拥有完整的 `KinematicsSolver` topology 和求解
-配置；grouped 双臂入口使用独立 Red/Yellow worker。它们只复用 R1 固定参数、TUI/Viz 初始化和
-wall-clock pacing；算法快照统一映射为 `motion_control_viz::VisualizationFrame`。
+仓库还提供可选的 IK 交互预览运行时。单臂入口使用 MCC grouped solver 的 `RedOnly` profile；
+显式区分的双臂 ServoStep/TargetSolve 入口可以通过 `--solver mcc|placo` 选择实现，并在 MCC
+实现中通过 `--backend proxqp|eiquadprog` 选择 QP backend；各 app 拥有完整的 solver topology、
+任务和结果解释。grouped 双臂入口使用 MCC 独立 Red/Yellow worker。它们只复用 R1 固定参数、
+TUI/Viz 初始化和 wall-clock pacing；算法快照统一映射为
+`motion_control_viz::VisualizationFrame`。
 所有 IK app 的 Foxglove topic 与 FK 一致性要求由
 [Foxglove IK 可视化数据流合同](docs/foxglove_ik_visualization_contract.md)统一定义。
 该路径用于开发调试，不替代由 canonical timeline 驱动的可复现实验执行器。
-每个交互 app 直接拥有自己的 MCC topology、任务和 solver 配置；即使配置相同，也在各自目录
-中显式保留。`apps/common/` 不承载 solver 或任务语义。可复现 replay app 的 engine 也由该 app
-目录自行拥有，实验入口只调用这一明确的 replay 能力。
+每个交互 app 直接拥有自己的 backend topology、任务和 solver 配置；即使配置相同，也在各自
+目录中显式保留。`apps/common/` 不承载 solver 或任务语义。可复现 replay app 的 engine 也由该
+app 目录自行拥有，实验入口只调用这一明确的 replay 能力。
 
 E01 和 E04 都固定使用 `/workspace/models/r1.cos.urdf` 及同一左臂可达位置任务，
 分别验证 PlaCo 和 OpenSoT 求解链与证据落盘链，不构成算法性能结论。
@@ -50,6 +52,30 @@ cmake --preset dev
 cmake --build --preset dev --target e01_placo_smoke -j8
 ctest --preset dev
 ```
+
+## IK app CPU affinity（Linux）
+
+IK app 可以在编译时启用固定的 Linux CPU affinity；默认关闭，因此不会改变普通 Linux
+或 macOS 构建：
+
+```bash
+cmake -S . -B build/affinity -DMCL_ENABLE_CPU_AFFINITY=ON
+cmake --build build/affinity -j8
+```
+
+CPU 编号由各 app 的源码常量持有，不提供运行时覆盖；TUI 会显示当前编译版本实际请求和
+生效的 CPU。启用后，若请求 CPU 不在进程启动时的 cgroup/cpuset allowed set 内，app
+会立即失败并打印请求、允许和实际 CPU 集。该能力只限制线程运行位置，不负责 CPU 独占、
+SMT sibling 隔离、IRQ affinity 或实时调度优先级。交互 IK 的 TUI Runtime 页显示每个角色的
+启用状态、线程 ID、requested CPU 和内核核验后的 effective CPU；关闭构建明确显示
+`disabled`，worker 完成绑定前显示 `pending`。
+
+所有交互 IK 的 Solver/QP 与 Runtime 页还会显示 IK solve time 的 P90、P95、P99。
+统计采用 nearest-rank 定义和最近 4096 次实际求解的固定容量滑动窗口，同时显示窗口样本数
+与进程启动后的累计样本数；暂停或 Grouped worker idle 不会生成零耗时样本。
+在 MCC/PlaCo 比较中，只有包含 backend 调用与 app 侧迭代/结果提取的总 IK 耗时及其分位数是
+跨后端同口径性能指标。MCC 的 QP timing、residual、active set 和 warm start 等内部诊断不与
+PlaCo 对比；PlaCo 未公开的字段在 TUI 中显示 `-`，不写成数值零。
 
 ## ROS-free 数据源与 canonical replay
 
@@ -267,9 +293,27 @@ cmake --build build/dual-arm \
 ./build/mcc-preview/mcl_single_arm_ik \
   --urdf /path/to/Psi_R1_rev1.urdf --rate 20
 ./build/mcc-preview/mcl_dual_arm_ik_servo_step \
-  --urdf /path/to/Psi_R1_rev1.urdf --rate 20 --mcap /new/run/path/servo-step.mcap
+  --solver mcc --backend proxqp \
+  --urdf /path/to/Psi_R1_rev1.urdf --rate 20 \
+  --mcap /new/run/path/servo-step-mcc-proxqp.mcap
+./build/mcc-preview/mcl_dual_arm_ik_servo_step \
+  --solver mcc --backend eiquadprog \
+  --urdf /path/to/Psi_R1_rev1.urdf --rate 20 \
+  --mcap /new/run/path/servo-step-mcc-eiquadprog.mcap
+./build/mcc-preview/mcl_dual_arm_ik_servo_step \
+  --solver placo --urdf /path/to/Psi_R1_rev1.urdf --rate 20 \
+  --mcap /new/run/path/servo-step-placo.mcap
 ./build/mcc-preview/mcl_dual_arm_ik_target_solve \
-  --urdf /path/to/Psi_R1_rev1.urdf --rate 20 --mcap /new/run/path/target-solve.mcap
+  --solver mcc --backend proxqp \
+  --urdf /path/to/Psi_R1_rev1.urdf --rate 20 \
+  --mcap /new/run/path/target-solve-mcc-proxqp.mcap
+./build/mcc-preview/mcl_dual_arm_ik_target_solve \
+  --solver mcc --backend eiquadprog \
+  --urdf /path/to/Psi_R1_rev1.urdf --rate 20 \
+  --mcap /new/run/path/target-solve-mcc-eiquadprog.mcap
+./build/mcc-preview/mcl_dual_arm_ik_target_solve \
+  --solver placo --urdf /path/to/Psi_R1_rev1.urdf --rate 20 \
+  --mcap /new/run/path/target-solve-placo.mcap
 ./build/mcc-preview/mcl_grouped_dual_arm_ik \
   --urdf /path/to/Psi_R1_rev1.urdf \
   --red-rate 1000 --yellow-rate 100 --ui-rate 20 \
@@ -283,9 +327,22 @@ solver、worker 和 collision 快照自动显示相应面板，并根据终端�
 
 两个双臂入口分别定义同值的双手 Hard position/orientation task 和 Hard joint-position limits；
 这种重复用于保持 app 独立，不抽取到 `common`。它们只共享 TUI/Viz 初始化与 R1 固定参数。
-ServoStep 每次只执行一个 QP update，`--rate` 同时定义其正 `servo_period`，并启用 Hard
-joint-velocity limits。TargetSolve 使用 `servo_period=0`、最多 80 次迭代且不注册 rate limits；
-其 `--rate` 只控制交互求解和发布频率。两者显式使用相同的 ProxQP regularization `1e-4`。
+`--solver` 默认为 `mcc`；该选择在进程启动时确定，不提供热切换或双求解器并跑。
+`--backend <proxqp|eiquadprog>` 默认为 `proxqp`，只选择 MCC 的 QP backend；当
+`--solver placo` 时该参数会被解析但不生效，PlaCo 始终使用自身的 eiquadprog。MCC 与 PlaCo
+都固定 floating base，并只控制 R1 配置列出的 20 个关节；position limits 使用 `1e-3` margin，
+数值 regularization 为 `1e-4`。ServoStep 每次只执行一个 QP update，`--rate` 同时定义其正
+`servo_period`/PlaCo `dt`，并启用 Hard joint-velocity limits。TargetSolve 不注册 velocity limits，
+增加权重 `1e-5` 的 initial-pose Soft joints task；最多迭代 10000 次，并使用 100 ms soft budget、
+`1e-4` Cartesian tolerance 和 `1e-8` minimum-improvement 终止规则。其 `--rate` 只控制交互求解
+和发布频率。
+
+各求解路径复用相同 TUI 和五个 IK/FK Viz 通道。TUI 标题及 Solver 页明确显示
+`MCC/ProxQP`、`MCC/eiquadprog` 或 `PlaCo/eiquadprog`；对应的 visualization run ID 仍按
+solver implementation 分别为
+`interactive-preview-mcc` 与 `interactive-preview-placo`。通用 debug frame 记录总 IK 耗时、
+P90/P95/P99、迭代/收敛、attempts/accepted/rejected 计数以及双臂 Cartesian error，便于分别
+运行两次后按同一口径观察。
 
 grouped 入口固定使用 `RedYellow` profile，要求 `red-rate > yellow-rate > 0`，默认分别为
 1000 Hz 和 100 Hz。每组 period 同时是该 worker 的 deadline。默认

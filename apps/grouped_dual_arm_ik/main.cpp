@@ -1,4 +1,6 @@
 #include <Eigen/Core>
+#include <algorithm>
+#include <array>
 #include <chrono>
 #include <cmath>
 #include <cstdint>
@@ -12,11 +14,13 @@
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <thread>
 #include <utility>
 #include <vector>
 
 #include "config/interactive_ik_options.hpp"
+#include "cpu_affinity.hpp"
 #include "ik_app_utils.hpp"
 #include "r1_interactive_config.hpp"
 #include "r1_robot_config.hpp"
@@ -24,6 +28,7 @@
 #include "runtime/interactive_scheduler.hpp"
 #include "runtime/interactive_types.hpp"
 #include "runtime/latest_value_mailbox.hpp"
+#include "runtime/rolling_percentiles.hpp"
 #include "sinks/ik_visualization.hpp"
 #include "sinks/visualization_sink_factory.hpp"
 #include "teleop/tui_teleop_source.hpp"
@@ -39,17 +44,33 @@ using mcl::toStdVector;
 
 constexpr const char * kProgramId = "mcl_grouped_dual_arm_ik";
 constexpr const char * kTitle = "Motion Control Grouped Dual-arm IK";
+constexpr std::array<unsigned int, 1> kUiCpuAffinity{29};
+constexpr std::array<unsigned int, 1> kRedCpuAffinity{31};
+constexpr std::array<unsigned int, 1> kYellowCpuAffinity{30};
 constexpr double kMaximumAcceptedHardViolation = 5.0e-4;
 constexpr double kJointPositionLimitMarginRad = 1.0e-2;
 constexpr double kCartesianProgressWeight = 3.0;
 constexpr double kRedProxQpAbsoluteTolerance = 1.0e-6;
-constexpr double kYellowPostureWeight = 1.0e-3;
+constexpr double kYellowPostureWeight = 1.0;
+constexpr double kDefaultPostureJointWeightMultiplier = 1.0e-3;
+constexpr double kArmJoint4PostureWeightMultiplier = 1.0e-1;
 constexpr double kYellowToRedCouplingWeight = 10.0;
 constexpr double kMinimumCollisionDistanceM = 0.3;
 constexpr double kCollisionInfluenceDistanceM = 0.35;
 constexpr double kCollisionDampingGainPerS = 2.0;
 constexpr double kCollisionWeight = 100.0;
+constexpr std::array<double, 20> kRedMaximumJointAccelerationsRadPerS2{
+  6.0, 6.0, 6.0, 4.0, 4.0, 4.0, 10.10, 10.10, 12.42, 12.48,
+  16.2, 16.2, 16.2, 10.10, 10.10, 12.42, 12.48, 16.2, 16.2, 16.2};
+constexpr std::array<std::string_view, 4> kWaistJointNames{
+  "torso_yaw_joint", "torso_pitch_joint", "knee_pitch_joint", "ankle_pitch_joint"};
 bool operationSucceeded(const mcc::Status & status) { return status.ok(); }
+
+bool isWaistJoint(const std::string & joint_name)
+{
+  return std::find(kWaistJointNames.begin(), kWaistJointNames.end(), joint_name) !=
+         kWaistJointNames.end();
+}
 
 void requireOk(const mcc::Status & status, const std::string &)
 {
@@ -281,7 +302,10 @@ mcc::SelfCollisionModelDescription collisionModelDescription(
 {
   mcc::SelfCollisionModelDescription description;
   description.link_pairs = {
-      {"left_arm_link4", "body_link4"}, {"right_arm_link4", "body_link4"}};
+      {"left_arm_link4", "body_link4"},
+      {"right_arm_link4", "body_link4"},
+      {"left_arm_link7", "right_arm_link4"},
+      {"right_arm_link7", "left_arm_link4"}};
   description.mesh_search_paths = {collisionMeshSearchRoot(urdf_path).string()};
   return description;
 }
@@ -335,7 +359,7 @@ CartesianHandles addCartesianTasks(
   return handles;
 }
 
-void addExplicitLimits(mcc::GroupedKinematicsSolverBuilder & builder, mcc::SolverGroup group)
+void addPositionLimits(mcc::GroupedKinematicsSolverBuilder & builder, mcc::SolverGroup group)
 {
   mcc::JointPositionLimitConfig position;
   position.margin = kJointPositionLimitMarginRad;
@@ -344,13 +368,27 @@ void addExplicitLimits(mcc::GroupedKinematicsSolverBuilder & builder, mcc::Solve
   requireOk(
     builder.addJointPositionLimits(group, position, position_handle),
     "Failed to register grouped joint-position limits");
+}
 
+void addVelocityLimits(mcc::GroupedKinematicsSolverBuilder & builder, mcc::SolverGroup group)
+{
   mcc::JointVelocityLimitConfig velocity;
   velocity.enforcement = mcc::HardEnforcement{kMaximumAcceptedHardViolation};
   mcc::GroupedJointVelocityLimitHandle velocity_handle;
   requireOk(
     builder.addJointVelocityLimits(group, velocity, velocity_handle),
     "Failed to register grouped joint-velocity limits");
+}
+
+void addRedAccelerationLimits(mcc::GroupedKinematicsSolverBuilder & builder)
+{
+  mcc::JointAccelerationLimitConfig acceleration;
+  acceleration.enforcement = mcc::HardEnforcement{kMaximumAcceptedHardViolation};
+  mcc::GroupedJointAccelerationLimitHandle acceleration_handle;
+  requireOk(
+    builder.addJointAccelerationLimits(
+      mcc::SolverGroup::Red, acceleration, acceleration_handle),
+    "Failed to register Red joint-acceleration limits");
 }
 
 std::string statusDetail(const mcc::Status & status)
@@ -517,8 +555,24 @@ void fillSelfCollisionDebug(
 int run(int argc, char ** argv, std::string & normal_exit_detail)
 {
   const auto options = mcl::parseGroupedInteractiveIkOptions(argc, argv);
+  const auto affinity_domain = mcl::CpuAffinityDomain::capture();
+  affinity_domain.validate(kProgramId, "ui", kUiCpuAffinity);
+  affinity_domain.validate(kProgramId, "red", kRedCpuAffinity);
+  affinity_domain.validate(kProgramId, "yellow", kYellowCpuAffinity);
+  const auto ui_affinity_binding =
+    affinity_domain.bindCurrentThread(kProgramId, "ui", kUiCpuAffinity);
   const auto & robot = mcl::r1RobotConfig();
   const auto & joint_names = robot.joint_names;
+  mcc::JointNames active_joint_names;
+  std::vector<Eigen::Index> active_joint_full_indices;
+  active_joint_names.reserve(joint_names.size() - kWaistJointNames.size());
+  active_joint_full_indices.reserve(joint_names.size() - kWaistJointNames.size());
+  for (std::size_t index = 0; index < joint_names.size(); ++index) {
+    if (!isWaistJoint(joint_names[index])) {
+      active_joint_names.push_back(joint_names[index]);
+      active_joint_full_indices.push_back(static_cast<Eigen::Index>(index));
+    }
+  }
   const Eigen::VectorXd initial_positions = toEigen(robot.default_positions);
   StateSnapshot initial_state;
   initial_state.sequence = 1;
@@ -530,6 +584,17 @@ int run(int argc, char ** argv, std::string & normal_exit_detail)
   model_description.urdf_path = options.urdf_path;
   model_description.kinematics_reference_frame = robot.base_frame;
   model_description.joint_names = joint_names;
+  {
+    std::shared_ptr<const mcc::RobotModel> urdf_model;
+    requireOk(
+      mcc::RobotModel::load(model_description, urdf_model),
+      "Failed to load robot model limits from URDF");
+    model_description.joint_limits = urdf_model->jointLimits();
+  }
+  for (std::size_t index = 0; index < model_description.joint_limits.size(); ++index) {
+    model_description.joint_limits[index].acceleration =
+      kRedMaximumJointAccelerationsRadPerS2.at(index);
+  }
   std::shared_ptr<const mcc::RobotModel> model;
   requireOk(mcc::RobotModel::load(model_description, model), "Failed to load robot model");
 
@@ -553,7 +618,7 @@ int run(int argc, char ** argv, std::string & normal_exit_detail)
   for (auto * config : {&solver_config.red, &solver_config.yellow}) {
     config->joint_limit_policy = mcc::KinematicsJointLimitPolicy::ExplicitRequirements;
     config->qp.backend = mcc::QpBackend::ProxQp;
-    config->qp.regularization = 1.0e-8;
+    config->qp.regularization = 1.0e-4;
     config->position_tolerance_m = 1.0e-4;
     config->orientation_tolerance_rad = 1.0e-4;
     config->minimum_position_improvement_m = 1.0e-8;
@@ -568,7 +633,8 @@ int run(int argc, char ** argv, std::string & normal_exit_detail)
 
   mcc::GroupedKinematicsSolverBuilder builder;
   requireOk(
-    builder.configure(model, joint_names, solver_config), "Failed to configure grouped IK builder");
+    builder.configure(model, active_joint_names, solver_config),
+    "Failed to configure grouped IK builder");
   GroupedHandles handles;
   handles.red = addCartesianTasks(builder, mcc::SolverGroup::Red, "red", robot);
   mcc::PostureTaskConfig yellow_posture;
@@ -576,6 +642,14 @@ int run(int argc, char ** argv, std::string & normal_exit_detail)
   yellow_posture.enforcement = mcc::squaredL2Penalty(kYellowPostureWeight, 1);
   yellow_posture.reference_positions = initial_positions;
   yellow_posture.role = mcc::PostureTaskRole::Convergence;
+  yellow_posture.joint_weight_multipliers = Eigen::VectorXd::Constant(
+    initial_positions.size(), kDefaultPostureJointWeightMultiplier);
+  yellow_posture.joint_weight_multipliers(
+    static_cast<Eigen::Index>(robot.left_arm_joint_indices[3])) =
+    kArmJoint4PostureWeightMultiplier;
+  yellow_posture.joint_weight_multipliers(
+    static_cast<Eigen::Index>(robot.right_arm_joint_indices[3])) =
+    kArmJoint4PostureWeightMultiplier;
   // requireOk(
   //   builder.addPostureTask(mcc::SolverGroup::Yellow, yellow_posture, handles.yellow_posture),
   //   "Failed to register Yellow initial-posture task");
@@ -588,8 +662,10 @@ int run(int argc, char ** argv, std::string & normal_exit_detail)
     builder.addSelfCollisionAvoidance(
       mcc::SolverGroup::Yellow, collision_model, collision_config, handles.yellow_collision),
     "Failed to register Yellow self-collision avoidance");
-  addExplicitLimits(builder, mcc::SolverGroup::Red);
-  addExplicitLimits(builder, mcc::SolverGroup::Yellow);
+  addPositionLimits(builder, mcc::SolverGroup::Red);
+  addVelocityLimits(builder, mcc::SolverGroup::Red);
+  addRedAccelerationLimits(builder);
+  addPositionLimits(builder, mcc::SolverGroup::Yellow);
 
   mcc::GroupedKinematicsSolver solver;
   requireOk(builder.finalize(solver), "Failed to finalize grouped IK solver");
@@ -661,6 +737,11 @@ int run(int argc, char ** argv, std::string & normal_exit_detail)
   initial_red_attempt.target = initial_target;
   initial_red_attempt.solver_debug = initial_output.solver_debug;
 
+  const auto initial_red_affinity =
+    affinity_domain.describe(kProgramId, "red", kRedCpuAffinity);
+  const auto initial_yellow_affinity =
+    affinity_domain.describe(kProgramId, "yellow", kYellowCpuAffinity);
+
   mcl::LatestValueMailbox<TargetSnapshot> target_to_red(initial_target);
   mcl::LatestValueMailbox<StateSnapshot> state_to_yellow(initial_state);
   mcl::LatestValueMailbox<RedOutputSnapshot> output_to_ui(initial_output);
@@ -668,6 +749,9 @@ int run(int argc, char ** argv, std::string & normal_exit_detail)
   mcl::LatestValueMailbox<mcl::SelfCollisionDebug> collision_to_ui(initial_collision_debug);
   mcl::LatestValueMailbox<mcl::SolverDebug> yellow_solver_to_ui(
     initial_yellow_solver_debug);
+  mcl::LatestValueMailbox<mcl::CpuAffinityBinding> red_affinity_to_ui(initial_red_affinity);
+  mcl::LatestValueMailbox<mcl::CpuAffinityBinding> yellow_affinity_to_ui(
+    initial_yellow_affinity);
   target_to_red.publish(initial_target);
   state_to_yellow.publish(initial_state);
   output_to_ui.publish(initial_output);
@@ -685,12 +769,17 @@ int run(int argc, char ** argv, std::string & normal_exit_detail)
   mcl::GroupedFaultState fault;
   mcl::PeriodicWorkerDiagnostics red_worker_diagnostics;
   mcl::PeriodicWorkerDiagnostics yellow_worker_diagnostics;
+  mcl::RollingPercentiles red_solve_time_percentiles;
+  mcl::RollingPercentiles yellow_solve_time_percentiles;
   WorkerThreads workers(stop_controller);
 
     visualization_sink->open({"interactive-preview", kProgramId});
     mcl::installInteractiveSignalHandlers();
 
     workers.yellow = std::thread([&]() {
+      const auto affinity_binding =
+        affinity_domain.bindCurrentThread(kProgramId, "yellow", kYellowCpuAffinity);
+      yellow_affinity_to_ui.publish(affinity_binding);
       StateSnapshot state = initial_state;
       mcc::GroupedInverseKinematicsRequest request;
       request.reference_frame_name = robot.base_frame;
@@ -706,6 +795,7 @@ int run(int argc, char ** argv, std::string & normal_exit_detail)
           request.captured_state = capturedState(state);
           const auto status =
             solver.solveInverseKinematics(mcc::SolverGroup::Yellow, request, solution, diagnostics);
+          yellow_solve_time_percentiles.record(diagnostics.kinematics.solve_time_ms);
           const bool accepted = operationSucceeded(status) && diagnostics.attempt_accepted;
           if (accepted) {
             requireOk(
@@ -728,6 +818,9 @@ int run(int argc, char ** argv, std::string & normal_exit_detail)
     });
 
     workers.red = std::thread([&]() {
+      const auto affinity_binding =
+        affinity_domain.bindCurrentThread(kProgramId, "red", kRedCpuAffinity);
+      red_affinity_to_ui.publish(affinity_binding);
       StateSnapshot state = initial_state;
       TargetSnapshot target = initial_target;
       RedOutputSnapshot output = initial_output;
@@ -755,10 +848,16 @@ int run(int argc, char ** argv, std::string & normal_exit_detail)
           addCartesianTargets(handles.red, target, request);
           const auto status =
             solver.solveInverseKinematics(mcc::SolverGroup::Red, request, solution, diagnostics);
+          red_solve_time_percentiles.record(diagnostics.kinematics.solve_time_ms);
           const bool accepted = operationSucceeded(status) && diagnostics.attempt_accepted;
           if (accepted) {
-            state.positions = solution.kinematics_solution.joint_positions;
-            state.velocities = solution.kinematics_solution.joint_velocities;
+            for (std::size_t index = 0; index < active_joint_full_indices.size(); ++index) {
+              const auto full_index = active_joint_full_indices[index];
+              state.positions(full_index) =
+                solution.kinematics_solution.joint_positions(static_cast<Eigen::Index>(index));
+              state.velocities(full_index) =
+                solution.kinematics_solution.joint_velocities(static_cast<Eigen::Index>(index));
+            }
             ++state.sequence;
             state.monotonic_time_nanoseconds = sample_time_ns;
             state_to_yellow.publish(state);
@@ -816,6 +915,8 @@ int run(int argc, char ** argv, std::string & normal_exit_detail)
     RedAttemptSnapshot latest_red_attempt = initial_red_attempt;
     mcl::SelfCollisionDebug latest_collision_debug = initial_collision_debug;
     mcl::SolverDebug latest_yellow_solver_debug = initial_yellow_solver_debug;
+    mcl::CpuAffinityBinding latest_red_affinity = initial_red_affinity;
+    mcl::CpuAffinityBinding latest_yellow_affinity = initial_yellow_affinity;
     std::optional<mcl::RejectedTargetDebug> rejected_target;
     std::optional<RedAttemptSnapshot> last_recoverable_rejection;
     std::optional<mcl::GroupedWorkerFault> held_fault;
@@ -832,6 +933,12 @@ int run(int argc, char ** argv, std::string & normal_exit_detail)
       {mcl::ArmSide::Right, initial_output.right_pose}};
     frame.selected_side = mcl::parseArmSide(options.tui.side);
     frame.solvers = {initial_output.solver_debug, initial_yellow_solver_debug};
+    frame.solvers[0].ik_solve_time_percentiles = red_solve_time_percentiles.snapshot();
+    frame.solvers[1].ik_solve_time_percentiles = yellow_solve_time_percentiles.snapshot();
+    frame.cpu_affinities = {
+      mcl::makeCpuAffinityDebug(ui_affinity_binding),
+      mcl::makeCpuAffinityDebug(latest_red_affinity),
+      mcl::makeCpuAffinityDebug(latest_yellow_affinity)};
     frame.self_collisions = {initial_collision_debug};
 
     while (true) {
@@ -843,6 +950,8 @@ int run(int argc, char ** argv, std::string & normal_exit_detail)
       output_to_ui.readLatest(latest_output);
       collision_to_ui.readLatest(latest_collision_debug);
       yellow_solver_to_ui.readLatest(latest_yellow_solver_debug);
+      red_affinity_to_ui.readLatest(latest_red_affinity);
+      yellow_affinity_to_ui.readLatest(latest_yellow_affinity);
       if (red_attempt_to_ui.readLatest(latest_red_attempt)) {
         if (latest_red_attempt.state == RedAttemptState::RecoverableRejected) {
           last_recoverable_rejection = latest_red_attempt;
@@ -920,6 +1029,12 @@ int run(int argc, char ** argv, std::string & normal_exit_detail)
         const auto red_stats = red_worker_diagnostics.snapshot();
         const auto yellow_stats = yellow_worker_diagnostics.snapshot();
         frame.solvers = {latest_red_attempt.solver_debug, latest_yellow_solver_debug};
+        frame.solvers[0].ik_solve_time_percentiles = red_solve_time_percentiles.snapshot();
+        frame.solvers[1].ik_solve_time_percentiles = yellow_solve_time_percentiles.snapshot();
+        frame.cpu_affinities = {
+          mcl::makeCpuAffinityDebug(ui_affinity_binding),
+          mcl::makeCpuAffinityDebug(latest_red_affinity),
+          mcl::makeCpuAffinityDebug(latest_yellow_affinity)};
         frame.workers = {
           {"Red", options.red_rate_hz,
            red_stats.iteration_count,
@@ -931,7 +1046,14 @@ int run(int argc, char ** argv, std::string & normal_exit_detail)
            red_stats.maximum_release_to_finish_ms,
            red_stats.maximum_overrun_ms,
            red_stats.maximum_solver_ms,
-           red_stats.recoverable_rejection_count},
+           red_stats.recoverable_rejection_count,
+           red_stats.maximum_non_solver_execution_ms,
+           red_stats.latest_release_lateness_ms,
+           red_stats.latest_execution_ms,
+           red_stats.latest_release_to_finish_ms,
+           red_stats.latest_overrun_ms,
+           red_stats.latest_solver_ms,
+           red_stats.latest_non_solver_execution_ms},
           {"Yellow", options.yellow_rate_hz,
            yellow_stats.iteration_count,
            yellow_stats.deadline_miss_count,
@@ -942,7 +1064,14 @@ int run(int argc, char ** argv, std::string & normal_exit_detail)
            yellow_stats.maximum_release_to_finish_ms,
            yellow_stats.maximum_overrun_ms,
            yellow_stats.maximum_solver_ms,
-           yellow_stats.recoverable_rejection_count}};
+           yellow_stats.recoverable_rejection_count,
+           yellow_stats.maximum_non_solver_execution_ms,
+           yellow_stats.latest_release_lateness_ms,
+           yellow_stats.latest_execution_ms,
+           yellow_stats.latest_release_to_finish_ms,
+           yellow_stats.latest_overrun_ms,
+           yellow_stats.latest_solver_ms,
+           yellow_stats.latest_non_solver_execution_ms}};
         if (held_fault.has_value()) {
           frame.runtime_state = mcl::IkRuntimeState::FaultHold;
           frame.ik_status = "fault hold " + taskScaleStatus(latest_output);

@@ -86,9 +86,15 @@ def main() -> int:
                 os.write(master_fd, b"4")
                 action_index += 1
             elif not expect_exception and not fault_hold and action_index == 3 and ready_elapsed >= 0.72:
-                os.write(master_fd, b"5")
+                os.write(master_fd, b"\x1b[6~")
                 action_index += 1
             elif not expect_exception and not fault_hold and action_index == 4 and ready_elapsed >= 0.92:
+                os.write(master_fd, b"\x1b[6~")
+                action_index += 1
+            elif not expect_exception and not fault_hold and action_index == 5 and ready_elapsed >= 1.12:
+                os.write(master_fd, b"5")
+                action_index += 1
+            elif not expect_exception and not fault_hold and action_index == 6 and ready_elapsed >= 1.32:
                 # Move left +x, select right, double the step, move right -y,
                 # enter a manual 0.020 m step, move right +z, pause, return to
                 # Overview, and exit.
@@ -171,7 +177,23 @@ def main() -> int:
             b"Cartesian",
             b"maximum hard violation",
             b"All joint state",
+            b"head_yaw",
+            b"J7",
+            b"CPU affinity",
+            b"bound",
+            b"disabled",
+            b"4101",
+            b"requested CPUs",
+            b"effective CPUs",
+            b"IK solve-time percentiles",
+            b"P90 [ms]",
+            b"P95 [ms]",
+            b"P99 [ms]",
+            b"0.160",
             b"Periodic workers",
+            b"sched delay",
+            b"IK non-QP",
+            b"attempts/accepted/rejected",
             b"Recent state changes",
         )
         missing_markers = [marker for marker in expected_markers if marker not in output]

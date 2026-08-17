@@ -20,7 +20,7 @@ motion_control::viz::VisualizationFrame makeIkVisualizationFrame(
   namespace mcv = motion_control::viz;
 
   mcv::VisualizationFrame visualization;
-  visualization.run_id = "interactive-preview";
+  visualization.run_id = frame.run_id;
   visualization.sequence = sequence;
   visualization.sample_time_ns = sample_time_ns;
   visualization.sample_clock = "interactive_steady";
@@ -82,6 +82,29 @@ motion_control::viz::VisualizationFrame makeIkVisualizationFrame(
     {"ik.iterations", static_cast<double>(frame.iterations), "count"},
     {"ik.converged", frame.converged ? 1.0 : 0.0, "bool"},
     {"ik.solve_time", frame.solve_time_ms, "ms"}};
+  if (!frame.solvers.empty()) {
+    const auto & solver = frame.solvers.front();
+    const auto & percentiles = solver.ik_solve_time_percentiles;
+    if (percentiles.window_sample_count > 0U) {
+      visualization.diagnostics.push_back({"ik.solve_time.p90", percentiles.p90, "ms"});
+      visualization.diagnostics.push_back({"ik.solve_time.p95", percentiles.p95, "ms"});
+      visualization.diagnostics.push_back({"ik.solve_time.p99", percentiles.p99, "ms"});
+      visualization.diagnostics.push_back(
+        {"ik.solve_time.window_samples",
+         static_cast<double>(percentiles.window_sample_count), "count"});
+      visualization.diagnostics.push_back(
+        {"ik.solve_time.total_samples",
+         static_cast<double>(percentiles.total_sample_count), "count"});
+    }
+    if (solver.run_counters.has_value()) {
+      visualization.diagnostics.push_back(
+        {"ik.solve_attempts", static_cast<double>(solver.run_counters->attempts), "count"});
+      visualization.diagnostics.push_back(
+        {"ik.accepted", static_cast<double>(solver.run_counters->accepted), "count"});
+      visualization.diagnostics.push_back(
+        {"ik.rejected", static_cast<double>(solver.run_counters->rejected), "count"});
+    }
+  }
   for (const auto & error : frame.target_errors) {
     const std::string prefix = std::string{"ik."} + armSideName(error.side);
     visualization.diagnostics.push_back(

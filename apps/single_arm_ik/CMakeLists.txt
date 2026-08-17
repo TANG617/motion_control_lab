@@ -6,6 +6,7 @@ set_target_properties(
 target_link_libraries(
   mcl_single_arm_ik
   PRIVATE
+    motion_control_lab::cpu_affinity
     motion_control_lab::app_common
     motion_control_core::motion_control_core
     motion_control_lab::interactive_support

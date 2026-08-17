@@ -116,7 +116,14 @@ PeriodicWorkerStatistics PeriodicWorkerDiagnostics::snapshot() const
     maximum_execution_ms_.load(std::memory_order_relaxed),
     maximum_release_to_finish_ms_.load(std::memory_order_relaxed),
     maximum_overrun_ms_.load(std::memory_order_relaxed),
-    maximum_solver_ms_.load(std::memory_order_relaxed)};
+    maximum_solver_ms_.load(std::memory_order_relaxed),
+    maximum_non_solver_execution_ms_.load(std::memory_order_relaxed),
+    latest_release_lateness_ms_.load(std::memory_order_relaxed),
+    latest_execution_ms_.load(std::memory_order_relaxed),
+    latest_release_to_finish_ms_.load(std::memory_order_relaxed),
+    latest_overrun_ms_.load(std::memory_order_relaxed),
+    latest_solver_ms_.load(std::memory_order_relaxed),
+    latest_non_solver_execution_ms_.load(std::memory_order_relaxed)};
 }
 
 void PeriodicWorkerDiagnostics::recordIteration(
@@ -139,6 +146,14 @@ void PeriodicWorkerDiagnostics::recordIteration(
   updateMaximum(maximum_release_to_finish_ms_, release_to_finish_ms);
   updateMaximum(maximum_overrun_ms_, overrun_ms);
   updateMaximum(maximum_solver_ms_, solver_ms);
+  const double non_solver_execution_ms = std::max(0.0, execution_ms - solver_ms);
+  updateMaximum(maximum_non_solver_execution_ms_, non_solver_execution_ms);
+  latest_release_lateness_ms_.store(release_lateness_ms, std::memory_order_relaxed);
+  latest_execution_ms_.store(execution_ms, std::memory_order_relaxed);
+  latest_release_to_finish_ms_.store(release_to_finish_ms, std::memory_order_relaxed);
+  latest_overrun_ms_.store(overrun_ms, std::memory_order_relaxed);
+  latest_solver_ms_.store(solver_ms, std::memory_order_relaxed);
+  latest_non_solver_execution_ms_.store(non_solver_execution_ms, std::memory_order_relaxed);
 }
 
 void PeriodicWorkerDiagnostics::recordSkippedReleases(std::uint64_t count)

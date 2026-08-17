@@ -24,6 +24,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -342,6 +343,28 @@ std::string formatFixed(double value, int precision)
   return output.str();
 }
 
+std::string formatTimingPair(double latest, double maximum)
+{
+  return formatFixed(latest, 3) + "/" + formatFixed(maximum, 3);
+}
+
+std::string formatPercentileTriplet(const RollingPercentilesSnapshot & percentiles)
+{
+  if (percentiles.window_sample_count == 0U) {
+    return "-";
+  }
+  return formatFixed(percentiles.p90, 3) + "/" +
+         formatFixed(percentiles.p95, 3) + "/" +
+         formatFixed(percentiles.p99, 3);
+}
+
+std::string formatPercentileWindow(const RollingPercentilesSnapshot & percentiles)
+{
+  return std::to_string(percentiles.window_sample_count) + "/" +
+         std::to_string(percentiles.window_capacity) + " (" +
+         std::to_string(percentiles.total_sample_count) + " total)";
+}
+
 std::string formatScientific(double value)
 {
   std::ostringstream output;
@@ -379,6 +402,21 @@ std::string joinStrings(const std::vector<std::string> & values)
       output << ", ";
     }
     output << values[index];
+  }
+  return output.str();
+}
+
+std::string joinCpus(const std::vector<unsigned int> & cpus)
+{
+  if (cpus.empty()) {
+    return "-";
+  }
+  std::ostringstream output;
+  for (std::size_t index = 0; index < cpus.size(); ++index) {
+    if (index != 0U) {
+      output << ',';
+    }
+    output << cpus[index];
   }
   return output.str();
 }
@@ -574,7 +612,7 @@ private:
           separator(),
           renderRuntimeSummaryPanel() | flex,
         }),
-        renderJointsPanel(true),
+        renderAllJointsCompactPanel(false),
       });
     }
     if (width >= 100) {
@@ -585,7 +623,7 @@ private:
           renderSolverSummaryPanel() | flex,
         }),
         hbox({
-          renderJointsPanel(true) | flex,
+          renderAllJointsCompactPanel(false) | flex,
           separator(),
           renderRuntimeSummaryPanel() | flex,
         }),
@@ -594,6 +632,7 @@ private:
     return vbox({
       renderCartesianPanel(true),
       renderSolverSummaryPanel(),
+      renderAllJointsCompactPanel(false),
       renderRuntimeSummaryPanel(),
     });
   }
@@ -689,16 +728,22 @@ private:
   {
     using namespace ftxui;
     std::vector<std::vector<std::string>> rows = {
-      {"solver", "result", "termination", "QP", "IK/QP ms", "hard max"}};
+      {"solver", "result", "termination", "QP", "IK total/QP/non-QP ms", "hard max"}};
     for (const auto & solver : frame_.solvers) {
+      const std::string qp_timing = solver.has_qp_diagnostics
+        ? formatFixed(solver.qp_solve_time_ms, 3)
+        : "-";
+      const std::string non_qp_timing = solver.has_qp_diagnostics
+        ? formatFixed(std::max(0.0, solver.ik_solve_time_ms - solver.qp_solve_time_ms), 3)
+        : "-";
       rows.push_back({
         solver.label,
         solver.disposition,
         solver.termination_reason,
         solver.qp_status,
         formatFixed(solver.ik_solve_time_ms, 3) + "/" +
-          formatFixed(solver.qp_solve_time_ms, 3),
-        formatScientific(solver.maximum_hard_violation)});
+          qp_timing + "/" + non_qp_timing,
+        solver.has_qp_diagnostics ? formatScientific(solver.maximum_hard_violation) : "-"});
     }
     if (frame_.solvers.empty()) {
       rows.push_back({"IK", frame_.ik_status, "-", "-", formatFixed(frame_.solve_time_ms, 3), "-"});
@@ -714,18 +759,20 @@ private:
       content.push_back(text("single-loop runtime") | dim);
     } else {
       std::vector<std::vector<std::string>> rows = {
-        {"worker", "Hz", "iterations", "miss", "consecutive", "skipped",
-         "recoverable rejects", "max solver ms"}};
+        {"worker", "Hz", "iterations", "miss", "skipped", "recoverable rejects",
+         "solver now/max", "sched now/max", "exec now/max"}};
       for (const auto & worker : frame_.workers) {
         rows.push_back({
           worker.label,
           formatFixed(worker.configured_rate_hz, 0),
           std::to_string(worker.iteration_count),
           std::to_string(worker.deadline_miss_count),
-          std::to_string(worker.consecutive_deadline_misses),
           std::to_string(worker.skipped_release_count),
           std::to_string(worker.recoverable_rejection_count),
-          formatFixed(worker.maximum_solver_ms, 3)});
+          formatTimingPair(worker.latest_solver_ms, worker.maximum_solver_ms),
+          formatTimingPair(
+            worker.latest_release_lateness_ms, worker.maximum_release_lateness_ms),
+          formatTimingPair(worker.latest_execution_ms, worker.maximum_execution_ms)});
       }
       content.push_back(renderTable(std::move(rows)));
     }
@@ -756,19 +803,41 @@ private:
         {"converged", solver.converged ? "true" : "false"},
         {"joint-limit policy", solver.joint_limit_policy},
         {"IK iterations", std::to_string(solver.ik_iterations)},
-        {"IK solve ms", formatFixed(solver.ik_solve_time_ms, 6)},
+        {"IK total [ms]", formatFixed(solver.ik_solve_time_ms, 6)},
+        {"IK percentile window", formatPercentileWindow(solver.ik_solve_time_percentiles)},
+        {"IK P90/P95/P99 [ms]",
+         formatPercentileTriplet(solver.ik_solve_time_percentiles)},
         {"QP backend/status", solver.backend + "/" + solver.qp_status},
         {"QP native status", solver.native_status.empty() ? "-" : solver.native_status},
-        {"QP iterations", std::to_string(solver.qp_iterations)},
-        {"QP solve ms", formatFixed(solver.qp_solve_time_ms, 6)},
-        {"objective", formatScientific(solver.objective_value)},
-        {"primal residual", formatScientific(solver.primal_residual)},
-        {"dual residual", formatScientific(solver.dual_residual)},
-        {"maximum hard violation", formatScientific(solver.maximum_hard_violation)},
-        {"active set size", std::to_string(solver.active_set_size)},
-        {"warm start", solver.warm_start_used ? "true" : "false"},
+        {"QP iterations",
+         solver.has_qp_diagnostics ? std::to_string(solver.qp_iterations) : "-"},
+        {"QP backend [ms]",
+         solver.has_qp_diagnostics ? formatFixed(solver.qp_solve_time_ms, 6) : "-"},
+        {"IK non-QP [ms]",
+         solver.has_qp_diagnostics
+         ? formatFixed(std::max(0.0, solver.ik_solve_time_ms - solver.qp_solve_time_ms), 6)
+         : "-"},
+        {"objective",
+         solver.has_qp_diagnostics ? formatScientific(solver.objective_value) : "-"},
+        {"primal residual",
+         solver.has_qp_diagnostics ? formatScientific(solver.primal_residual) : "-"},
+        {"dual residual",
+         solver.has_qp_diagnostics ? formatScientific(solver.dual_residual) : "-"},
+        {"maximum hard violation",
+         solver.has_qp_diagnostics ? formatScientific(solver.maximum_hard_violation) : "-"},
+        {"active set size",
+         solver.has_qp_diagnostics ? std::to_string(solver.active_set_size) : "-"},
+        {"warm start",
+         solver.has_qp_diagnostics ? (solver.warm_start_used ? "true" : "false") : "-"},
         {"saturated joints", joinStrings(solver.saturated_joints)},
       };
+      if (solver.run_counters.has_value()) {
+        summary.push_back({
+          "attempts/accepted/rejected",
+          std::to_string(solver.run_counters->attempts) + "/" +
+            std::to_string(solver.run_counters->accepted) + "/" +
+            std::to_string(solver.run_counters->rejected)});
+      }
       solver_content.push_back(renderTable(std::move(summary)));
       if (solver.grouped_attempt.has_value()) {
         const auto & attempt = *solver.grouped_attempt;
@@ -863,59 +932,191 @@ private:
     return vbox(std::move(content));
   }
 
-  ftxui::Element renderJointsPanel(bool selected_only) const
+  std::vector<std::size_t> armJointIndices(ArmSide side) const
   {
-    using namespace ftxui;
-    std::vector<std::vector<std::string>> rows = {{"joint", "q", "dq", "saturated"}};
+    const auto * arm = findArmPresentation(source_.presentation_, side);
+    return arm == nullptr ? std::vector<std::size_t>{} : arm->joint_indices;
+  }
+
+  std::vector<std::size_t> nonArmJointIndices() const
+  {
     std::vector<std::size_t> indices;
-    if (selected_only) {
-      if (const auto * arm = findArmPresentation(
-          source_.presentation_, source_.command_.selected_side))
-      {
-        indices = arm->joint_indices;
+    for (std::size_t index = 0; index < frame_.positions.size(); ++index) {
+      bool arm_joint = false;
+      for (const auto & arm : source_.presentation_.arms) {
+        if (std::find(arm.joint_indices.begin(), arm.joint_indices.end(), index) !=
+          arm.joint_indices.end())
+        {
+          arm_joint = true;
+          break;
+        }
       }
-    } else {
-      indices.resize(frame_.positions.size());
-      for (std::size_t index = 0; index < indices.size(); ++index) {
-        indices[index] = index;
+      if (!arm_joint) {
+        indices.push_back(index);
       }
     }
+    return indices;
+  }
+
+  std::vector<std::string> saturatedJointNames() const
+  {
     std::vector<std::string> saturated;
     for (const auto & solver : frame_.solvers) {
       saturated.insert(
         saturated.end(), solver.saturated_joints.begin(), solver.saturated_joints.end());
     }
+    return saturated;
+  }
+
+  std::string jointName(std::size_t index) const
+  {
+    return index < frame_.joint_names.size()
+      ? frame_.joint_names[index]
+      : "joint_" + std::to_string(index);
+  }
+
+  bool isJointSaturated(
+    std::size_t index,
+    const std::vector<std::string> & saturated) const
+  {
+    const std::string name = jointName(index);
+    return std::find(saturated.begin(), saturated.end(), name) != saturated.end();
+  }
+
+  ftxui::Element renderJointGroupPanel(
+    const std::string & title,
+    const std::vector<std::size_t> & indices) const
+  {
+    using namespace ftxui;
+    std::vector<std::vector<std::string>> rows = {{"joint", "q", "dq", "saturated"}};
+    const auto saturated = saturatedJointNames();
     for (const auto index : indices) {
       if (index >= frame_.positions.size()) {
         continue;
       }
-      const std::string name = index < frame_.joint_names.size()
-        ? frame_.joint_names[index]
-        : "joint_" + std::to_string(index);
-      const bool is_saturated =
-        std::find(saturated.begin(), saturated.end(), name) != saturated.end();
       rows.push_back({
-        name,
+        jointName(index),
         formatFixed(frame_.positions[index], 6),
         index < frame_.velocities.size() ? formatFixed(frame_.velocities[index], 6) : "-",
-        is_saturated ? "YES" : ""});
+        isJointSaturated(index, saturated) ? "YES" : ""});
+    }
+    return debugWindow(title, renderTable(std::move(rows)));
+  }
+
+  ftxui::Element renderAllJointsCompactPanel(bool include_velocity) const
+  {
+    using namespace ftxui;
+    const auto body = nonArmJointIndices();
+    const auto left = armJointIndices(ArmSide::Left);
+    const auto right = armJointIndices(ArmSide::Right);
+    const auto saturated = saturatedJointNames();
+    const std::size_t row_count = std::max({body.size(), left.size(), right.size()});
+
+    std::vector<std::vector<std::string>> rows;
+    rows.push_back(include_velocity
+      ? std::vector<std::string>{
+          "body", "q", "dq", "left", "q", "dq", "right", "q", "dq"}
+      : std::vector<std::string>{"body", "q", "left", "q", "right", "q"});
+
+    auto shortBodyName = [this](std::size_t index) {
+        std::string name = jointName(index);
+        constexpr std::string_view suffix = "_joint";
+        if (name.size() >= suffix.size() &&
+          name.compare(name.size() - suffix.size(), suffix.size(), suffix) == 0)
+        {
+          name.erase(name.size() - suffix.size());
+        }
+        return name;
+      };
+    auto appendJoint = [this, &saturated, include_velocity](
+        std::vector<std::string> & row,
+        const std::vector<std::size_t> & indices,
+        std::size_t display_row,
+        const std::string & label) {
+        if (display_row >= indices.size() || indices[display_row] >= frame_.positions.size()) {
+          row.push_back("");
+          row.push_back("");
+          if (include_velocity) {
+            row.push_back("");
+          }
+          return;
+        }
+        const std::size_t index = indices[display_row];
+        row.push_back(label + (isJointSaturated(index, saturated) ? "!" : ""));
+        row.push_back(formatFixed(frame_.positions[index], 4));
+        if (include_velocity) {
+          row.push_back(
+            index < frame_.velocities.size() ? formatFixed(frame_.velocities[index], 4) : "-");
+        }
+      };
+
+    for (std::size_t display_row = 0; display_row < row_count; ++display_row) {
+      std::vector<std::string> row;
+      appendJoint(
+        row, body, display_row,
+        display_row < body.size() ? shortBodyName(body[display_row]) : "");
+      appendJoint(row, left, display_row, "J" + std::to_string(display_row + 1));
+      appendJoint(row, right, display_row, "J" + std::to_string(display_row + 1));
+      rows.push_back(std::move(row));
     }
     return debugWindow(
-      selected_only
-      ? std::string{armSideName(source_.command_.selected_side)} + " arm state"
-      : "All joint state",
-      renderTable(std::move(rows)));
+      include_velocity ? "All joint state [rad, rad/s]" : "All joint positions [rad]",
+      vbox({renderTable(std::move(rows)), text("! saturated") | dim}));
   }
 
   ftxui::Element renderJointsPage() const
   {
-    return renderJointsPanel(false);
+    using namespace ftxui;
+    if (Terminal::Size().dimx >= 145) {
+      return hbox({
+        renderJointGroupPanel("Body state", nonArmJointIndices()) | flex,
+        separator(),
+        renderJointGroupPanel("Left arm state", armJointIndices(ArmSide::Left)) | flex,
+        separator(),
+        renderJointGroupPanel("Right arm state", armJointIndices(ArmSide::Right)) | flex,
+      });
+    }
+    return renderAllJointsCompactPanel(Terminal::Size().dimx >= 95);
   }
 
   ftxui::Element renderRuntimePage() const
   {
     using namespace ftxui;
     Elements content;
+    if (!frame_.cpu_affinities.empty()) {
+      std::vector<std::vector<std::string>> rows = {
+        {"role", "status", "TID", "requested CPUs", "effective CPUs"}};
+      for (const auto & affinity : frame_.cpu_affinities) {
+        const bool bound = affinity.enabled && !affinity.effective_cpus.empty();
+        rows.push_back({
+          affinity.role,
+          !affinity.enabled ? "disabled" : bound ? "bound" : "pending",
+          affinity.thread_id > 0 ? std::to_string(affinity.thread_id) : "-",
+          joinCpus(affinity.requested_cpus),
+          joinCpus(affinity.effective_cpus)});
+      }
+      content.push_back(debugWindow("CPU affinity", renderTable(std::move(rows))));
+    }
+    std::vector<std::vector<std::string>> percentile_rows = {
+      {"solver", "window/capacity", "total", "P90 [ms]", "P95 [ms]", "P99 [ms]"}};
+    for (const auto & solver : frame_.solvers) {
+      const auto & percentiles = solver.ik_solve_time_percentiles;
+      if (percentiles.window_sample_count == 0U) {
+        continue;
+      }
+      percentile_rows.push_back({
+        solver.label,
+        std::to_string(percentiles.window_sample_count) + "/" +
+          std::to_string(percentiles.window_capacity),
+        std::to_string(percentiles.total_sample_count),
+        formatFixed(percentiles.p90, 3),
+        formatFixed(percentiles.p95, 3),
+        formatFixed(percentiles.p99, 3)});
+    }
+    if (percentile_rows.size() > 1U) {
+      content.push_back(debugWindow(
+        "IK solve-time percentiles", renderTable(std::move(percentile_rows))));
+    }
     if (!frame_.workers.empty()) {
       if (Terminal::Size().dimx < 120) {
         Elements workers;
@@ -923,40 +1124,55 @@ private:
           workers.push_back(debugWindow(worker.label, renderTable({
             {"metric", "value"},
             {"configured rate [Hz]", formatFixed(worker.configured_rate_hz, 0)},
+            {"solver latest/max [ms]",
+             formatTimingPair(worker.latest_solver_ms, worker.maximum_solver_ms)},
+            {"sched delay latest/max [ms]",
+             formatTimingPair(
+               worker.latest_release_lateness_ms, worker.maximum_release_lateness_ms)},
+            {"non-solver execution latest/max [ms]",
+             formatTimingPair(
+               worker.latest_non_solver_execution_ms,
+               worker.maximum_non_solver_execution_ms)},
+            {"worker execution latest/max [ms]",
+             formatTimingPair(worker.latest_execution_ms, worker.maximum_execution_ms)},
+            {"release-to-finish latest/max [ms]",
+             formatTimingPair(
+               worker.latest_release_to_finish_ms, worker.maximum_release_to_finish_ms)},
+            {"overrun latest/max [ms]",
+             formatTimingPair(worker.latest_overrun_ms, worker.maximum_overrun_ms)},
             {"iterations", std::to_string(worker.iteration_count)},
             {"deadline misses", std::to_string(worker.deadline_miss_count)},
             {"consecutive misses", std::to_string(worker.consecutive_deadline_misses)},
             {"skipped releases", std::to_string(worker.skipped_release_count)},
             {"recoverable rejections", std::to_string(worker.recoverable_rejection_count)},
-            {"maximum release lateness [ms]",
-             formatFixed(worker.maximum_release_lateness_ms, 3)},
-            {"maximum execution [ms]", formatFixed(worker.maximum_execution_ms, 3)},
-            {"maximum release-to-finish [ms]",
-             formatFixed(worker.maximum_release_to_finish_ms, 3)},
-            {"maximum overrun [ms]", formatFixed(worker.maximum_overrun_ms, 3)},
-            {"maximum solver [ms]", formatFixed(worker.maximum_solver_ms, 3)},
           })));
         }
         content.push_back(debugWindow("Periodic workers", vbox(std::move(workers))));
       } else {
         std::vector<std::vector<std::string>> rows = {
-          {"worker", "Hz", "iterations", "miss", "consecutive", "skipped",
-           "recoverable rejects",
-           "late max", "exec max", "finish max", "overrun max", "solver max"}};
+          {"worker", "Hz", "iterations", "miss/consecutive", "skipped",
+           "recoverable rejects", "solver latest/max", "sched delay latest/max",
+           "non-solver latest/max", "execution latest/max",
+           "release-finish latest/max", "overrun latest/max"}};
         for (const auto & worker : frame_.workers) {
           rows.push_back({
             worker.label,
             formatFixed(worker.configured_rate_hz, 0),
             std::to_string(worker.iteration_count),
-            std::to_string(worker.deadline_miss_count),
-            std::to_string(worker.consecutive_deadline_misses),
+            std::to_string(worker.deadline_miss_count) + "/" +
+              std::to_string(worker.consecutive_deadline_misses),
             std::to_string(worker.skipped_release_count),
             std::to_string(worker.recoverable_rejection_count),
-            formatFixed(worker.maximum_release_lateness_ms, 3),
-            formatFixed(worker.maximum_execution_ms, 3),
-            formatFixed(worker.maximum_release_to_finish_ms, 3),
-            formatFixed(worker.maximum_overrun_ms, 3),
-            formatFixed(worker.maximum_solver_ms, 3)});
+            formatTimingPair(worker.latest_solver_ms, worker.maximum_solver_ms),
+            formatTimingPair(
+              worker.latest_release_lateness_ms, worker.maximum_release_lateness_ms),
+            formatTimingPair(
+              worker.latest_non_solver_execution_ms,
+              worker.maximum_non_solver_execution_ms),
+            formatTimingPair(worker.latest_execution_ms, worker.maximum_execution_ms),
+            formatTimingPair(
+              worker.latest_release_to_finish_ms, worker.maximum_release_to_finish_ms),
+            formatTimingPair(worker.latest_overrun_ms, worker.maximum_overrun_ms)});
         }
         content.push_back(debugWindow("Periodic workers [ms]", renderTable(std::move(rows))));
       }
@@ -988,7 +1204,8 @@ private:
       content.push_back(debugWindow(collision.label, vbox(std::move(collision_content))));
     }
     if (content.empty()) {
-      content.push_back(text("No multi-rate worker or collision diagnostics") | dim | center);
+      content.push_back(
+        text("No CPU affinity, multi-rate worker, or collision diagnostics") | dim | center);
     }
     return vbox(std::move(content));
   }

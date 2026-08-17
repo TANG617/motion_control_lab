@@ -1,5 +1,7 @@
 #pragma once
 
+#include "runtime/rolling_percentiles.hpp"
+
 #include <Eigen/Geometry>
 
 #include <cstddef>
@@ -113,6 +115,13 @@ struct GroupedAttemptDebug
   std::int64_t captured_state_time_nanoseconds{0};
 };
 
+struct SolverRunCounters
+{
+  std::uint64_t attempts{0};
+  std::uint64_t accepted{0};
+  std::uint64_t rejected{0};
+};
+
 struct SolverDebug
 {
   std::string label{"IK"};
@@ -122,10 +131,12 @@ struct SolverDebug
   int ik_iterations{0};
   bool converged{false};
   double ik_solve_time_ms{0.0};
+  RollingPercentilesSnapshot ik_solve_time_percentiles;
   std::vector<std::string> saturated_joints;
   std::string backend;
   std::string qp_status;
   std::string native_status;
+  bool has_qp_diagnostics{true};
   double objective_value{0.0};
   double primal_residual{0.0};
   double dual_residual{0.0};
@@ -136,6 +147,7 @@ struct SolverDebug
   bool warm_start_used{false};
   std::vector<TaskScaleDebug> task_scales;
   std::vector<RequirementDebug> requirements;
+  std::optional<SolverRunCounters> run_counters;
   std::optional<GroupedAttemptDebug> grouped_attempt;
 };
 
@@ -153,6 +165,22 @@ struct WorkerDebug
   double maximum_overrun_ms{0.0};
   double maximum_solver_ms{0.0};
   std::uint64_t recoverable_rejection_count{0};
+  double maximum_non_solver_execution_ms{0.0};
+  double latest_release_lateness_ms{0.0};
+  double latest_execution_ms{0.0};
+  double latest_release_to_finish_ms{0.0};
+  double latest_overrun_ms{0.0};
+  double latest_solver_ms{0.0};
+  double latest_non_solver_execution_ms{0.0};
+};
+
+struct CpuAffinityDebug
+{
+  std::string role;
+  bool enabled{false};
+  std::int64_t thread_id{-1};
+  std::vector<unsigned int> requested_cpus;
+  std::vector<unsigned int> effective_cpus;
 };
 
 enum class IkRuntimeState
@@ -207,6 +235,7 @@ struct TargetCommand
 
 struct IkDebugFrame
 {
+  std::string run_id{"interactive-preview"};
   std::vector<ArmTarget> targets;
   std::vector<ArmForwardKinematics> forward_kinematics;
   JointNames joint_names;
@@ -219,6 +248,7 @@ struct IkDebugFrame
   std::vector<ArmTargetError> target_errors;
   std::vector<SolverDebug> solvers;
   std::vector<WorkerDebug> workers;
+  std::vector<CpuAffinityDebug> cpu_affinities;
   std::vector<SelfCollisionDebug> self_collisions;
   std::optional<RejectedTargetDebug> rejected_target;
   std::string status{"Ready"};

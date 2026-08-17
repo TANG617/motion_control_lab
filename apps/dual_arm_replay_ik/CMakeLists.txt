@@ -6,6 +6,7 @@ set_target_properties(
 target_link_libraries(
   mcl_dual_arm_replay_ik
   PRIVATE
+    motion_control_lab::cpu_affinity
     motion_control_lab::replay_support
     motion_control_lab::replay_ik_engine
 )

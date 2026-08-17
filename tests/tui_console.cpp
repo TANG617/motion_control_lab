@@ -30,8 +30,8 @@ int run(bool throw_after_render, bool fault_hold)
   presentation.base_frame_id = "base_link";
   presentation.joint_state_channel = "/test/joints";
   presentation.arms = {
-    {mcl::ArmSide::Left, "/test/left_target", "/test/left_fk", {0}},
-    {mcl::ArmSide::Right, "/test/right_target", "/test/right_fk", {1}},
+    {mcl::ArmSide::Left, "/test/left_target", "/test/left_fk", {6, 7, 8, 9, 10, 11, 12}},
+    {mcl::ArmSide::Right, "/test/right_target", "/test/right_fk", {13, 14, 15, 16, 17, 18, 19}},
   };
 
   mcl::TuiTeleopSource tui(
@@ -48,9 +48,19 @@ int run(bool throw_after_render, bool fault_hold)
     {mcl::ArmSide::Left, mcl::Pose::Identity()},
     {mcl::ArmSide::Right, mcl::Pose::Identity()},
   };
-  frame.joint_names = {"left_joint", "right_joint"};
-  frame.positions = {0.0, 0.0};
-  frame.velocities = {0.0, 0.0};
+  frame.joint_names = {
+    "head_yaw_joint", "head_pitch_joint", "torso_yaw_joint", "torso_pitch_joint",
+    "knee_pitch_joint", "ankle_pitch_joint",
+    "left_arm_joint1", "left_arm_joint2", "left_arm_joint3", "left_arm_joint4",
+    "left_arm_joint5", "left_arm_joint6", "left_arm_joint7",
+    "right_arm_joint1", "right_arm_joint2", "right_arm_joint3", "right_arm_joint4",
+    "right_arm_joint5", "right_arm_joint6", "right_arm_joint7"};
+  frame.positions = {
+    0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9,
+    1.0, 1.1, 1.2, -0.6, -0.7, -0.8, -0.9, -1.0, -1.1, -1.2};
+  frame.velocities = {
+    0.00, 0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.09,
+    0.10, 0.11, 0.12, -0.06, -0.07, -0.08, -0.09, -0.10, -0.11, -0.12};
   frame.ik_status = "test";
   frame.converged = true;
   frame.status = "diagnostic frame ready";
@@ -63,6 +73,8 @@ int run(bool throw_after_render, bool fault_hold)
   solver.ik_iterations = 1;
   solver.converged = true;
   solver.ik_solve_time_ms = 0.125;
+  solver.ik_solve_time_percentiles = {5000, 4096, 4096, 0.130, 0.140, 0.160};
+  solver.run_counters = mcl::SolverRunCounters{5001, 5000, 1};
   solver.backend = "proxqp";
   solver.qp_status = "optimal";
   solver.native_status = "PROXQP_SOLVED";
@@ -73,11 +85,23 @@ int run(bool throw_after_render, bool fault_hold)
   solver.qp_solve_time_ms = 0.100;
   solver.qp_iterations = 4;
   solver.warm_start_used = true;
+  solver.saturated_joints = {"left_arm_joint4"};
   solver.task_scales = {{"left-cartesian", true, 1.0, 0.0, false, false}};
   solver.requirements = {{"joint-position-limits", "rad", "joint limits", true, true,
                           3.0e-9, 0.0}};
   frame.solvers = {solver};
   frame.workers = {{"Red", 1000.0, 120, 2, 0, 3, 0.010, 0.200, 0.210, 0.0, 0.125}};
+  frame.workers.front().maximum_non_solver_execution_ms = 0.075;
+  frame.workers.front().latest_release_lateness_ms = 0.004;
+  frame.workers.front().latest_execution_ms = 0.180;
+  frame.workers.front().latest_release_to_finish_ms = 0.184;
+  frame.workers.front().latest_overrun_ms = 0.0;
+  frame.workers.front().latest_solver_ms = 0.120;
+  frame.workers.front().latest_non_solver_execution_ms = 0.060;
+  frame.cpu_affinities = {
+    {"ui", true, 4101, {16}, {16}},
+    {"red", true, 4102, {8}, {8}},
+    {"yellow", false, -1, {10}, {}}};
 
   mcl::SelfCollisionDebug collision;
   collision.label = "Yellow self-collision";

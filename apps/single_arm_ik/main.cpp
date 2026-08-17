@@ -1,10 +1,12 @@
 #include "ik_app_utils.hpp"
+#include "cpu_affinity.hpp"
 #include "r1_interactive_config.hpp"
 #include "r1_robot_config.hpp"
 
 #include "config/interactive_ik_options.hpp"
 #include "runtime/interactive_scheduler.hpp"
 #include "runtime/interactive_types.hpp"
+#include "runtime/rolling_percentiles.hpp"
 #include "sinks/ik_visualization.hpp"
 #include "sinks/visualization_sink_factory.hpp"
 #include "teleop/tui_teleop_source.hpp"
@@ -14,6 +16,7 @@
 #include <Eigen/Core>
 
 #include <algorithm>
+#include <array>
 #include <cstdint>
 #include <cstdlib>
 #include <iostream>
@@ -30,6 +33,7 @@ namespace mcl = motion_control_lab;
 
 constexpr const char * kProgramId = "mcl_single_arm_ik";
 constexpr const char * kTitle = "Motion Control Single-arm IK";
+constexpr std::array<unsigned int, 1> kMainCpuAffinity{8};
 
 void throwIfError(const mcc::Status & status)
 {
@@ -41,6 +45,9 @@ void throwIfError(const mcc::Status & status)
 int run(int argc, char ** argv)
 {
   const auto options = mcl::parseInteractiveIkOptions(argc, argv);
+  const auto affinity_domain = mcl::CpuAffinityDomain::capture();
+  const auto affinity_binding =
+    affinity_domain.bindCurrentThread(kProgramId, "main", kMainCpuAffinity);
   const auto & robot = mcl::r1RobotConfig();
   const auto controlled_side = mcl::parseArmSide(options.tui.side);
   const std::string & controlled_frame = mcl::frameForSide(robot, controlled_side);
@@ -137,6 +144,7 @@ int run(int argc, char ** argv)
 
   mcl::installInteractiveSignalHandlers();
   mcl::InteractiveScheduler scheduler({options.rate_hz, options.duration_s});
+  mcl::RollingPercentiles solve_time_percentiles;
   std::size_t publish_count = 0;
   std::uint64_t solve_sequence = 0;
 
@@ -149,6 +157,7 @@ int run(int argc, char ** argv)
   latest_frame.positions = positions;
   latest_frame.velocities = velocities;
   latest_frame.selected_side = controlled_side;
+  latest_frame.cpu_affinities = {mcl::makeCpuAffinityDebug(affinity_binding)};
 
   visualization_sink->open({"interactive-preview", kProgramId});
 
@@ -185,6 +194,7 @@ int run(int argc, char ** argv)
         mcc::GroupedInverseKinematicsDiagnostics diagnostics;
         const auto status = solver.solveInverseKinematics(
           mcc::SolverGroup::Red, request, solution, diagnostics);
+        solve_time_percentiles.record(diagnostics.kinematics.solve_time_ms);
         throwIfError(status);
         if (!diagnostics.attempt_accepted) {
           throw std::runtime_error("Red IK attempt rejected");
@@ -246,6 +256,10 @@ int run(int argc, char ** argv)
       }
 
       if (schedule->draw_due) {
+        if (!latest_frame.solvers.empty()) {
+          latest_frame.solvers.front().ik_solve_time_percentiles =
+            solve_time_percentiles.snapshot();
+        }
         latest_frame.paused = tui.command().paused;
         tui.render(latest_frame, publish_count, visualization_sink->status());
       }

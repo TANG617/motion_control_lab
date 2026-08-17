@@ -1,4 +1,5 @@
 #include "apps/dual_arm_replay_ik/replay_ik_engine.hpp"
+#include "cpu_affinity.hpp"
 #include "contracts/visualization/foxglove_ik_v1.hpp"
 #include "e02_build_config.hpp"
 #include "motion_control_lab/run_artifacts.hpp"
@@ -14,6 +15,7 @@
 #include <unistd.h>
 
 #include <Eigen/Geometry>
+#include <array>
 #include <cerrno>
 #include <chrono>
 #include <cstdint>
@@ -36,6 +38,9 @@ namespace visualization_contract = motion_control_lab::contracts::foxglove_ik_v1
 namespace mcv = motion_control::viz;
 #endif
 
+constexpr const char * kProgramId = "mcl_dual_arm_replay_ik";
+constexpr std::array<unsigned int, 1> kMainCpuAffinity{8};
+
 std::string jsonString(const Json::Value & value)
 {
   Json::StreamWriterBuilder builder;
@@ -54,6 +59,21 @@ Json::Value isometryJson(const Eigen::Isometry3d & value)
   result["orientation_xyzw"]["y"] = orientation.y();
   result["orientation_xyzw"]["z"] = orientation.z();
   result["orientation_xyzw"]["w"] = orientation.w();
+  return result;
+}
+
+Json::Value cpuAffinityJson(const mcl::CpuAffinityBinding & binding)
+{
+  Json::Value result;
+  result["enabled"] = binding.enabled;
+  result["roles"][binding.role]["requested_cpus"] = Json::Value(Json::arrayValue);
+  result["roles"][binding.role]["effective_cpus"] = Json::Value(Json::arrayValue);
+  for (const auto cpu : binding.requested_cpus) {
+    result["roles"][binding.role]["requested_cpus"].append(cpu);
+  }
+  for (const auto cpu : binding.effective_cpus) {
+    result["roles"][binding.role]["effective_cpus"].append(cpu);
+  }
   return result;
 }
 
@@ -216,6 +236,9 @@ int run(int argc, char ** argv)
     std::cout << replay::replayHelp(argv[0], true);
     return EXIT_SUCCESS;
   }
+  const auto affinity_domain = mcl::CpuAffinityDomain::capture();
+  const auto affinity_binding =
+    affinity_domain.bindCurrentThread(kProgramId, "main", kMainCpuAffinity);
   resolveExperimentOutput(options);
 #if !MCL_WITH_REPLAY_VISUALIZATION
   if (options.visualize) {
@@ -313,6 +336,7 @@ int run(int argc, char ** argv)
   manifest["source_control"]["revision"] = std::string(mcl::e02::build_config::kSourceRevision);
   manifest["source_control"]["dirty"] = mcl::e02::build_config::kSourceDirty;
   manifest["environment"]["runtime"] = std::string(mcl::e02::build_config::kRuntime);
+  manifest["execution"]["cpu_affinity"] = cpuAffinityJson(affinity_binding);
   manifest["artifacts"]["status.json"]["sha256"] = mcl::sha256_file(status_path);
   manifest["robot_model"]["urdf_path"] =
     std::filesystem::absolute(options.urdf_path).lexically_normal().string();
