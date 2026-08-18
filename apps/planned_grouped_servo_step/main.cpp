@@ -58,7 +58,7 @@ constexpr std::array<unsigned int, 1> kRedCpuAffinity{6};
 constexpr std::array<unsigned int, 1> kYellowCpuAffinity{7};
 constexpr double kMaximumAcceptedHardViolation = 5.0e-4;
 constexpr double kJointPositionLimitMarginRad = 1.0e-2;
-constexpr double kCartesianProgressWeight = 3.0;
+constexpr double kCartesianProgressWeight = 100.0;
 constexpr double kRedProxQpAbsoluteTolerance = 1.0e-6;
 constexpr double kRedProxQpPrimalInfeasibilityTolerance = 1.0e-12;
 constexpr double kYellowPostureWeight = 1.0;
@@ -478,13 +478,19 @@ mcc::CapturedRobotState capturedState(const StateSnapshot & state)
 }
 
 void addCartesianTargets(
-  const CartesianHandles & handles, const TargetSnapshot & target,
+  const CartesianHandles & handles, const mcc::CartesianTrajectorySample & sample,
   mcc::GroupedInverseKinematicsRequest & request)
 {
-  request.position_targets[0].position = target.left.translation();
-  request.position_targets[1].position = target.right.translation();
-  request.orientation_targets[0].orientation = target.left.linear();
-  request.orientation_targets[1].orientation = target.right.linear();
+  const auto & left = sample.frames.at(0);
+  const auto & right = sample.frames.at(1);
+  request.position_targets[0].position = left.pose.translation();
+  request.position_targets[1].position = right.pose.translation();
+  request.orientation_targets[0].orientation = left.pose.linear();
+  request.orientation_targets[1].orientation = right.pose.linear();
+  request.position_targets[0].feed_forward_velocity = left.twist.head<3>();
+  request.position_targets[1].feed_forward_velocity = right.twist.head<3>();
+  request.orientation_targets[0].feed_forward_angular_velocity = left.twist.tail<3>();
+  request.orientation_targets[1].feed_forward_angular_velocity = right.twist.tail<3>();
   request.position_targets[0].handle = handles.left_position;
   request.position_targets[1].handle = handles.right_position;
   request.orientation_targets[0].handle = handles.left_orientation;
@@ -867,7 +873,7 @@ int run(int argc, char ** argv, std::string & normal_exit_detail)
   for (auto * config : {&solver_config.red, &solver_config.yellow}) {
     config->joint_limit_policy = mcc::KinematicsJointLimitPolicy::ExplicitRequirements;
     config->qp.backend = mcc::QpBackend::ProxQp;
-    config->qp.regularization = 1.0e-4;
+    config->qp.regularization = 1.0e-10;
     config->position_tolerance_m = 1.0e-4;
     config->orientation_tolerance_rad = 1.0e-4;
     config->minimum_position_improvement_m = 1.0e-8;
@@ -987,7 +993,7 @@ int run(int argc, char ** argv, std::string & normal_exit_detail)
     mcc::GroupedInverseKinematicsRequest red;
     initializeCartesianRequest(handles.red, robot.base_frame, red);
     red.captured_state = capturedState(initial_state);
-    addCartesianTargets(handles.red, warmup_target, red);
+    addCartesianTargets(handles.red, initial_output.accepted_planner_sample, red);
     status = solver.solveInverseKinematics(mcc::SolverGroup::Red, red, solution, diagnostics);
     if (!operationSucceeded(status) || !diagnostics.attempt_accepted) {
       throw std::runtime_error("Red warm-up failed: " + rejectedAttemptDetail(status, diagnostics));
@@ -1213,7 +1219,7 @@ int run(int argc, char ** argv, std::string & normal_exit_detail)
         const mcc::CartesianTrajectorySample staged_for_attempt = *staged_planner_sample;
         attempt.attempted_reference = reference;
         request.captured_state = capturedState(state);
-        addCartesianTargets(handles.red, reference, request);
+        addCartesianTargets(handles.red, staged_for_attempt, request);
         const auto status =
           solver.solveInverseKinematics(mcc::SolverGroup::Red, request, solution, diagnostics);
         red_solve_time_percentiles.record(diagnostics.kinematics.solve_time_ms);

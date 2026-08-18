@@ -19,6 +19,10 @@ Motion Control Lab 是面向机器人遥操作 whole-body IK 的可复现实验�
 任务和结果解释。grouped 双臂入口使用 MCC 独立 Red/Yellow worker。它们只复用 R1 固定参数、
 TUI/Viz 初始化和 wall-clock pacing；算法快照统一映射为
 `motion_control_viz::VisualizationFrame`。
+`mcl_baseline` 是独立的 PlaCo-only production-static 对照入口：它冻结生产
+`motion_control` revision `42ed3ce3a19f5a7346874a31ec659c0298751137` 的有效任务、权重、
+初始姿态、关节 mask、限位和 TargetSolve 终止条件，不读取 `/etc/robot/software.yaml`，也不
+启用 adaptive reach、continuity 或 elbow-pole 动态策略。
 所有 IK app 的 Foxglove topic 与 FK 一致性要求由
 [Foxglove IK 可视化数据流合同](docs/foxglove_ik_visualization_contract.md)统一定义。
 该路径用于开发调试，不替代由 canonical timeline 驱动的可复现实验执行器。
@@ -236,7 +240,39 @@ cmake --build build/opensot --target e04_opensot_smoke -j8
 ctest --test-dir build/opensot --output-on-failure -R 'contracts.r1_smoke_pair|experiments.e04_opensot_smoke'
 ```
 
-## 可选 MCC 交互预览
+## IK 交互预览与 production baseline
+
+### PlaCo production-static baseline
+
+默认构建包含 `mcl_baseline`；它没有 `--solver` 或 `--backend` 选项。teleop 固定以 100 Hz
+运行，外部目标保持 TCP 语义，进入 PlaCo task 前去除左右各 `0.1 m` TCP offset：
+
+```bash
+cmake --build build/mcc-preview --target mcl_baseline -j8
+./build/mcc-preview/mcl_baseline teleop \
+  --urdf /workspace/models/r1.cos.urdf \
+  --ui tui --no-mcap
+```
+
+Replay 固定要求 `--target-period-ms 10`，并始终从冻结的生产 initial pose 启动：
+
+```bash
+./build/mcc-preview/mcl_baseline replay \
+  --urdf /workspace/models/r1.cos.urdf \
+  --input /path/to/targets.csv --input-format csv \
+  --left-stream left --right-stream right \
+  --timestamp-source csv_timestamp --target-period-ms 10 \
+  --execution-mode batch --ui none --no-mcap \
+  --output-dir /tmp/mcl-baseline-run
+```
+
+每个 replay run 写出 `baseline_config.json`、`trace.csv`、`status.json` 和 `manifest.json`。
+配置 artifact 使用 `mcl.placo_baseline_config.v1`，manifest 固化其 SHA-256；trace 同时保存公共
+TCP target、内部 EE task target、EE/TCP FK、两套误差、frame scale、20 关节状态和 PlaCo
+velocity。Foxglove MCAP 仍只承载现有 IK 可视化合同，不承载这些诊断字段。
+为保证跨 run 的逐字段确定性，trace 中除 `solve_time_ms` 外的浮点诊断统一规范化为 12 位小数。
+
+### 可选 MCC 交互预览
 
 先按 MCC README 的 Strategy A 准备独立的 shared eiquadprog package（下例前缀为
 `/tmp/eiq_install`），再分别安装 `motion_control_core` 和 `motion_control_viz`。Lab 通过
@@ -441,6 +477,7 @@ apps/cartesian_planning/  JSON 驱动的纯 Cartesian MoveLine 规划、渲染�
 apps/plot_core_planning/  可选的 Core planning API matplotlib smoke app
 apps/replay_plan/         不运行 solver 的 canonical timeline inspect/artifact 入口
 adapters/replay/         solver-agnostic timeline loader、clock、provenance 与 replay artifact
+apps/baseline/           PlaCo production-static teleop/replay 对照基线
 apps/servo_step/         普通双臂 ServoStep；teleop/replay 使用同一 solver topology
 apps/grouped_servo_step/ raw Red/Yellow ServoStep；Red position+velocity，Yellow position
 apps/planned_grouped_servo_step/ 在线 Cartesian replan；Red position+velocity+acceleration

@@ -30,6 +30,11 @@ option(
   ON
 )
 option(
+  MCL_BUILD_BASELINE
+  "Build the PlaCo production-static baseline application"
+  ON
+)
+option(
   MCL_BUILD_GROUPED_SERVO_STEP
   "Build the Red/Yellow dual-arm IK application"
   ON
@@ -84,7 +89,7 @@ endif()
 
 set(MCL_BUILD_ANY_INTERACTIVE_IK OFF)
 if(MCL_BUILD_SINGLE_ARM_SERVO_STEP OR MCL_BUILD_SERVO_STEP OR
-   MCL_BUILD_TARGET_SOLVE OR MCL_BUILD_GROUPED_SERVO_STEP OR
+   MCL_BUILD_TARGET_SOLVE OR MCL_BUILD_BASELINE OR MCL_BUILD_GROUPED_SERVO_STEP OR
    MCL_BUILD_PLANNED_GROUPED_SERVO_STEP)
   set(MCL_BUILD_ANY_INTERACTIVE_IK ON)
 endif()
@@ -233,6 +238,9 @@ if(MCL_BUILD_ANY_INTERACTIVE_IK)
   endif()
   if(MCL_BUILD_TARGET_SOLVE)
     add_subdirectory(apps/target_solve)
+  endif()
+  if(MCL_BUILD_BASELINE)
+    add_subdirectory(apps/baseline)
   endif()
   if(MCL_BUILD_GROUPED_SERVO_STEP)
     add_subdirectory(apps/grouped_servo_step)
