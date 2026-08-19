@@ -2,7 +2,9 @@
 
 Motion Control Lab 是面向机器人遥操作 whole-body IK 的可复现实验仓库。研究愿景见
 [docs/experiments.md](docs/experiments.md)，实验与证据生命周期见
-[docs/experiment_architecture.md](docs/experiment_architecture.md)。
+[docs/experiment_architecture.md](docs/experiment_architecture.md)，app 与 TUI、Viz、scheduler、
+teleop、replay 的目标职责边界见
+[docs/app_component_architecture.md](docs/app_component_architecture.md)。
 
 当前仓库提供第一条端到端纵向切片：
 

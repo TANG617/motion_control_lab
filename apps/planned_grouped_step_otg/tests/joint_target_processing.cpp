@@ -160,9 +160,11 @@ void testR1ProfileOrderAndReplaySettling() {
             "R1 stream profile joint order mismatch");
   }
   require(app::kR1StreamMaxVelocityRadPerS[6] == 5.05 &&
-              app::kR1StreamMaxAccelerationRadPerS2[10] == 16.2 &&
-              app::kR1StreamMaxJerkRadPerS3[19] == 162.0,
+              app::kR1StreamMaxAccelerationRadPerS2[10] == 16.2,
           "R1 stream profile order/value mismatch");
+  for (const double maximum_jerk : app::kR1StreamMaxJerkRadPerS3) {
+    require(maximum_jerk == 3200.0, "OTG jerk override mismatch");
+  }
 
   app::ReplaySettlingCounter settling;
   for (std::size_t cycle = 0U; cycle < 19U; ++cycle) {

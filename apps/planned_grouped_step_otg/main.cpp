@@ -1176,7 +1176,11 @@ int run(int argc, char ** argv, std::string & normal_exit_detail)
     const auto affinity_binding =
       affinity_domain.bindCurrentThread(kProgramId, "red", kRedCpuAffinity);
     red_affinity_to_ui.publish(affinity_binding);
-    StateSnapshot state = initial_state;
+    // Keep the accepted raw-IK reference independent from the jerk-limited
+    // execution state. Red advances from ik_state, while JointPlanner and
+    // Yellow advance from otg_state.
+    StateSnapshot ik_state = initial_state;
+    StateSnapshot otg_state = initial_state;
     TargetSnapshot target = initial_target;
     RedOutputSnapshot output = initial_output;
     mcc::GroupedInverseKinematicsRequest request;
@@ -1235,10 +1239,10 @@ int run(int argc, char ** argv, std::string & normal_exit_detail)
       row[17] = traceEigenVector(target.left.translation());
       row[23] = tracePose(output.left_pose);
       row[24] = tracePose(output.right_pose);
-      row[33] = traceEigenVector(state.positions);
-      row[34] = traceEigenVector(state.velocities);
-      row[35] = traceEigenVector(state.accelerations);
-      row[36] = traceEigenVector(state.jerks);
+      row[33] = traceEigenVector(otg_state.positions);
+      row[34] = traceEigenVector(otg_state.velocities);
+      row[35] = traceEigenVector(otg_state.accelerations);
+      row[36] = traceEigenVector(otg_state.jerks);
       const auto worker_stats = red_worker_diagnostics.snapshot();
       row[45] = std::to_string(worker_stats.deadline_miss_count);
       row[46] = std::to_string(worker_stats.skipped_release_count);
@@ -1314,7 +1318,7 @@ int run(int argc, char ** argv, std::string & normal_exit_detail)
         reference.right = staged_planner_sample->frames.at(1).pose;
         const mcc::CartesianTrajectorySample staged_for_attempt = *staged_planner_sample;
         attempt.attempted_reference = reference;
-        request.captured_state = capturedState(state);
+        request.captured_state = capturedState(ik_state);
         addCartesianTargets(handles.red, staged_for_attempt, request);
         const auto ik_status =
           solver.solveInverseKinematics(mcc::SolverGroup::Red, request, solution, diagnostics);
@@ -1342,7 +1346,7 @@ int run(int argc, char ** argv, std::string & normal_exit_detail)
         }
 
         const auto mapped_raw_ik = mcl::planned_grouped_step_otg::mapActiveIkToFull(
-          toStdVector(state.positions), active_joint_full_indices,
+          toStdVector(ik_state.positions), active_joint_full_indices,
           toStdVector(solution.kinematics_solution.joint_positions),
           toStdVector(solution.kinematics_solution.joint_velocities));
         const auto raw_target = joint_target_builder.preview(
@@ -1365,9 +1369,9 @@ int run(int argc, char ** argv, std::string & normal_exit_detail)
 
         mcc::JointTrajectoryRequest joint_request;
         joint_request.joint_names = joint_names;
-        joint_request.current.positions = toStdVector(state.positions);
-        joint_request.current.velocities = toStdVector(state.velocities);
-        joint_request.current.accelerations = toStdVector(state.accelerations);
+        joint_request.current.positions = toStdVector(otg_state.positions);
+        joint_request.current.velocities = toStdVector(otg_state.velocities);
+        joint_request.current.accelerations = toStdVector(otg_state.accelerations);
         joint_request.target.positions = projected_target.positions;
         joint_request.target.velocities = projected_target.velocities;
         joint_request.target.accelerations = projected_target.accelerations;
@@ -1407,15 +1411,23 @@ int run(int argc, char ** argv, std::string & normal_exit_detail)
             attempt.detail};
         }
 
-        StateSnapshot candidate_state = state;
-        candidate_state.positions = toEigen(joint_sample.positions);
-        candidate_state.velocities = toEigen(joint_sample.velocities);
-        candidate_state.accelerations = toEigen(joint_sample.accelerations);
-        candidate_state.jerks = toEigen(joint_sample.jerks);
-        ++candidate_state.sequence;
-        candidate_state.monotonic_time_nanoseconds = sample_time_ns;
+        StateSnapshot candidate_ik_state = ik_state;
+        candidate_ik_state.positions = toEigen(mapped_raw_ik.positions);
+        candidate_ik_state.velocities = toEigen(mapped_raw_ik.velocities);
+        candidate_ik_state.accelerations.setZero();
+        candidate_ik_state.jerks.setZero();
+        ++candidate_ik_state.sequence;
+        candidate_ik_state.monotonic_time_nanoseconds = sample_time_ns;
+
+        StateSnapshot candidate_otg_state = otg_state;
+        candidate_otg_state.positions = toEigen(joint_sample.positions);
+        candidate_otg_state.velocities = toEigen(joint_sample.velocities);
+        candidate_otg_state.accelerations = toEigen(joint_sample.accelerations);
+        candidate_otg_state.jerks = toEigen(joint_sample.jerks);
+        ++candidate_otg_state.sequence;
+        candidate_otg_state.monotonic_time_nanoseconds = sample_time_ns;
         mcc::ForwardKinematicsRequest executed_fk_request;
-        executed_fk_request.state = robotState(candidate_state);
+        executed_fk_request.state = robotState(candidate_otg_state);
         executed_fk_request.frame_names = {
           robot.left_end_effector_frame, robot.right_end_effector_frame};
         executed_fk_request.reference_frame_name = robot.base_frame;
@@ -1445,9 +1457,10 @@ int run(int argc, char ** argv, std::string & normal_exit_detail)
         const auto executed_right_pose =
           requirePose(executed_fk.poses, robot.right_end_effector_frame).pose;
 
-        state = std::move(candidate_state);
+        ik_state = std::move(candidate_ik_state);
+        otg_state = std::move(candidate_otg_state);
         joint_target_builder.commit(mapped_raw_ik.positions, raw_target);
-        state_to_yellow.publish(state);
+        state_to_yellow.publish(otg_state);
         accepted_planner_sample = *staged_planner_sample;
         staged_planner_sample.reset();
 
@@ -1456,9 +1469,9 @@ int run(int argc, char ** argv, std::string & normal_exit_detail)
         output.source_goal = target;
         output.accepted_planner_sample = accepted_planner_sample;
         output.planner_state = planning_diagnostics.state;
-        output.state = state;
-        output.raw_ik_positions = toEigen(mapped_raw_ik.positions);
-        output.raw_ik_velocities = toEigen(mapped_raw_ik.velocities);
+        output.state = otg_state;
+        output.raw_ik_positions = ik_state.positions;
+        output.raw_ik_velocities = ik_state.velocities;
         output.raw_joint_target = raw_target;
         output.projected_joint_target = projected_target;
         output.projection = projection;
@@ -1502,7 +1515,7 @@ int run(int argc, char ** argv, std::string & normal_exit_detail)
             planning_diagnostics.state == mcc::PlanningState::Finished,
             output.left_position_error_m, output.left_orientation_error_rad,
             output.right_position_error_m, output.right_orientation_error_rad,
-            maximumAbsolute(state.velocities), maximumAbsolute(state.accelerations));
+            maximumAbsolute(otg_state.velocities), maximumAbsolute(otg_state.accelerations));
           replay_settled_cycle_count.store(replay_settling.consecutiveCycles());
           replay_settled.store(settled);
 
@@ -1529,10 +1542,10 @@ int run(int argc, char ** argv, std::string & normal_exit_detail)
           row[30] = traceStdVector(projected_target.positions);
           row[31] = traceStdVector(projected_target.velocities);
           row[32] = traceStdVector(projected_target.accelerations);
-          row[33] = traceEigenVector(state.positions);
-          row[34] = traceEigenVector(state.velocities);
-          row[35] = traceEigenVector(state.accelerations);
-          row[36] = traceEigenVector(state.jerks);
+          row[33] = traceEigenVector(otg_state.positions);
+          row[34] = traceEigenVector(otg_state.velocities);
+          row[35] = traceEigenVector(otg_state.accelerations);
+          row[36] = traceEigenVector(otg_state.jerks);
           row[37] = raw_target.future_o1_startup ? "true" : "false";
           row[38] = plannerStateName(joint_step_diagnostics.state);
           row[39] = std::to_string(joint_plan_diagnostics.duration);
@@ -1798,6 +1811,7 @@ int run(int argc, char ** argv, std::string & normal_exit_detail)
       frame.ik_status +=
         " joint_otg=" + std::string{mcl::planned_grouped_step_otg::jointTargetModeName(
                            planned_options.joint_target_mode)} +
+        " feedback=split-ik-reference/otg-execution" +
         " state=" + plannerStateName(latest_output.joint_step_diagnostics.state) +
         " plan_ms=" +
         std::to_string(latest_output.joint_plan_diagnostics.calculation_time_ms) +
@@ -1900,7 +1914,8 @@ int run(int argc, char ** argv, std::string & normal_exit_detail)
     }
     replay::ReplayExecutionMetadata execution;
     execution.app = kProgramId;
-    execution.topology = "planned-red-yellow-grouped-servo-step+joint-otg";
+    execution.topology =
+      "planned-red-yellow-grouped-servo-step+split-reference-joint-otg";
     execution.solver = "motion_control_core+CartesianPlanner+JointPlanner";
     execution.backend = "proxqp+ruckig";
     execution.red_rate_hz = options.red_rate_hz;
@@ -1920,6 +1935,10 @@ int run(int argc, char ** argv, std::string & normal_exit_detail)
     joint_otg["execution_semantics"] =
       "per Red tick JointPlanner::plan plus first JointPlanner::step sample; not persistent "
       "Ruckig.update equivalence";
+    joint_otg["feedback_topology"] = "split-ik-reference-and-otg-execution";
+    joint_otg["red_ik_feedback_source"] = "previous accepted raw IK P/V";
+    joint_otg["joint_planner_feedback_source"] = "previous accepted OTG P/V/A";
+    joint_otg["yellow_feedback_source"] = "previous accepted OTG P/V";
     joint_otg["future_o1_startup"] = "first two accepted live samples use latest P and zero V";
     joint_otg["future_o1_velocity_deadband_rad_per_s"] =
       mcl::planned_grouped_step_otg::kFutureO1VelocityDeadbandRadPerS;
@@ -1929,6 +1948,8 @@ int run(int argc, char ** argv, std::string & normal_exit_detail)
       "products/synrobot/modules/control/motion_control/config/robots/psi_r1.yaml";
     joint_otg["profile_source_sha256"] =
       mcl::planned_grouped_step_otg::kR1StreamProfileSha256;
+    joint_otg["profile_overrides"]["max_jerk_rad_per_s3"] = 3200.0;
+    joint_otg["profile_overrides"]["reason"] = "OTG Lab fixed jerk override";
     joint_otg["position_limits_source"] = "runtime-loaded R1 URDF model";
     joint_otg["projection_event_count"] =
       Json::UInt64(latest_output.projection_event_count);

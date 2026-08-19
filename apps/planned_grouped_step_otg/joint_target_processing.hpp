@@ -33,8 +33,9 @@ inline constexpr std::array<double, kR1JointCount> kR1StreamMaxAccelerationRadPe
     6.0, 6.0, 6.0, 4.0, 4.0, 4.0, 10.10, 10.10, 12.42, 12.48,
     16.2, 16.2, 16.2, 10.10, 10.10, 12.42, 12.48, 16.2, 16.2, 16.2};
 inline constexpr std::array<double, kR1JointCount> kR1StreamMaxJerkRadPerS3{
-    60.0, 60.0, 30.0, 20.0, 20.0, 20.0, 101.0, 101.0, 124.2, 124.8,
-    162.0, 162.0, 162.0, 101.0, 101.0, 124.2, 124.8, 162.0, 162.0, 162.0};
+    3200.0, 3200.0, 3200.0, 3200.0, 3200.0, 3200.0, 3200.0,
+    3200.0, 3200.0, 3200.0, 3200.0, 3200.0, 3200.0, 3200.0,
+    3200.0, 3200.0, 3200.0, 3200.0, 3200.0, 3200.0};
 
 struct JointTarget {
   std::vector<double> positions;
