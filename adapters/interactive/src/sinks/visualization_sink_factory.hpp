@@ -1,6 +1,6 @@
 #pragma once
 
-#include "config/interactive_ik_options.hpp"
+#include "sinks/visualization_sink_options.hpp"
 
 #include "motion_control_viz/frame_sink.hpp"
 

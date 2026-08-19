@@ -1,7 +1,7 @@
 # E03: PSI R1 dual-arm motion-library batch replay IK
 
 E03 evaluates every direct `*.mcap` child of the PSI R1 dual-arm motion library with one
-fixed MCC Red-only IK policy. The default library is:
+fixed ordinary MCC IK policy. The default library is:
 
 ```text
 /workspace/fixtures/datasets/psi_r1_dual_arm_motion_library/

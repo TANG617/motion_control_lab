@@ -18,7 +18,7 @@ planned。
 | Temporal projector | `adapters/data/temporal/` 中的 timestamp selection、严格时间校验、immutable Timeline、projection 与 ReplayClock |
 | Semantic projector | `adapters/data/projection/dual_arm_timeline.*`；只消费两个 `TypedStream<StampedPose>` |
 | Replay plan | `mcl_replay_plan`；预加载输入并输出 timeline trace/manifest，不运行 solver |
-| MCC interactive apps | `apps/single_arm_servo_step/` 使用 `RedOnly`；`apps/servo_step/`、`apps/target_solve/` 各自拥有完整的 `KinematicsSolver` topology 和配置；`apps/grouped_servo_step/` 与 `apps/planned_grouped_servo_step/` 各自拥有完整 Red/Yellow topology |
+| MCC interactive apps | `apps/single_arm_servo_step/`、`apps/servo_step/`、`apps/target_solve/` 各自拥有完整的普通 `KinematicsSolver` topology 和配置；`apps/grouped_servo_step/` 与 `apps/planned_grouped_servo_step/` 各自拥有完整 Red/Yellow topology |
 | Cartesian planning preview | `apps/cartesian_planning/` 读取版本化 JSON，调用 Core `CartesianPlanner`，输出 CSV/PNG 并循环发布 Foxglove；不加载 robot model 或调用 IK |
 | Interactive support | `adapters/interactive/` 提供 CLI、独立 TUI console/presentation、source-mode controls、wall-clock scheduler、SPSC latest mailbox、periodic worker/Fault 和 Viz helpers |
 | Replay support | `adapters/replay/` 提供 solver-agnostic timeline loader、ReplayClock、provenance 与 v2 artifact mechanics；solver loop 与失败语义仍由 app 拥有 |

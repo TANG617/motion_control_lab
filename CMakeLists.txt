@@ -189,7 +189,7 @@ if(MCL_BUILD_ANY_INTERACTIVE_IK)
 
   add_library(
     mcl_interactive_support
-    adapters/interactive/src/config/interactive_ik_options.cpp
+    adapters/interactive/src/console/tui_help.cpp
     adapters/interactive/src/runtime/grouped_worker.cpp
     adapters/interactive/src/runtime/interactive_scheduler.cpp
     adapters/interactive/src/runtime/rolling_percentiles.cpp
@@ -699,11 +699,20 @@ if(BUILD_TESTING)
         "$<TARGET_FILE:test_tui_console>"
         --replay
     )
+    add_test(
+      NAME interactive.tui_replay_start_paused_pty
+      COMMAND
+        "${Python3_EXECUTABLE}"
+        "${CMAKE_CURRENT_SOURCE_DIR}/tests/run_tui_pty.py"
+        "$<TARGET_FILE:test_tui_console>"
+        --replay-start-paused
+    )
     set_tests_properties(
       interactive.tui_console_pty
       interactive.tui_exception_pty
       interactive.tui_fault_hold_pty
       interactive.tui_replay_controls_pty
+      interactive.tui_replay_start_paused_pty
       PROPERTIES TIMEOUT 15
     )
 
@@ -751,6 +760,7 @@ if(BUILD_TESTING)
       add_executable(
         test_dual_arm_servo_solver_semantics
         tests/dual_arm_servo_solver_semantics.cpp
+        apps/servo_step/app_options.cpp
       )
       target_link_libraries(
         test_dual_arm_servo_solver_semantics
@@ -779,6 +789,7 @@ if(BUILD_TESTING)
       add_executable(
         test_dual_arm_target_solver_semantics
         tests/dual_arm_target_solver_semantics.cpp
+        apps/target_solve/app_options.cpp
       )
       target_link_libraries(
         test_dual_arm_target_solver_semantics

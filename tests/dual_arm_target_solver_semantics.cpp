@@ -123,17 +123,15 @@ int main(int argc, char ** argv)
 {
   try {
     require(argc == 2, "usage: dual_arm_target_solver_semantics <urdf>");
-    motion_control_lab::InteractiveIkOptions options;
-    options.urdf_path = argv[1];
-    options.rate_hz = 20.0;
+    const std::string urdf_path = argv[1];
     const auto & robot = motion_control_lab::r1RobotConfig();
 
     placo::model::RobotWrapper limit_model(
-      options.urdf_path,
+      urdf_path,
       placo::model::RobotWrapper::IGNORE_COLLISIONS | placo::model::RobotWrapper::IGNORE_GEOMETRY);
-    MccTargetSolver mcc_proxqp_solver(options, robot, MccBackend::Proxqp);
-    MccTargetSolver mcc_eiquadprog_solver(options, robot, MccBackend::Eiquadprog);
-    PlacoTargetSolver placo_solver(options, robot);
+    MccTargetSolver mcc_proxqp_solver(urdf_path, robot, MccBackend::Proxqp);
+    MccTargetSolver mcc_eiquadprog_solver(urdf_path, robot, MccBackend::Eiquadprog);
+    PlacoTargetSolver placo_solver(urdf_path, robot);
     require(
       mcc_proxqp_solver.currentPose(motion_control_lab::ArmSide::Left)
         .matrix()

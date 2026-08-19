@@ -15,7 +15,7 @@ target_link_libraries(
     jsoncpp_lib
 )
 
-add_executable(mcl_baseline main.cpp)
+add_executable(mcl_baseline main.cpp app_options.cpp)
 set_target_properties(
   mcl_baseline
   PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}"
@@ -52,6 +52,23 @@ install(
 if(BUILD_TESTING)
   find_package(Python3 REQUIRED COMPONENTS Interpreter)
   set(MCL_BASELINE_TEST_MODEL "/workspace/models/r1.cos.urdf")
+  add_executable(
+    test_baseline_app_options
+    tests/app_options_contract.cpp
+    app_options.cpp
+  )
+  target_link_libraries(
+    test_baseline_app_options
+    PRIVATE
+      mcl_baseline_runtime
+      motion_control_lab::replay_support
+      motion_control_lab::r1_robot_config
+  )
+  add_test(
+    NAME apps.mcl_baseline_options
+    COMMAND test_baseline_app_options
+  )
+
   add_test(
     NAME apps.mcl_baseline_help
     COMMAND

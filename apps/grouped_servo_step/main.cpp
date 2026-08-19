@@ -24,7 +24,7 @@
 #include <vector>
 
 #include "adapters/replay/replay_support.hpp"
-#include "config/interactive_ik_options.hpp"
+#include "app_options.hpp"
 #include "console/tui_console.hpp"
 #include "cpu_affinity.hpp"
 #include "ik_app_utils.hpp"
@@ -46,6 +46,9 @@ namespace
 namespace mcc = motion_control::core;
 namespace mcl = motion_control_lab;
 namespace replay = motion_control_lab::replay;
+
+using mcl::grouped_servo_step::SourceMode;
+using mcl::grouped_servo_step::parseLaunchOptions;
 
 using mcl::toEigen;
 using mcl::toStdVector;
@@ -70,19 +73,6 @@ constexpr double kCollisionWeight = 100.0;
 constexpr std::array<std::string_view, 4> kWaistJointNames{
   "torso_yaw_joint", "torso_pitch_joint", "knee_pitch_joint", "ankle_pitch_joint"};
 bool operationSucceeded(const mcc::Status & status) { return status.ok(); }
-
-enum class SourceMode
-{
-  Teleop,
-  Replay,
-};
-
-struct LaunchOptions
-{
-  SourceMode source_mode{SourceMode::Teleop};
-  mcl::GroupedInteractiveIkOptions interactive;
-  std::optional<replay::ReplayOptions> replay;
-};
 
 bool isWaistJoint(const std::string & joint_name)
 {
@@ -341,7 +331,7 @@ mcc::SelfCollisionModelDescription collisionModelDescription(
 }
 
 CartesianHandles addCartesianTasks(
-  mcc::GroupedKinematicsSolverBuilder & builder, mcc::SolverGroup group, const std::string & prefix,
+  mcc::KinematicsSolverBuilder & builder, mcc::SolverGroup group, const std::string & prefix,
   const mcl::R1RobotConfig & robot)
 {
   CartesianHandles handles;
@@ -389,7 +379,7 @@ CartesianHandles addCartesianTasks(
   return handles;
 }
 
-void addPositionLimits(mcc::GroupedKinematicsSolverBuilder & builder, mcc::SolverGroup group)
+void addPositionLimits(mcc::KinematicsSolverBuilder & builder, mcc::SolverGroup group)
 {
   mcc::JointPositionLimitConfig position;
   position.margin = kJointPositionLimitMarginRad;
@@ -400,7 +390,7 @@ void addPositionLimits(mcc::GroupedKinematicsSolverBuilder & builder, mcc::Solve
     "Failed to register grouped joint-position limits");
 }
 
-void addVelocityLimits(mcc::GroupedKinematicsSolverBuilder & builder, mcc::SolverGroup group)
+void addVelocityLimits(mcc::KinematicsSolverBuilder & builder, mcc::SolverGroup group)
 {
   mcc::JointVelocityLimitConfig velocity;
   velocity.enforcement = mcc::HardEnforcement{kMaximumAcceptedHardViolation};
@@ -571,89 +561,6 @@ void fillSelfCollisionDebug(
   }
 }
 
-void printTopLevelUsage(const char * program)
-{
-  std::cout << "Usage: " << program << " <teleop|replay> [options]\n\n"
-            << "  teleop  Edit live Cartesian goals (default UI: tui)\n"
-            << "  replay  Consume paired MCAP/CSV goals; --target-period-ms is "
-               "required\n\n"
-            << "Run '" << program << " teleop --help' or '" << program
-            << " replay --help' for mode-specific options.\n";
-}
-
-bool optionIn(const std::string & option, std::initializer_list<const char *> candidates)
-{
-  return std::any_of(candidates.begin(), candidates.end(), [&](const char * candidate) {
-    return option == candidate;
-  });
-}
-
-LaunchOptions parseLaunchOptions(int argc, char ** argv)
-{
-  if (argc < 2 || std::string{argv[1]} == "--help" || std::string{argv[1]} == "-h") {
-    printTopLevelUsage(argv[0]);
-    std::exit(EXIT_SUCCESS);
-  }
-  const std::string mode{argv[1]};
-  if (mode == "teleop") {
-    LaunchOptions result;
-    result.interactive = mcl::parseGroupedInteractiveIkOptions(argc - 1, argv + 1);
-    return result;
-  }
-  if (mode != "replay") {
-    throw std::runtime_error("expected subcommand 'teleop' or 'replay'");
-  }
-
-  if (argc >= 3 && (std::string{argv[2]} == "--help" || std::string{argv[2]} == "-h")) {
-    mcl::printGroupedInteractiveIkUsage(argv[0]);
-    std::cout << '\n' << replay::replayHelp(argv[0], true);
-    std::exit(EXIT_SUCCESS);
-  }
-
-  std::vector<char *> grouped_arguments{argv[0]};
-  std::vector<char *> replay_arguments{argv[0]};
-  for (int index = 2; index < argc; ++index) {
-    const std::string argument{argv[index]};
-    const bool shared_value = optionIn(argument, {"--urdf", "--ui", "--host", "--port", "--mcap"});
-    const bool grouped_value = optionIn(
-      argument, {"--red-rate", "--yellow-rate", "--ui-rate", "--deadline-policy", "--duration"});
-    const bool replay_value = optionIn(
-      argument,
-      {"--input", "--input-format", "--left-stream", "--right-stream",
-       "--initial-joint-state-stream", "--csv-mapping", "--timestamp-source", "--target-period-ms",
-       "--pairing-policy", "--nearest-tolerance-ms", "--unmatched-policy", "--execution-mode",
-       "--playback-rate", "--output-dir", "--output-root", "--run-id", "--viz-host", "--viz-port"});
-    if (argument == "--no-mcap") {
-      grouped_arguments.push_back(argv[index]);
-      replay_arguments.push_back(argv[index]);
-      continue;
-    }
-    if (!shared_value && !grouped_value && !replay_value) {
-      throw std::runtime_error("unknown option: " + argument);
-    }
-    if (index + 1 >= argc) {
-      throw std::runtime_error(argument + " requires a value");
-    }
-    if (shared_value || grouped_value) {
-      grouped_arguments.push_back(argv[index]);
-      grouped_arguments.push_back(argv[index + 1]);
-    }
-    if (shared_value || replay_value) {
-      replay_arguments.push_back(argv[index]);
-      replay_arguments.push_back(argv[index + 1]);
-    }
-    ++index;
-  }
-
-  LaunchOptions result;
-  result.source_mode = SourceMode::Replay;
-  result.interactive = mcl::parseGroupedInteractiveIkOptions(
-    static_cast<int>(grouped_arguments.size()), grouped_arguments.data());
-  result.replay = replay::parseReplayOptions(
-    static_cast<int>(replay_arguments.size()), replay_arguments.data(), true);
-  return result;
-}
-
 void applyReplayInitialState(
   const replay::LoadedReplay & loaded, const mcl::R1RobotConfig & robot,
   Eigen::VectorXd & positions, Eigen::VectorXd & velocities)
@@ -765,7 +672,7 @@ int run(int argc, char ** argv, std::string & normal_exit_detail)
   solver_config.red.qp.proxqp.absolute_tolerance = kRedProxQpAbsoluteTolerance;
   solver_config.red.qp.proxqp.warm_start_enabled = false;
 
-  mcc::GroupedKinematicsSolverBuilder builder;
+  mcc::KinematicsSolverBuilder builder;
   requireOk(
     builder.configure(model, active_joint_names, solver_config),
     "Failed to configure grouped IK builder");
@@ -899,7 +806,7 @@ int run(int argc, char ** argv, std::string & normal_exit_detail)
   mcl::TuiConsole tui(
     options.tui, options.ui_rate_hz, kTitle, presentation,
     {{mcl::ArmSide::Left, initial_target.left}, {mcl::ArmSide::Right, initial_target.right}}, true,
-    options.ui == mcl::UiMode::Tui,
+    options.tui_enabled,
     launch.source_mode == SourceMode::Replay ? mcl::TuiControlMode::Replay
                                              : mcl::TuiControlMode::Teleop);
   if (launch.source_mode == SourceMode::Replay) {

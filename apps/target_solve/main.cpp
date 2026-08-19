@@ -13,7 +13,7 @@
 #include <utility>
 #include <vector>
 
-#include "config/interactive_ik_options.hpp"
+#include "app_options.hpp"
 #include "console/tui_console.hpp"
 #include "cpu_affinity.hpp"
 #include "ik_app_utils.hpp"
@@ -33,6 +33,11 @@ namespace
 namespace mcc = motion_control::core;
 namespace mcl = motion_control_lab;
 
+using mcl::target_solve::AppOptions;
+using mcl::target_solve::MccBackend;
+using mcl::target_solve::SolverKind;
+using mcl::target_solve::parseAppOptions;
+
 constexpr const char * kProgramId = "mcl_target_solve";
 constexpr const char * kTitle = "Dual-arm IK — TargetSolve";
 constexpr int kMaximumIterations = 10000;
@@ -45,25 +50,6 @@ constexpr double kJointPositionMargin = 1.0e-3;
 constexpr double kPostureWeight = 1.0e-5;
 constexpr double kNumericalRegularization = 1.0e-4;
 constexpr std::array<unsigned int, 1> kMainCpuAffinity{8};
-
-enum class SolverKind
-{
-  Mcc,
-  Placo,
-};
-
-enum class MccBackend
-{
-  Proxqp,
-  Eiquadprog,
-};
-
-struct AppOptions
-{
-  SolverKind solver{SolverKind::Mcc};
-  MccBackend backend{MccBackend::Proxqp};
-  mcl::InteractiveIkOptions interactive;
-};
 
 struct TargetSolveResult
 {
@@ -127,77 +113,18 @@ mcc::QpBackend mccQpBackend(MccBackend backend)
   return mcc::QpBackend::Eiquadprog;
 }
 
-void printUsage(const char * program)
-{
-  mcl::printInteractiveIkUsage(program);
-  std::cout << "\nSolver selection:\n"
-            << "  --solver <mcc|placo>              IK implementation (default: "
-               "mcc)\n"
-            << "  --backend <proxqp|eiquadprog>     MCC QP backend (default: proxqp; "
-               "ignored for placo)\n";
-}
-
-AppOptions parseAppOptions(int argc, char ** argv)
-{
-  AppOptions result;
-  std::vector<char *> interactive_argv;
-  interactive_argv.reserve(static_cast<std::size_t>(argc));
-  interactive_argv.push_back(argv[0]);
-
-  for (int index = 1; index < argc; ++index) {
-    const std::string argument{argv[index]};
-    if (argument == "--help" || argument == "-h") {
-      printUsage(argv[0]);
-      std::exit(EXIT_SUCCESS);
-    }
-    if (argument == "--solver") {
-      if (index + 1 >= argc) {
-        throw std::runtime_error("--solver requires a value");
-      }
-      const std::string value{argv[++index]};
-      if (value == "mcc") {
-        result.solver = SolverKind::Mcc;
-      } else if (value == "placo") {
-        result.solver = SolverKind::Placo;
-      } else {
-        throw std::runtime_error("--solver must be either 'mcc' or 'placo'");
-      }
-      continue;
-    }
-    if (argument == "--backend") {
-      if (index + 1 >= argc) {
-        throw std::runtime_error("--backend requires a value");
-      }
-      const std::string value{argv[++index]};
-      if (value == "proxqp") {
-        result.backend = MccBackend::Proxqp;
-      } else if (value == "eiquadprog") {
-        result.backend = MccBackend::Eiquadprog;
-      } else {
-        throw std::runtime_error("--backend must be either 'proxqp' or 'eiquadprog'");
-      }
-      continue;
-    }
-    interactive_argv.push_back(argv[index]);
-  }
-
-  result.interactive = mcl::parseInteractiveIkOptions(
-    static_cast<int>(interactive_argv.size()), interactive_argv.data());
-  return result;
-}
-
 class MccTargetSolver
 {
 public:
   MccTargetSolver(
-    const mcl::InteractiveIkOptions & options, const mcl::R1RobotConfig & robot, MccBackend backend)
+    const std::string & urdf_path, const mcl::R1RobotConfig & robot, MccBackend backend)
   : robot_(robot),
     backend_(backend),
     positions_(robot.default_positions),
     velocities_(positions_.size(), 0.0)
   {
     mcc::RobotModelDescription model_description;
-    model_description.urdf_path = options.urdf_path;
+    model_description.urdf_path = urdf_path;
     model_description.kinematics_reference_frame = robot.base_frame;
     model_description.joint_names = robot.joint_names;
     throwIfError(mcc::RobotModel::load(model_description, model_));
@@ -364,12 +291,12 @@ private:
 class PlacoTargetSolver
 {
 public:
-  PlacoTargetSolver(const mcl::InteractiveIkOptions & options, const mcl::R1RobotConfig & robot)
+  PlacoTargetSolver(const std::string & urdf_path, const mcl::R1RobotConfig & robot)
   : robot_config_(robot),
     positions_(robot.default_positions),
     velocities_(positions_.size(), 0.0),
     robot_(
-      options.urdf_path,
+      urdf_path,
       placo::model::RobotWrapper::IGNORE_COLLISIONS | placo::model::RobotWrapper::IGNORE_GEOMETRY),
     solver_(robot_)
   {
@@ -548,7 +475,8 @@ int runInteractive(
   const auto initial_right_fk = solver.currentPose(mcl::ArmSide::Right);
   mcl::TuiConsole tui(
     options.tui, options.rate_hz, std::string{kTitle} + " [" + solver_title + "]", presentation,
-    {{mcl::ArmSide::Left, initial_left_fk}, {mcl::ArmSide::Right, initial_right_fk}}, true);
+    {{mcl::ArmSide::Left, initial_left_fk}, {mcl::ArmSide::Right, initial_right_fk}}, true,
+    options.tui_enabled);
   auto visualization_sink = mcl::createVisualizationSink(options.visualization, kProgramId);
 
   mcl::installInteractiveSignalHandlers();
@@ -634,10 +562,10 @@ int run(int argc, char ** argv)
   const auto app_options = parseAppOptions(argc, argv);
   const auto & robot = mcl::r1RobotConfig();
   if (app_options.solver == SolverKind::Mcc) {
-    MccTargetSolver solver(app_options.interactive, robot, app_options.backend);
+    MccTargetSolver solver(app_options.interactive.urdf_path, robot, app_options.backend);
     return runInteractive(app_options, "mcc", mccSolverTitle(app_options.backend), solver);
   }
-  PlacoTargetSolver solver(app_options.interactive, robot);
+  PlacoTargetSolver solver(app_options.interactive.urdf_path, robot);
   return runInteractive(app_options, "placo", "PlaCo/eiquadprog", solver);
 }
 

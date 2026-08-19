@@ -5,8 +5,8 @@
 #include <string>
 #include <vector>
 
-#include "config/interactive_ik_options.hpp"
 #include "controls/tui_source_controls.hpp"
+#include "console/tui_teleop_options.hpp"
 #include "runtime/interactive_types.hpp"
 
 namespace motion_control_lab
@@ -33,6 +33,8 @@ public:
   void setTargetPose(ArmSide side, const Pose & target_pose, const std::string & status);
 
   void setStatus(const std::string & status);
+
+  void setPaused(bool paused, const std::string & status);
 
   void setMotionInputEnabled(bool enabled, const std::string & status);
 

@@ -1,5 +1,6 @@
 #include "baseline_config.hpp"
 #include "baseline_solver.hpp"
+#include "app_options.hpp"
 
 #include <algorithm>
 #include <array>
@@ -17,7 +18,6 @@
 #include <vector>
 
 #include "adapters/replay/replay_support.hpp"
-#include "config/interactive_ik_options.hpp"
 #include "console/tui_console.hpp"
 #include "cpu_affinity.hpp"
 #include "ik_app_utils.hpp"
@@ -39,119 +39,16 @@ namespace replay = motion_control_lab::replay;
 
 constexpr const char * kProgramId = "mcl_baseline";
 constexpr const char * kTitle = "PlaCo Production-Static Baseline";
-constexpr std::int64_t kTargetPeriodNs = 10'000'000;
 constexpr std::array<unsigned int, 1> kMainCpuAffinity{8};
 
-struct ReplayAppOptions
-{
-  replay::ReplayOptions replay;
-};
+using baseline::ReplayAppOptions;
+using baseline::parseReplayOptions;
+using baseline::parseTeleopOptions;
+using baseline::printTopLevelUsage;
 
 std::string sourceSummary()
 {
   return baseline::productionStaticConfig().source_revision.substr(0, 12);
-}
-
-void printTopLevelUsage(const char * program)
-{
-  std::cout << "Usage: " << program << " <teleop|replay> [options]\n\n"
-            << "  teleop  Run the fixed 100 Hz production-static PlaCo baseline\n"
-            << "  replay  Replay paired TCP targets at the fixed 10 ms period\n\n"
-            << "This executable is PlaCo-only; --solver and --backend are not "
-               "supported.\n";
-}
-
-void printTeleopUsage(const char * program)
-{
-  std::cout << "Usage: " << program << " [options]\n\n"
-            << "Options:\n"
-            << "  --urdf <path>              Robot URDF (required unless MCL_R1_URDF "
-               "is set)\n"
-            << "  --side <left|right>        Initially selected arm (default left)\n"
-            << "  --ui <tui|none>            User interface mode (default tui)\n"
-            << "  --duration <seconds>       Stop after duration; zero runs until "
-               "stopped\n"
-            << "  --step-m <meters>          Cartesian key increment\n"
-            << "  --min-step-m <meters>      Minimum Cartesian increment\n"
-            << "  --max-step-m <meters>      Maximum Cartesian increment\n"
-            << "  --rotation-step-deg <deg>  TCP local-axis rotation increment\n"
-            << "  --host <address>           Foxglove bind address\n"
-            << "  --port <port>              Foxglove port\n"
-            << "  --mcap <path>              Record visualization MCAP\n"
-            << "  --no-mcap                  Disable visualization MCAP\n"
-            << "  --help                     Show this text\n\n"
-            << "The control rate is fixed at 100 Hz. --rate is rejected.\n";
-}
-
-void printReplayUsage(const char * program)
-{
-  std::cout << "Usage: " << program << " [options]\n\n"
-            << "  --urdf <path>                    Robot URDF (required)\n"
-            << "  --input <path>                   MCAP or CSV input (required)\n"
-            << "  --input-format mcap|csv          Physical source backend\n"
-            << "  --left-stream <name>             Left logical TCP stream\n"
-            << "  --right-stream <name>            Right logical TCP stream\n"
-            << "  --csv-mapping <json>             Optional CSV column mapping\n"
-            << "  --timestamp-source <source>      header_stamp, log_time, "
-               "publish_time, or csv_timestamp\n"
-            << "  --target-period-ms 10            Required production parity "
-               "period\n"
-            << "  --pairing-policy exact|nearest   Original-time pairing\n"
-            << "  --nearest-tolerance-ms <ms>      Nearest pairing tolerance\n"
-            << "  --unmatched-policy error|drop_with_diagnostics\n"
-            << "  --execution-mode batch|realtime\n"
-            << "  --playback-rate <rate>           Positive replay rate\n"
-            << "  --output-dir <path>              Exact new artifact directory\n"
-            << "  --output-root <path>             Parent of an auto-named run\n"
-            << "  --run-id <id>                    Override auto-generated run ID\n"
-            << "  --ui tui|none                    User interface mode\n"
-            << "  --host <address>                 Foxglove bind address\n"
-            << "  --port <port>                    Foxglove port\n"
-            << "  --mcap <path>                    Record visualization MCAP\n"
-            << "  --no-mcap                        Disable visualization MCAP\n"
-            << "  --help                           Show this text\n\n"
-            << "Replay always starts from the frozen production initial pose; "
-               "--initial-joint-state-stream is rejected.\n";
-}
-
-mcl::InteractiveIkOptions parseTeleopOptions(int argc, char ** argv)
-{
-  for (int index = 1; index < argc; ++index) {
-    const std::string argument{argv[index]};
-    if (argument == "--help" || argument == "-h") {
-      printTeleopUsage(argv[0]);
-      std::exit(EXIT_SUCCESS);
-    }
-    if (argument == "--rate") {
-      throw std::runtime_error("--rate is not supported; the baseline is fixed at 100 Hz");
-    }
-  }
-  auto options = mcl::parseInteractiveIkOptions(argc, argv);
-  options.rate_hz = baseline::productionStaticConfig().control_rate_hz;
-  return options;
-}
-
-ReplayAppOptions parseReplayOptions(int argc, char ** argv)
-{
-  for (int index = 1; index < argc; ++index) {
-    const std::string argument{argv[index]};
-    if (argument == "--help" || argument == "-h") {
-      printReplayUsage(argv[0]);
-      std::exit(EXIT_SUCCESS);
-    }
-    if (argument == "--initial-joint-state-stream") {
-      throw std::runtime_error("--initial-joint-state-stream is not supported; "
-                               "the baseline uses the production initial pose");
-    }
-  }
-
-  ReplayAppOptions result;
-  result.replay = replay::parseReplayOptions(argc, argv, true);
-  if (result.replay.target_period_ns != kTargetPeriodNs) {
-    throw std::runtime_error("--target-period-ms must be exactly 10 for the production baseline");
-  }
-  result.replay.initial_joint_state_stream.reset();
-  return result;
 }
 
 std::string traceVector(const std::vector<double> & values)
@@ -224,7 +121,7 @@ std::string taskSummary()
 }
 
 template <typename Solver>
-int runTeleopLoop(const mcl::InteractiveIkOptions & options, Solver & solver)
+int runTeleopLoop(const baseline::TeleopOptions & options, Solver & solver)
 {
   const auto & robot = mcl::r1RobotConfig();
   const auto affinity_domain = mcl::CpuAffinityDomain::capture();
@@ -240,7 +137,7 @@ int runTeleopLoop(const mcl::InteractiveIkOptions & options, Solver & solver)
   };
   mcl::TuiConsole tui(options.tui, options.rate_hz,
                       std::string{kTitle} + " [source " + sourceSummary() + "]", presentation,
-                      initial_targets, true, options.ui == mcl::UiMode::Tui);
+                      initial_targets, true, options.tui_enabled);
   auto visualization_sink = mcl::createVisualizationSink(options.visualization, kProgramId);
 
   mcl::installInteractiveSignalHandlers();
@@ -350,7 +247,8 @@ int runReplayLoop(ReplayAppOptions options, baseline::BaselineSolver & solver,
       {mcl::ArmSide::Right, first.value.right.pose},
   };
   const auto presentation = mcl::makeArmPresentation(robot, mcl::foxgloveIkVisualizationChannels());
-  mcl::TuiConsole tui({}, baseline::productionStaticConfig().control_rate_hz,
+  mcl::TuiConsole tui(baseline::TeleopOptions{}.tui,
+                      baseline::productionStaticConfig().control_rate_hz,
                       std::string{kTitle} + " Replay [source " + sourceSummary() + "]",
                       presentation, targets, true, options.replay.ui_mode == "tui",
                       mcl::TuiControlMode::Replay);
@@ -390,7 +288,7 @@ int runReplayLoop(ReplayAppOptions options, baseline::BaselineSolver & solver,
            "left_ee_fk,right_ee_fk,"
            "left_tcp_fk,right_tcp_fk,positions,velocities\n";
 
-  const std::int64_t solver_period_ns = kTargetPeriodNs;
+  const std::int64_t solver_period_ns = baseline::kTargetPeriodNs;
   const auto run_start = std::chrono::steady_clock::now();
   std::int64_t solver_time_ns = 0;
   std::int64_t timeline_time_ns = 0;

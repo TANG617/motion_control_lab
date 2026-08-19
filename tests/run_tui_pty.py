@@ -15,11 +15,17 @@ def main() -> int:
     if len(sys.argv) not in (2, 3):
         raise RuntimeError(
             "usage: run_tui_pty.py <test-executable> "
-            "[--expect-exception|--fault-hold|--replay]"
+            "[--expect-exception|--fault-hold|--replay|--replay-start-paused]"
         )
     expect_exception = len(sys.argv) == 3 and sys.argv[2] == "--expect-exception"
     fault_hold = len(sys.argv) == 3 and sys.argv[2] == "--fault-hold"
-    replay_controls = len(sys.argv) == 3 and sys.argv[2] == "--replay"
+    replay_controls = len(sys.argv) == 3 and sys.argv[2] in (
+        "--replay",
+        "--replay-start-paused",
+    )
+    replay_start_paused = (
+        len(sys.argv) == 3 and sys.argv[2] == "--replay-start-paused"
+    )
     if len(sys.argv) == 3 and not (expect_exception or fault_hold or replay_controls):
         raise RuntimeError(f"unknown argument: {sys.argv[2]}")
 
@@ -34,7 +40,9 @@ def main() -> int:
     elif fault_hold:
         command.append("--fault-hold")
     elif replay_controls:
-        command.append("--replay")
+        command.append(
+            "--replay-start-paused" if replay_start_paused else "--replay"
+        )
     process = subprocess.Popen(
         command,
         stdin=slave_fd,

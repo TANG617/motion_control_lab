@@ -24,7 +24,7 @@
 #include <vector>
 
 #include "adapters/replay/replay_support.hpp"
-#include "config/interactive_ik_options.hpp"
+#include "app_options.hpp"
 #include "console/tui_console.hpp"
 #include "cpu_affinity.hpp"
 #include "ik_app_utils.hpp"
@@ -33,6 +33,7 @@
 #include "planning_request_visualization.hpp"
 #include "r1_interactive_config.hpp"
 #include "r1_robot_config.hpp"
+#include "retarget_state_clamp.hpp"
 #include "runtime/grouped_worker.hpp"
 #include "runtime/interactive_scheduler.hpp"
 #include "runtime/interactive_types.hpp"
@@ -48,6 +49,10 @@ namespace mcc = motion_control::core;
 namespace mcl = motion_control_lab;
 namespace replay = motion_control_lab::replay;
 
+using mcl::planned_grouped_servo_step::PlanningLimitOptions;
+using mcl::planned_grouped_servo_step::SourceMode;
+using mcl::planned_grouped_servo_step::parsePlannedOptions;
+
 using mcl::toEigen;
 using mcl::toStdVector;
 
@@ -59,21 +64,21 @@ constexpr std::array<unsigned int, 1> kYellowCpuAffinity{7};
 constexpr double kMaximumAcceptedHardViolation = 5.0e-4;
 constexpr double kJointPositionLimitMarginRad = 1.0e-2;
 constexpr double kCartesianProgressWeight = 100.0;
-constexpr double kRedProxQpAbsoluteTolerance = 1.0e-6;
+constexpr double kRedProxQpAbsoluteTolerance = 2.0e-5;
 constexpr double kRedProxQpPrimalInfeasibilityTolerance = 1.0e-12;
 constexpr double kYellowPostureWeight = 1.0;
 constexpr double kDefaultPostureJointWeightMultiplier = 1.0e-3;
 constexpr double kArmJoint4PostureWeightMultiplier = 1.0e-1;
-constexpr double kYellowToRedCouplingWeight = 10.0;
+constexpr double kYellowToRedCouplingWeight = 1.0;
 constexpr double kMinimumCollisionDistanceM = 0.1;
 constexpr double kCollisionInfluenceDistanceM = 0.15;
 constexpr double kCollisionDampingGainPerS = 2.0;
-constexpr double kCollisionWeight = 100.0;
+constexpr double kCollisionWeight = 10.0;
 constexpr std::array<double, 20> kRedMaximumJointAccelerationsRadPerS2{
   6.0,  6.0,  6.0,  4.0,   4.0,   4.0,   10.10, 10.10, 12.42, 12.48,
   16.2, 16.2, 16.2, 10.10, 10.10, 12.42, 12.48, 16.2,  16.2,  16.2};
-constexpr std::array<std::string_view, 4> kWaistJointNames{
-  "torso_yaw_joint", "torso_pitch_joint", "knee_pitch_joint", "ankle_pitch_joint"};
+constexpr std::array<std::string_view, 2> kWaistJointNames{
+  "knee_pitch_joint", "ankle_pitch_joint"};
 bool operationSucceeded(const mcc::Status & status) { return status.ok(); }
 
 bool isWaistJoint(const std::string & joint_name)
@@ -107,30 +112,6 @@ struct TargetSnapshot
   std::uint64_t revision{0};
   mcc::Pose left{mcc::Pose::Identity()};
   mcc::Pose right{mcc::Pose::Identity()};
-};
-
-struct PlanningLimitOptions
-{
-  double max_linear_velocity_mps{ 0.8};
-  double max_linear_acceleration_mps2{4.0};
-  double max_linear_jerk_mps3{20.0};
-  double max_angular_velocity_rps{1.00};
-  double max_angular_acceleration_rps2{2.00};
-  double max_angular_jerk_rps3{10.0};
-};
-
-enum class SourceMode
-{
-  Teleop,
-  Replay,
-};
-
-struct PlannedOptions
-{
-  SourceMode source_mode{SourceMode::Teleop};
-  mcl::GroupedInteractiveIkOptions interactive;
-  PlanningLimitOptions planning;
-  std::optional<replay::ReplayOptions> replay;
 };
 
 struct StateSnapshot
@@ -171,121 +152,6 @@ struct RedOutputSnapshot
   mcl::SolverDebug solver_debug;
 };
 
-double parsePositiveOption(const std::string & name, const std::string & value)
-{
-  const double parsed = std::stod(value);
-  if (!std::isfinite(parsed) || parsed <= 0.0) {
-    throw std::runtime_error(name + " must be finite and positive");
-  }
-  return parsed;
-}
-
-void printPlannedUsage(const char * program)
-{
-  mcl::printGroupedInteractiveIkUsage(program);
-  std::cout << "\nOnline Cartesian replan limits (per "
-               "reference-frame/rotation-vector axis):\n"
-            << "  --max-linear-velocity-mps <value>       (default: 0.05)\n"
-            << "  --max-linear-acceleration-mps2 <value>  (default: 0.10)\n"
-            << "  --max-linear-jerk-mps3 <value>          (default: 0.50)\n"
-            << "  --max-angular-velocity-rps <value>      (default: 0.10)\n"
-            << "  --max-angular-acceleration-rps2 <value> (default: 0.20)\n"
-            << "  --max-angular-jerk-rps3 <value>         (default: 1.0)\n";
-}
-
-PlannedOptions parsePlannedOptions(int argc, char ** argv)
-{
-  if (argc < 2 || std::string{argv[1]} == "--help" || std::string{argv[1]} == "-h") {
-    std::cout << "Usage: " << argv[0] << " <teleop|replay> [options]\n\n"
-              << "  teleop  Edit source Cartesian goals and replan online "
-                 "(default UI: tui)\n"
-              << "  replay  Replan paired MCAP/CSV goals; --target-period-ms "
-                 "is required\n";
-    std::exit(EXIT_SUCCESS);
-  }
-  PlannedOptions result;
-  const std::string mode{argv[1]};
-  if (mode != "teleop" && mode != "replay") {
-    throw std::runtime_error("expected subcommand 'teleop' or 'replay'");
-  }
-  result.source_mode = mode == "replay" ? SourceMode::Replay : SourceMode::Teleop;
-  if (argc >= 3 && (std::string{argv[2]} == "--help" || std::string{argv[2]} == "-h")) {
-    printPlannedUsage(argv[0]);
-    if (result.source_mode == SourceMode::Replay) {
-      std::cout << '\n' << replay::replayHelp(argv[0], true);
-    }
-    std::exit(EXIT_SUCCESS);
-  }
-  std::vector<char *> grouped_arguments{argv[0]};
-  std::vector<char *> replay_arguments{argv[0]};
-  const auto optionIn = [](const std::string & option, std::initializer_list<const char *> values) {
-    return std::any_of(
-      values.begin(), values.end(), [&](const char * value) { return option == value; });
-  };
-  for (int index = 2; index < argc; ++index) {
-    const std::string argument{argv[index]};
-    auto planningValue = [&](double & destination) {
-      if (index + 1 >= argc) {
-        throw std::runtime_error(argument + " requires a value");
-      }
-      destination = parsePositiveOption(argument, argv[++index]);
-    };
-    if (argument == "--max-linear-velocity-mps") {
-      planningValue(result.planning.max_linear_velocity_mps);
-    } else if (argument == "--max-linear-acceleration-mps2") {
-      planningValue(result.planning.max_linear_acceleration_mps2);
-    } else if (argument == "--max-linear-jerk-mps3") {
-      planningValue(result.planning.max_linear_jerk_mps3);
-    } else if (argument == "--max-angular-velocity-rps") {
-      planningValue(result.planning.max_angular_velocity_rps);
-    } else if (argument == "--max-angular-acceleration-rps2") {
-      planningValue(result.planning.max_angular_acceleration_rps2);
-    } else if (argument == "--max-angular-jerk-rps3") {
-      planningValue(result.planning.max_angular_jerk_rps3);
-    } else if (result.source_mode == SourceMode::Teleop) {
-      grouped_arguments.push_back(argv[index]);
-    } else {
-      const bool shared_value =
-        optionIn(argument, {"--urdf", "--ui", "--host", "--port", "--mcap"});
-      const bool grouped_value = optionIn(
-        argument, {"--red-rate", "--yellow-rate", "--ui-rate", "--deadline-policy", "--duration"});
-      const bool replay_value = optionIn(
-        argument, {"--input", "--input-format", "--left-stream", "--right-stream",
-                   "--initial-joint-state-stream", "--csv-mapping", "--timestamp-source",
-                   "--target-period-ms", "--pairing-policy", "--nearest-tolerance-ms",
-                   "--unmatched-policy", "--execution-mode", "--playback-rate", "--output-dir",
-                   "--output-root", "--run-id", "--viz-host", "--viz-port"});
-      if (argument == "--no-mcap") {
-        grouped_arguments.push_back(argv[index]);
-        replay_arguments.push_back(argv[index]);
-        continue;
-      }
-      if (!shared_value && !grouped_value && !replay_value) {
-        throw std::runtime_error("unknown option: " + argument);
-      }
-      if (index + 1 >= argc) {
-        throw std::runtime_error(argument + " requires a value");
-      }
-      if (shared_value || grouped_value) {
-        grouped_arguments.push_back(argv[index]);
-        grouped_arguments.push_back(argv[index + 1]);
-      }
-      if (shared_value || replay_value) {
-        replay_arguments.push_back(argv[index]);
-        replay_arguments.push_back(argv[index + 1]);
-      }
-      ++index;
-    }
-  }
-  result.interactive = mcl::parseGroupedInteractiveIkOptions(
-    static_cast<int>(grouped_arguments.size()), grouped_arguments.data());
-  if (result.source_mode == SourceMode::Replay) {
-    result.replay = replay::parseReplayOptions(
-      static_cast<int>(replay_arguments.size()), replay_arguments.data(), true);
-  }
-  return result;
-}
-
 mcc::CartesianRetargetRequest makeRetargetRequest(
   const TargetSnapshot & goal, const mcc::CartesianTrajectorySample & accepted,
   const mcl::R1RobotConfig & robot, const PlanningLimitOptions & limits, double rate_hz)
@@ -324,8 +190,49 @@ struct RedAttemptSnapshot
   TargetSnapshot target;
   TargetSnapshot attempted_reference;
   mcl::SolverDebug solver_debug;
+  mcl::planned_grouped_servo_step::RetargetClampDiagnostics retarget_clamp;
+  std::uint64_t retarget_clamp_target_revision{0U};
   std::string detail;
 };
+
+const char * retargetClampComponentName(
+  mcl::planned_grouped_servo_step::RetargetClampComponent component)
+{
+  using Component = mcl::planned_grouped_servo_step::RetargetClampComponent;
+  switch (component) {
+    case Component::LinearVelocity:
+      return "linear_velocity";
+    case Component::AngularVelocity:
+      return "angular_velocity";
+    case Component::LinearAcceleration:
+      return "linear_acceleration";
+    case Component::AngularAcceleration:
+      return "angular_acceleration";
+  }
+  return "unknown";
+}
+
+std::string retargetClampDetail(const RedAttemptSnapshot & attempt)
+{
+  if (!attempt.retarget_clamp.clamped()) {
+    return {};
+  }
+
+  constexpr std::array<const char *, 3> kAxisNames{"x", "y", "z"};
+  std::ostringstream detail;
+  detail << std::setprecision(9) << "retarget_clamp revision="
+         << attempt.retarget_clamp_target_revision
+         << " components=" << attempt.retarget_clamp.clamped_component_count
+         << " max_limit_ratio=" << attempt.retarget_clamp.maximum_limit_ratio;
+  for (std::size_t index = 0U; index < attempt.retarget_clamp.clamped_component_count; ++index) {
+    const auto & event = attempt.retarget_clamp.events[index];
+    detail << " [" << (event.segment_index == 0U ? "left" : "right") << '.'
+           << retargetClampComponentName(event.component) << '.' << kAxisNames.at(event.axis)
+           << " original=" << event.original_value << " applied=" << event.applied_value
+           << " limit=" << event.limit << ']';
+  }
+  return detail.str();
+}
 
 struct CartesianHandles
 {
@@ -531,7 +438,7 @@ mcc::SelfCollisionModelDescription collisionModelDescription(
 }
 
 CartesianHandles addCartesianTasks(
-  mcc::GroupedKinematicsSolverBuilder & builder, mcc::SolverGroup group, const std::string & prefix,
+  mcc::KinematicsSolverBuilder & builder, mcc::SolverGroup group, const std::string & prefix,
   const mcl::R1RobotConfig & robot)
 {
   CartesianHandles handles;
@@ -579,10 +486,11 @@ CartesianHandles addCartesianTasks(
   return handles;
 }
 
-void addPositionLimits(mcc::GroupedKinematicsSolverBuilder & builder, mcc::SolverGroup group)
+void addPositionLimits(mcc::KinematicsSolverBuilder & builder, mcc::SolverGroup group)
 {
   mcc::JointPositionLimitConfig position;
   position.margin = kJointPositionLimitMarginRad;
+  position.braking_velocity_envelope_enabled = group == mcc::SolverGroup::Red;
   position.enforcement = mcc::HardEnforcement{kMaximumAcceptedHardViolation};
   mcc::GroupedJointPositionLimitHandle position_handle;
   requireOk(
@@ -590,7 +498,7 @@ void addPositionLimits(mcc::GroupedKinematicsSolverBuilder & builder, mcc::Solve
     "Failed to register grouped joint-position limits");
 }
 
-void addVelocityLimits(mcc::GroupedKinematicsSolverBuilder & builder, mcc::SolverGroup group)
+void addVelocityLimits(mcc::KinematicsSolverBuilder & builder, mcc::SolverGroup group)
 {
   mcc::JointVelocityLimitConfig velocity;
   velocity.enforcement = mcc::HardEnforcement{kMaximumAcceptedHardViolation};
@@ -600,7 +508,7 @@ void addVelocityLimits(mcc::GroupedKinematicsSolverBuilder & builder, mcc::Solve
     "Failed to register grouped joint-velocity limits");
 }
 
-void addRedAccelerationLimits(mcc::GroupedKinematicsSolverBuilder & builder)
+void addRedAccelerationLimits(mcc::KinematicsSolverBuilder & builder)
 {
   mcc::JointAccelerationLimitConfig acceleration;
   acceleration.enforcement = mcc::HardEnforcement{kMaximumAcceptedHardViolation};
@@ -881,16 +789,17 @@ int run(int argc, char ** argv, std::string & normal_exit_detail)
     config->maximum_accepted_hard_violation = kMaximumAcceptedHardViolation;
   }
   // A target step changes the scaled-equality columns, so Red starts each 1 ms
-  // QP from a neutral guess. Keep ordinary convergence at 1e-6 while requiring
-  // a much stronger infeasibility certificate: acceleration-derived delta
-  // boxes are only O(1e-6) rad at 1 kHz and are otherwise falsely classified.
+  // QP from a neutral guess. Keep ordinary convergence well inside the app's
+  // 5e-4 hard-violation acceptance threshold while requiring a much stronger
+  // infeasibility certificate: acceleration-derived velocity boxes are only
+  // O(1e-2) rad/s at 1 kHz and are otherwise falsely classified.
   // Contradictory canonical boxes are still rejected by the adapter precheck.
   solver_config.red.qp.proxqp.absolute_tolerance = kRedProxQpAbsoluteTolerance;
   solver_config.red.qp.proxqp.primal_infeasibility_tolerance =
     kRedProxQpPrimalInfeasibilityTolerance;
   solver_config.red.qp.proxqp.warm_start_enabled = false;
 
-  mcc::GroupedKinematicsSolverBuilder builder;
+  mcc::KinematicsSolverBuilder builder;
   requireOk(
     builder.configure(model, active_joint_names, solver_config),
     "Failed to configure grouped IK builder");
@@ -1035,11 +944,14 @@ int run(int argc, char ** argv, std::string & normal_exit_detail)
   mcl::TuiConsole tui(
     options.tui, options.ui_rate_hz, kTitle, presentation,
     {{mcl::ArmSide::Left, initial_target.left}, {mcl::ArmSide::Right, initial_target.right}}, true,
-    options.ui == mcl::UiMode::Tui,
+    options.tui_enabled,
     planned_options.source_mode == SourceMode::Replay ? mcl::TuiControlMode::Replay
                                                       : mcl::TuiControlMode::Teleop);
   if (planned_options.source_mode == SourceMode::Replay) {
     tui.setMotionInputEnabled(false, "Replay motion editing is disabled");
+    if (planned_options.start_paused) {
+      tui.setPaused(true, "Replay timeline paused; press space to start");
+    }
   }
   auto visualization_sink = mcl::createVisualizationSink(options.visualization, kProgramId);
 
@@ -1172,11 +1084,13 @@ int run(int argc, char ** argv, std::string & normal_exit_detail)
         }
         rejected_target_revision.reset();
         if (target.revision != planned_goal_revision) {
-          const auto planning_status = planner.replan(
-            makeRetargetRequest(
-              target, accepted_planner_sample, robot, planned_options.planning,
-              options.red_rate_hz),
-            planning_diagnostics);
+          auto retarget_request = makeRetargetRequest(
+            target, accepted_planner_sample, robot, planned_options.planning,
+            options.red_rate_hz);
+          attempt.retarget_clamp =
+            mcl::planned_grouped_servo_step::clampRetargetCurrentState(retarget_request);
+          attempt.retarget_clamp_target_revision = target.revision;
+          const auto planning_status = planner.replan(retarget_request, planning_diagnostics);
           if (!planning_status.ok()) {
             attempt.state = planned_options.source_mode == SourceMode::Teleop &&
                                 planning_status.code == mcc::StatusCode::Infeasible
@@ -1337,7 +1251,7 @@ int run(int argc, char ** argv, std::string & normal_exit_detail)
   std::size_t replay_source_index = 0;
   std::int64_t replay_timeline_time_ns = 0;
   auto replay_clock_origin = std::chrono::steady_clock::now();
-  bool replay_clock_was_paused = false;
+  bool replay_clock_was_paused = planned_options.start_paused;
   bool replay_completed = false;
   mcl::IkDebugFrame frame;
   frame.joint_names = joint_names;
@@ -1523,6 +1437,7 @@ int run(int argc, char ** argv, std::string & normal_exit_detail)
          yellow_stats.latest_release_lateness_ms, yellow_stats.latest_execution_ms,
          yellow_stats.latest_release_to_finish_ms, yellow_stats.latest_overrun_ms,
          yellow_stats.latest_solver_ms, yellow_stats.latest_non_solver_execution_ms}};
+      const std::string clamp_detail = retargetClampDetail(latest_red_attempt);
       if (held_fault.has_value()) {
         frame.runtime_state = mcl::IkRuntimeState::FaultHold;
         frame.ik_status = "fault hold " + taskScaleStatus(latest_output);
@@ -1545,6 +1460,12 @@ int run(int argc, char ** argv, std::string & normal_exit_detail)
           std::to_string(red_stats.skipped_release_count) +
           " Y=" + std::to_string(yellow_stats.skipped_release_count) +
           " recoverable_rejections R=" + std::to_string(red_stats.recoverable_rejection_count);
+      }
+      if (!clamp_detail.empty()) {
+        frame.ik_status +=
+          " retarget_clamped=" +
+          std::to_string(latest_red_attempt.retarget_clamp.clamped_component_count);
+        frame.status += " | " + clamp_detail;
       }
       frame.iterations = latest_red_attempt.solver_debug.ik_iterations;
       frame.converged = latest_red_attempt.solver_debug.converged;

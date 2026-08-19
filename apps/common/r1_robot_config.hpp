@@ -8,6 +8,8 @@
 namespace motion_control_lab
 {
 
+inline constexpr const char * kMotionControlUrdfEnvironmentVariable = "MOTION_CONTROL_URDF";
+
 struct R1RobotConfig
 {
   std::string base_frame;

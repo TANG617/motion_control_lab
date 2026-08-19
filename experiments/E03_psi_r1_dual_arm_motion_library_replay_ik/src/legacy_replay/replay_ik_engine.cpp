@@ -85,7 +85,7 @@ struct EndEffectorFk
 };
 
 EndEffectorFk computeEndEffectorFk(
-  mcc::GroupedKinematicsSolver & solver, const R1RobotConfig & robot,
+  mcc::KinematicsSolver & solver, const R1RobotConfig & robot,
   const std::vector<double> & positions, const std::vector<double> & velocities)
 {
   mcc::ForwardKinematicsRequest request;
@@ -95,8 +95,7 @@ EndEffectorFk computeEndEffectorFk(
   mcc::ForwardKinematicsSolution solution;
   mcc::ForwardKinematicsDiagnostics diagnostics;
   requireOk(
-    solver.computeForwardKinematics(mcc::SolverGroup::Red, request, solution, diagnostics),
-    "visualization FK failed");
+    solver.computeForwardKinematics(request, solution, diagnostics), "visualization FK failed");
   const auto findPose = [&](const std::string & frame_name) -> const mcc::FramePose & {
     const auto found = std::find_if(
       solution.poses.begin(), solution.poses.end(),
@@ -208,68 +207,60 @@ ReplayIkCaseResult executeReplayIkCase(
   solver_config.minimum_position_improvement_m = 1.0e-8;
   solver_config.minimum_orientation_improvement_rad = 1.0e-8;
 
-  mcc::GroupedKinematicsSolverConfig grouped_config;
-  grouped_config.profile = mcc::GroupedSolverProfile::RedOnly;
-  grouped_config.red = solver_config;
-  mcc::GroupedKinematicsSolverBuilder builder;
-  requireOk(builder.configure(model, robot.joint_names, grouped_config), "failed to configure IK");
+  mcc::KinematicsSolverBuilder builder;
+  requireOk(builder.configure(model, robot.joint_names, solver_config), "failed to configure IK");
 
   mcc::PositionTaskConfig left_position_config;
   left_position_config.name = "replay-left-position";
   left_position_config.enforcement = mcc::HardEnforcement{};
-  mcc::GroupedPositionTaskHandle left_position;
+  mcc::PositionTaskHandle left_position;
   requireOk(
-    builder.addPositionTask(
-      mcc::SolverGroup::Red, robot.left_end_effector_frame, left_position_config, left_position),
+    builder.addPositionTask(robot.left_end_effector_frame, left_position_config, left_position),
     "failed to add left position task");
 
   mcc::OrientationTaskConfig left_orientation_config;
   left_orientation_config.name = "replay-left-orientation";
   left_orientation_config.enforcement = mcc::HardEnforcement{};
-  mcc::GroupedOrientationTaskHandle left_orientation;
+  mcc::OrientationTaskHandle left_orientation;
   requireOk(
     builder.addOrientationTask(
-      mcc::SolverGroup::Red, robot.left_end_effector_frame, left_orientation_config,
-      left_orientation),
+      robot.left_end_effector_frame, left_orientation_config, left_orientation),
     "failed to add left orientation task");
 
   mcc::PositionTaskConfig right_position_config;
   right_position_config.name = "replay-right-position";
   right_position_config.enforcement = mcc::HardEnforcement{};
-  mcc::GroupedPositionTaskHandle right_position;
+  mcc::PositionTaskHandle right_position;
   requireOk(
-    builder.addPositionTask(
-      mcc::SolverGroup::Red, robot.right_end_effector_frame, right_position_config, right_position),
+    builder.addPositionTask(robot.right_end_effector_frame, right_position_config, right_position),
     "failed to add right position task");
 
   mcc::OrientationTaskConfig right_orientation_config;
   right_orientation_config.name = "replay-right-orientation";
   right_orientation_config.enforcement = mcc::HardEnforcement{};
-  mcc::GroupedOrientationTaskHandle right_orientation;
+  mcc::OrientationTaskHandle right_orientation;
   requireOk(
     builder.addOrientationTask(
-      mcc::SolverGroup::Red, robot.right_end_effector_frame, right_orientation_config,
-      right_orientation),
+      robot.right_end_effector_frame, right_orientation_config, right_orientation),
     "failed to add right orientation task");
 
   mcc::JointPositionLimitConfig position_limit_config;
   position_limit_config.margin = 1.0e-3;
   position_limit_config.enforcement = mcc::HardEnforcement{};
-  mcc::GroupedJointPositionLimitHandle position_limits;
+  mcc::JointPositionLimitHandle position_limits;
   requireOk(
-    builder.addJointPositionLimits(mcc::SolverGroup::Red, position_limit_config, position_limits),
+    builder.addJointPositionLimits(position_limit_config, position_limits),
     "failed to add position limits");
 
   mcc::JointVelocityLimitConfig velocity_limit_config;
   velocity_limit_config.enforcement = mcc::HardEnforcement{};
-  mcc::GroupedJointVelocityLimitHandle velocity_limits;
+  mcc::JointVelocityLimitHandle velocity_limits;
   requireOk(
-    builder.addJointVelocityLimits(mcc::SolverGroup::Red, velocity_limit_config, velocity_limits),
+    builder.addJointVelocityLimits(velocity_limit_config, velocity_limits),
     "failed to add velocity limits");
 
-  mcc::GroupedKinematicsSolver solver;
+  mcc::KinematicsSolver solver;
   requireOk(builder.finalize(solver), "failed to finalize IK");
-  requireOk(solver.beginRun(1), "failed to begin IK run");
 
   result.initial_positions =
     result.loaded.initial_joint_state.has_value()
@@ -323,12 +314,9 @@ ReplayIkCaseResult executeReplayIkCase(
       options.state_policy == LegacyStatePolicy::PreviousSolution ? positions : fixed_positions;
     const auto & state_velocities =
       options.state_policy == LegacyStatePolicy::PreviousSolution ? velocities : fixed_velocities;
-    mcc::GroupedInverseKinematicsRequest request;
+    mcc::InverseKinematicsRequest request;
     request.reference_frame_name = frame.value.left.frame_id;
-    request.captured_state.state = makeState(state_positions, state_velocities);
-    request.captured_state.sequence = frame.sequence + 1;
-    request.captured_state.monotonic_time_nanoseconds =
-      std::max<std::int64_t>(1, monotonicNanoseconds(scheduled));
+    request.state = makeState(state_positions, state_velocities);
     const Eigen::Isometry3d left_end_effector_target =
       frame.value.left.pose * robot.left_tcp_offset.inverse();
     const Eigen::Isometry3d right_end_effector_target =
@@ -342,17 +330,16 @@ ReplayIkCaseResult executeReplayIkCase(
     request.orientation_targets.push_back(
       {right_orientation, right_end_effector_target.linear(), true});
 
-    mcc::GroupedInverseKinematicsSolution solution;
-    mcc::GroupedInverseKinematicsDiagnostics diagnostics;
-    const auto status =
-      solver.solveInverseKinematics(mcc::SolverGroup::Red, request, solution, diagnostics);
+    mcc::InverseKinematicsSolution solution;
+    mcc::InverseKinematicsDiagnostics diagnostics;
+    const auto status = solver.solveInverseKinematics(request, solution, diagnostics);
     const auto solve_end = clock.now();
-    const bool accepted = status.ok() && diagnostics.attempt_accepted;
+    const bool accepted = status.ok() && mcc::isAccepted(solution.disposition);
     std::vector<double> output_positions = state_positions;
     std::vector<double> output_velocities = state_velocities;
     if (accepted) {
-      output_positions = toVector(solution.kinematics_solution.joint_positions);
-      output_velocities = toVector(solution.kinematics_solution.joint_velocities);
+      output_positions = toVector(solution.joint_positions);
+      output_velocities = toVector(solution.joint_velocities);
       ++result.accepted_solves;
       if (options.state_policy == LegacyStatePolicy::PreviousSolution) {
         positions = output_positions;
@@ -377,7 +364,7 @@ ReplayIkCaseResult executeReplayIkCase(
       execution_config.visualization_callback(makeVisualizationSample(
         result.next_visualization_sequence++, frame.projected_time_ns, frame.value, robot,
         output_fk, output_positions, output_velocities, status_text, false, accepted,
-        diagnostics.kinematics.solve_time_ms));
+        diagnostics.solve_time_ms));
     }
 
     trace << frame.sequence << ',' << frame.original_logical_time_ns << ','
@@ -392,8 +379,7 @@ ReplayIkCaseResult executeReplayIkCase(
           << optionalTimestamp(frame.value.right.time.log_time_ns) << ','
           << optionalTimestamp(frame.value.right.time.publish_time_ns) << ','
           << (accepted ? "true" : "false") << ',' << csvEscape(status_text) << ','
-          << diagnostics.kinematics.solve_time_ms << ','
-          << csvEscape(joinPositions(output_positions)) << '\n';
+          << diagnostics.solve_time_ms << ',' << csvEscape(joinPositions(output_positions)) << '\n';
 
     if (!accepted && execution_config.stop_on_first_error) {
       break;

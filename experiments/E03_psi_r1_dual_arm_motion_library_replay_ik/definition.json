@@ -2,7 +2,7 @@
   "schema_version": "experiment.v1",
   "experiment_id": "E03",
   "title": "PSI R1 dual-arm motion-library batch replay IK",
-  "question": "Which actions in the versioned PSI R1 dual-arm motion library can be replayed through the fixed MCC Red-only IK policy without rejected solves?",
+  "question": "Which actions in the versioned PSI R1 dual-arm motion library can be replayed through the fixed ordinary MCC IK policy without rejected solves?",
   "hypothesis": "Every conforming action is accepted when its own first recorded JointState initializes the robot and actions do not share solver state.",
   "independent_factors": [
     "motion_library_action"
@@ -50,7 +50,7 @@
   "arms": [
     {
       "arm_id": "mcc_red_only",
-      "method": "motion_control_core_grouped_inverse_kinematics",
+      "method": "motion_control_core_inverse_kinematics",
       "required": true
     }
   ],

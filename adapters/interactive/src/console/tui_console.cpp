@@ -24,12 +24,14 @@
 #include <utility>
 #include <vector>
 
-#include "config/constants.hpp"
-
 namespace motion_control_lab
 {
 namespace
 {
+
+constexpr double kStepScale = 2.0;
+constexpr double kPi = 3.14159265358979323846;
+constexpr std::array<const char *, 3> kRotationAxes{"x", "y", "z"};
 
 ArmTarget * findTarget(std::vector<ArmTarget> & targets, ArmSide side)
 {
@@ -1577,6 +1579,12 @@ void TuiConsole::setTargetPose(ArmSide side, const Pose & target_pose, const std
 }
 
 void TuiConsole::setStatus(const std::string & status) { command_.status = status; }
+
+void TuiConsole::setPaused(bool paused, const std::string & status)
+{
+  command_.paused = paused;
+  command_.status = status;
+}
 
 void TuiConsole::setMotionInputEnabled(bool enabled, const std::string & status)
 {

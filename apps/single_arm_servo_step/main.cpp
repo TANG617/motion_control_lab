@@ -1,7 +1,5 @@
 #include <Eigen/Core>
-#include <algorithm>
 #include <array>
-#include <cstdint>
 #include <cstdlib>
 #include <iostream>
 #include <memory>
@@ -10,7 +8,7 @@
 #include <string>
 #include <vector>
 
-#include "config/interactive_ik_options.hpp"
+#include "app_options.hpp"
 #include "console/tui_console.hpp"
 #include "cpu_affinity.hpp"
 #include "ik_app_utils.hpp"
@@ -41,7 +39,7 @@ void throwIfError(const mcc::Status & status)
 
 int run(int argc, char ** argv)
 {
-  const auto options = mcl::parseInteractiveIkOptions(argc, argv);
+  const auto options = mcl::single_arm_servo_step::parseAppOptions(argc, argv);
   const auto affinity_domain = mcl::CpuAffinityDomain::capture();
   const auto affinity_binding =
     affinity_domain.bindCurrentThread(kProgramId, "main", kMainCpuAffinity);
@@ -73,42 +71,35 @@ int run(int argc, char ** argv)
   solver_config.minimum_position_improvement_m = 1.0e-8;
   solver_config.minimum_orientation_improvement_rad = 1.0e-8;
 
-  mcc::GroupedKinematicsSolverConfig grouped_config;
-  grouped_config.profile = mcc::GroupedSolverProfile::RedOnly;
-  grouped_config.red = solver_config;
-  mcc::GroupedKinematicsSolverBuilder builder;
-  throwIfError(builder.configure(model, joint_names, grouped_config));
+  mcc::KinematicsSolverBuilder builder;
+  throwIfError(builder.configure(model, joint_names, solver_config));
 
   mcc::PositionTaskConfig position_task_config;
   position_task_config.name = std::string{mcl::armSideName(controlled_side)} + "-position";
   position_task_config.enforcement = mcc::HardEnforcement{};
-  mcc::GroupedPositionTaskHandle position_task;
-  throwIfError(builder.addPositionTask(
-    mcc::SolverGroup::Red, controlled_frame, position_task_config, position_task));
+  mcc::PositionTaskHandle position_task;
+  throwIfError(builder.addPositionTask(controlled_frame, position_task_config, position_task));
 
   mcc::OrientationTaskConfig orientation_task_config;
   orientation_task_config.name = std::string{mcl::armSideName(controlled_side)} + "-orientation";
   orientation_task_config.enforcement = mcc::HardEnforcement{};
-  mcc::GroupedOrientationTaskHandle orientation_task;
-  throwIfError(builder.addOrientationTask(
-    mcc::SolverGroup::Red, controlled_frame, orientation_task_config, orientation_task));
+  mcc::OrientationTaskHandle orientation_task;
+  throwIfError(
+    builder.addOrientationTask(controlled_frame, orientation_task_config, orientation_task));
 
   mcc::JointPositionLimitConfig joint_limit_config;
   joint_limit_config.margin = 0.0;
   joint_limit_config.enforcement = mcc::HardEnforcement{};
-  mcc::GroupedJointPositionLimitHandle joint_limits;
-  throwIfError(
-    builder.addJointPositionLimits(mcc::SolverGroup::Red, joint_limit_config, joint_limits));
+  mcc::JointPositionLimitHandle joint_limits;
+  throwIfError(builder.addJointPositionLimits(joint_limit_config, joint_limits));
 
   mcc::JointVelocityLimitConfig velocity_limit_config;
   velocity_limit_config.enforcement = mcc::HardEnforcement{};
-  mcc::GroupedJointVelocityLimitHandle velocity_limits;
-  throwIfError(
-    builder.addJointVelocityLimits(mcc::SolverGroup::Red, velocity_limit_config, velocity_limits));
+  mcc::JointVelocityLimitHandle velocity_limits;
+  throwIfError(builder.addJointVelocityLimits(velocity_limit_config, velocity_limits));
 
-  mcc::GroupedKinematicsSolver solver;
+  mcc::KinematicsSolver solver;
   throwIfError(builder.finalize(solver));
-  throwIfError(solver.beginRun(1));
 
   auto currentTargetPose = [&](mcl::ArmSide side) {
     mcc::ForwardKinematicsRequest request;
@@ -117,8 +108,7 @@ int run(int argc, char ** argv)
     request.reference_frame_name = robot.base_frame;
     mcc::ForwardKinematicsSolution solution;
     mcc::ForwardKinematicsDiagnostics diagnostics;
-    throwIfError(
-      solver.computeForwardKinematics(mcc::SolverGroup::Red, request, solution, diagnostics));
+    throwIfError(solver.computeForwardKinematics(request, solution, diagnostics));
     return solution.poses.at(0).pose;
   };
 
@@ -127,14 +117,14 @@ int run(int argc, char ** argv)
   const auto initial_right_fk = currentTargetPose(mcl::ArmSide::Right);
   mcl::TuiConsole tui(
     options.tui, options.rate_hz, kTitle, presentation,
-    {{mcl::ArmSide::Left, initial_left_fk}, {mcl::ArmSide::Right, initial_right_fk}}, false);
+    {{mcl::ArmSide::Left, initial_left_fk}, {mcl::ArmSide::Right, initial_right_fk}}, false,
+    options.tui_enabled);
   auto visualization_sink = mcl::createVisualizationSink(options.visualization, kProgramId);
 
   mcl::installInteractiveSignalHandlers();
   mcl::InteractiveScheduler scheduler({options.rate_hz, options.duration_s});
   mcl::RollingPercentiles solve_time_percentiles;
   std::size_t publish_count = 0;
-  std::uint64_t solve_sequence = 0;
 
   mcl::IkDebugFrame latest_frame;
   latest_frame.targets = tui.command().targets;
@@ -163,26 +153,22 @@ int run(int argc, char ** argv)
 
     if (schedule->update_due && !command.paused) {
       const auto & target = command.targets.at(controlled_side == mcl::ArmSide::Left ? 0 : 1);
-      mcc::GroupedInverseKinematicsRequest request;
+      mcc::InverseKinematicsRequest request;
       request.reference_frame_name = robot.base_frame;
-      request.captured_state.state = mcl::makeRobotState(positions, velocities);
-      request.captured_state.sequence = ++solve_sequence;
-      request.captured_state.monotonic_time_nanoseconds =
-        std::max<std::int64_t>(1, schedule->sample_time_ns);
+      request.state = mcl::makeRobotState(positions, velocities);
       request.position_targets.push_back({position_task, target.target_pose.translation(), true});
       request.orientation_targets.push_back({orientation_task, target.target_pose.linear(), true});
 
-      mcc::GroupedInverseKinematicsSolution solution;
-      mcc::GroupedInverseKinematicsDiagnostics diagnostics;
-      const auto status =
-        solver.solveInverseKinematics(mcc::SolverGroup::Red, request, solution, diagnostics);
-      solve_time_percentiles.record(diagnostics.kinematics.solve_time_ms);
+      mcc::InverseKinematicsSolution solution;
+      mcc::InverseKinematicsDiagnostics diagnostics;
+      const auto status = solver.solveInverseKinematics(request, solution, diagnostics);
+      solve_time_percentiles.record(diagnostics.solve_time_ms);
       throwIfError(status);
-      if (!diagnostics.attempt_accepted) {
-        throw std::runtime_error("Red IK attempt rejected");
+      if (!mcc::isAccepted(solution.disposition)) {
+        throw std::runtime_error("IK candidate rejected");
       }
-      positions = mcl::toStdVector(solution.kinematics_solution.joint_positions);
-      velocities = mcl::toStdVector(solution.kinematics_solution.joint_velocities);
+      positions = mcl::toStdVector(solution.joint_positions);
+      velocities = mcl::toStdVector(solution.joint_velocities);
 
       latest_frame.targets = command.targets;
       latest_frame.forward_kinematics = {
@@ -192,28 +178,27 @@ int run(int argc, char ** argv)
       latest_frame.positions = positions;
       latest_frame.velocities = velocities;
       latest_frame.ik_status = status.ok() ? "ok" : status.message;
-      latest_frame.iterations = diagnostics.kinematics.iterations;
-      latest_frame.converged = diagnostics.kinematics.converged;
-      latest_frame.solve_time_ms = diagnostics.kinematics.solve_time_ms;
+      latest_frame.iterations = diagnostics.iterations;
+      latest_frame.converged = diagnostics.converged;
+      latest_frame.solve_time_ms = diagnostics.solve_time_ms;
       if (latest_frame.solvers.empty()) {
         latest_frame.solvers.push_back(
-          mcl::makeSolverDebug("Red", diagnostics, solution.kinematics_solution.disposition));
+          mcl::makeSolverDebug("MCC", diagnostics, solution.disposition));
       } else {
-        mcl::updateSolverDebug(
-          latest_frame.solvers.front(), diagnostics, solution.kinematics_solution.disposition);
+        mcl::updateSolverDebug(latest_frame.solvers.front(), diagnostics, solution.disposition);
       }
       latest_frame.target_errors.clear();
       mcl::ArmTargetError target_error;
       target_error.side = controlled_side;
       bool has_error = false;
-      for (const auto & error : diagnostics.kinematics.position_errors) {
+      for (const auto & error : diagnostics.position_errors) {
         if (error.handle.value == position_task.value) {
           target_error.position_m = error.norm_m;
           has_error = true;
           break;
         }
       }
-      for (const auto & error : diagnostics.kinematics.orientation_errors) {
+      for (const auto & error : diagnostics.orientation_errors) {
         if (error.handle.value == orientation_task.value) {
           target_error.orientation_rad = error.norm_rad;
           has_error = true;
@@ -223,7 +208,7 @@ int run(int argc, char ** argv)
       if (has_error) {
         latest_frame.target_errors.push_back(target_error);
       }
-      latest_frame.status = "Red IK accepted";
+      latest_frame.status = "IK accepted";
       latest_frame.paused = command.paused;
       latest_frame.selected_side = command.selected_side;
 

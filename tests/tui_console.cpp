@@ -8,7 +8,6 @@
 #include <string_view>
 #include <thread>
 
-#include "config/interactive_ik_options.hpp"
 #include "runtime/interactive_types.hpp"
 
 namespace
@@ -16,7 +15,7 @@ namespace
 
 constexpr std::string_view kExpectedException = "intentional TUI exception";
 
-int run(bool throw_after_render, bool fault_hold, bool replay_controls)
+int run(bool throw_after_render, bool fault_hold, bool replay_controls, bool replay_start_paused)
 {
   namespace mcl = motion_control_lab;
 
@@ -44,6 +43,9 @@ int run(bool throw_after_render, bool fault_hold, bool replay_controls)
     true, true, replay_controls ? mcl::TuiControlMode::Replay : mcl::TuiControlMode::Teleop);
   if (replay_controls) {
     tui.setMotionInputEnabled(false, "Replay motion editing is disabled");
+    if (replay_start_paused) {
+      tui.setPaused(true, "Replay timeline paused; press space to start");
+    }
   }
 
   mcl::IkDebugFrame frame;
@@ -174,9 +176,14 @@ int main(int argc, char ** argv)
 {
   const bool throw_after_render = argc == 2 && std::string_view(argv[1]) == "--throw-after-render";
   const bool fault_hold = argc == 2 && std::string_view(argv[1]) == "--fault-hold";
-  const bool replay_controls = argc == 2 && std::string_view(argv[1]) == "--replay";
+  const bool replay_controls =
+    argc == 2 &&
+    (std::string_view(argv[1]) == "--replay" ||
+     std::string_view(argv[1]) == "--replay-start-paused");
+  const bool replay_start_paused =
+    argc == 2 && std::string_view(argv[1]) == "--replay-start-paused";
   try {
-    return run(throw_after_render, fault_hold, replay_controls);
+    return run(throw_after_render, fault_hold, replay_controls, replay_start_paused);
   } catch (const std::exception & error) {
     std::cerr << "test_tui_console: " << error.what() << '\n';
     return EXIT_FAILURE;

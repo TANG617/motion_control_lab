@@ -13,7 +13,7 @@ Motion Control Lab 是面向机器人遥操作 whole-body IK 的可复现实验�
 - 可选、隔离构建的 `E04_opensot_smoke` OpenSoT ROS2 R1 IK smoke；
 - 对实验定义、共享 R1 输入、run manifest、artifact 哈希和求解结果的自动检查。
 
-仓库还提供可选的 IK 交互预览运行时。单臂入口使用 MCC grouped solver 的 `RedOnly` profile；
+仓库还提供可选的 IK 交互预览运行时。单臂入口直接使用普通 MCC `KinematicsSolver`；
 显式区分的双臂 ServoStep/TargetSolve 入口可以通过 `--solver mcc|placo` 选择实现，并在 MCC
 实现中通过 `--backend proxqp|eiquadprog` 选择 QP backend；各 app 拥有完整的 solver topology、
 任务和结果解释。grouped 双臂入口使用 MCC 独立 Red/Yellow worker。它们只复用 R1 固定参数、

@@ -3,7 +3,6 @@
 #include <stdexcept>
 #include <string>
 
-#include "config/interactive_ik_options.hpp"
 #include "contracts/visualization/foxglove_ik_v1.hpp"
 #include "ik_app_utils.hpp"
 #include "r1_interactive_config.hpp"
@@ -15,86 +14,6 @@
 int main()
 {
   namespace mcc = motion_control::core;
-
-  char program[] = "mcl_single_arm_servo_step";
-  char urdf_option[] = "--urdf";
-  char urdf_value[] = "/tmp/robot.urdf";
-  char side_option[] = "--side";
-  char side_value[] = "right";
-  char rate_option[] = "--rate";
-  char rate_value[] = "50";
-  char * argv[]{program, urdf_option, urdf_value, side_option, side_value, rate_option, rate_value};
-  const auto options = motion_control_lab::parseInteractiveIkOptions(7, argv);
-  if (
-    options.urdf_path != urdf_value || options.tui.side != "right" || options.rate_hz != 50.0 ||
-    motion_control_lab::parseArmSide(options.tui.side) != motion_control_lab::ArmSide::Right) {
-    return EXIT_FAILURE;
-  }
-
-  char grouped_program[] = "mcl_grouped_servo_step";
-  char grouped_urdf_option[] = "--urdf";
-  char grouped_urdf_value[] = "/tmp/robot.urdf";
-  char * grouped_argv[]{grouped_program, grouped_urdf_option, grouped_urdf_value};
-  const auto grouped = motion_control_lab::parseGroupedInteractiveIkOptions(3, grouped_argv);
-  if (
-    grouped.red_rate_hz != 1000.0 || grouped.yellow_rate_hz != 100.0 ||
-    grouped.ui_rate_hz != 100.0 ||
-    grouped.deadline_policy != motion_control_lab::DeadlinePolicy::Strict) {
-    return EXIT_FAILURE;
-  }
-
-  char deadline_policy_option[] = "--deadline-policy";
-  char deadline_policy_value[] = "monitor";
-  char * monitor_grouped_argv[]{
-    grouped_program, grouped_urdf_option, grouped_urdf_value, deadline_policy_option,
-    deadline_policy_value};
-  const auto monitor =
-    motion_control_lab::parseGroupedInteractiveIkOptions(5, monitor_grouped_argv);
-  if (monitor.deadline_policy != motion_control_lab::DeadlinePolicy::Monitor) {
-    return EXIT_FAILURE;
-  }
-
-  char invalid_deadline_policy_value[] = "ignore";
-  char * invalid_policy_argv[]{
-    grouped_program, grouped_urdf_option, grouped_urdf_value, deadline_policy_option,
-    invalid_deadline_policy_value};
-  try {
-    (void)motion_control_lab::parseGroupedInteractiveIkOptions(5, invalid_policy_argv);
-    return EXIT_FAILURE;
-  } catch (const std::runtime_error &) {
-  }
-
-  char red_option[] = "--red-rate";
-  char yellow_option[] = "--yellow-rate";
-  char valid_red_value[] = "800";
-  char valid_yellow_value[] = "80";
-  char * custom_grouped_argv[]{grouped_program, grouped_urdf_option, grouped_urdf_value, red_option,
-                               valid_red_value, yellow_option,       valid_yellow_value};
-  const auto custom = motion_control_lab::parseGroupedInteractiveIkOptions(7, custom_grouped_argv);
-  if (custom.red_rate_hz != 800.0 || custom.yellow_rate_hz != 80.0) {
-    return EXIT_FAILURE;
-  }
-
-  char green_option[] = "--green-rate";
-  char green_value[] = "10";
-  char * removed_green_argv[]{
-    grouped_program, grouped_urdf_option, grouped_urdf_value, green_option, green_value};
-  try {
-    (void)motion_control_lab::parseGroupedInteractiveIkOptions(5, removed_green_argv);
-    return EXIT_FAILURE;
-  } catch (const std::runtime_error &) {
-  }
-
-  char red_value[] = "100";
-  char yellow_value[] = "100";
-  char * invalid_grouped_argv[]{grouped_program, grouped_urdf_option, grouped_urdf_value,
-                                red_option,      red_value,           yellow_option,
-                                yellow_value};
-  try {
-    (void)motion_control_lab::parseGroupedInteractiveIkOptions(7, invalid_grouped_argv);
-    return EXIT_FAILURE;
-  } catch (const std::runtime_error &) {
-  }
 
   const auto & robot = motion_control_lab::r1RobotConfig();
   const auto presentation = motion_control_lab::makeArmPresentation(

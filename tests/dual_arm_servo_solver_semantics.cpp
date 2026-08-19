@@ -104,17 +104,16 @@ int main(int argc, char ** argv)
 {
   try {
     require(argc == 2, "usage: dual_arm_servo_solver_semantics <urdf>");
-    motion_control_lab::InteractiveIkOptions options;
-    options.urdf_path = argv[1];
-    options.rate_hz = 20.0;
+    const std::string urdf_path = argv[1];
+    constexpr double rate_hz = 20.0;
     const auto & robot = motion_control_lab::r1RobotConfig();
 
     placo::model::RobotWrapper limit_model(
-      options.urdf_path,
+      urdf_path,
       placo::model::RobotWrapper::IGNORE_COLLISIONS | placo::model::RobotWrapper::IGNORE_GEOMETRY);
-    MccServoSolver mcc_proxqp_solver(options, robot, MccBackend::Proxqp);
-    MccServoSolver mcc_eiquadprog_solver(options, robot, MccBackend::Eiquadprog);
-    PlacoServoSolver placo_solver(options, robot);
+    MccServoSolver mcc_proxqp_solver(urdf_path, rate_hz, robot, MccBackend::Proxqp);
+    MccServoSolver mcc_eiquadprog_solver(urdf_path, rate_hz, robot, MccBackend::Eiquadprog);
+    PlacoServoSolver placo_solver(urdf_path, rate_hz, robot);
     require(
       mcc_proxqp_solver.currentPose(motion_control_lab::ArmSide::Left)
         .matrix()
@@ -137,11 +136,11 @@ int main(int argc, char ** argv)
       "MCC/eiquadprog and PlaCo right initial FK differ");
 
     exerciseServoSolver(
-      mcc_proxqp_solver, limit_model, robot, options.rate_hz, "MCC/ProxQP", "proxqp");
+      mcc_proxqp_solver, limit_model, robot, rate_hz, "MCC/ProxQP", "proxqp");
     exerciseServoSolver(
-      mcc_eiquadprog_solver, limit_model, robot, options.rate_hz, "MCC/eiquadprog", "eiquadprog");
+      mcc_eiquadprog_solver, limit_model, robot, rate_hz, "MCC/eiquadprog", "eiquadprog");
     exerciseServoSolver(
-      placo_solver, limit_model, robot, options.rate_hz, "PlaCo/eiquadprog", "eiquadprog");
+      placo_solver, limit_model, robot, rate_hz, "PlaCo/eiquadprog", "eiquadprog");
     return EXIT_SUCCESS;
   } catch (const std::exception & error) {
     std::cerr << "dual_arm_servo_solver_semantics: " << error.what() << '\n';

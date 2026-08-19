@@ -1,4 +1,4 @@
-add_executable(mcl_single_arm_servo_step main.cpp)
+add_executable(mcl_single_arm_servo_step main.cpp app_options.cpp)
 set_target_properties(
   mcl_single_arm_servo_step
   PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}"
@@ -14,6 +14,22 @@ target_link_libraries(
 install(TARGETS mcl_single_arm_servo_step RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 
 if(BUILD_TESTING)
+  add_executable(
+    test_single_arm_servo_step_app_options
+    tests/app_options_contract.cpp
+    app_options.cpp
+  )
+  target_link_libraries(
+    test_single_arm_servo_step_app_options
+    PRIVATE
+      motion_control_lab::interactive_support
+      motion_control_lab::r1_robot_config
+  )
+  add_test(
+    NAME apps.mcl_single_arm_servo_step_options
+    COMMAND test_single_arm_servo_step_app_options
+  )
+
   add_test(
     NAME apps.mcl_single_arm_servo_step_help
     COMMAND

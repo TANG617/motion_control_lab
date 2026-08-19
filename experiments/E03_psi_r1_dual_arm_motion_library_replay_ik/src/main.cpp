@@ -288,7 +288,7 @@ Json::Value actionManifestJson(
   manifest["robot_model"]["urdf_path"] =
     std::filesystem::absolute(replay_options.urdf_path).lexically_normal().string();
   manifest["robot_model"]["urdf_sha256"] = mcl::sha256_file(replay_options.urdf_path);
-  manifest["solver"]["profile"] = "RedOnly";
+  manifest["solver"]["profile"] = "Ordinary";
   manifest["solver"]["servo_mode"] = "ServoStep";
   manifest["target_pose"]["input_semantics"] = "tcp";
   manifest["target_pose"]["solver_semantics"] = "end_effector";
