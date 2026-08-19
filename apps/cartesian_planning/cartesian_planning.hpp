@@ -1,7 +1,7 @@
 #pragma once
 
 #include <motion_control_core/planning/cartesian_planner.hpp>
-#include <motion_control_viz/frame.hpp>
+#include <motion_control_viz/render_batch.hpp>
 
 #include <cstdint>
 #include <filesystem>
@@ -55,13 +55,11 @@ void renderTrajectoryPlots(
 std::vector<motion_control::viz::LineStrip3d> makeStaticScene(
   const motion_control::core::CartesianLineRequest & request);
 
-motion_control::viz::VisualizationFrame makePlaybackFrame(
+motion_control::viz::RenderBatch makePlaybackFrame(
   const motion_control::core::CartesianTrajectorySample & sample,
   const std::vector<motion_control::viz::LineStrip3d> & static_scene,
   bool include_static_scene,
-  std::uint64_t sequence,
-  std::int64_t sample_time_ns,
-  std::uint64_t emit_time_ns);
+  std::uint64_t timestamp_ns);
 
 void playTrajectory(
   const AppOptions & options,

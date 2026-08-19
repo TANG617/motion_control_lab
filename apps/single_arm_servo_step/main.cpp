@@ -17,8 +17,8 @@
 #include "runtime/interactive_scheduler.hpp"
 #include "runtime/interactive_types.hpp"
 #include "runtime/rolling_percentiles.hpp"
-#include "sinks/ik_visualization.hpp"
-#include "sinks/visualization_sink_factory.hpp"
+#include "sinks/ik_render_batch.hpp"
+#include "sinks/preview_sink_factory.hpp"
 
 namespace
 {
@@ -119,7 +119,7 @@ int run(int argc, char ** argv)
     options.tui, options.rate_hz, kTitle, presentation,
     {{mcl::ArmSide::Left, initial_left_fk}, {mcl::ArmSide::Right, initial_right_fk}}, false,
     options.tui_enabled);
-  auto visualization_sink = mcl::createVisualizationSink(options.visualization, kProgramId);
+  auto visualization_sink = mcl::createPreviewSink(options.visualization, kProgramId);
 
   mcl::installInteractiveSignalHandlers();
   mcl::InteractiveScheduler scheduler({options.rate_hz, options.duration_s});
@@ -136,7 +136,7 @@ int run(int argc, char ** argv)
   latest_frame.selected_side = controlled_side;
   latest_frame.cpu_affinities = {mcl::makeCpuAffinityDebug(affinity_binding)};
 
-  visualization_sink->open({"interactive-preview", kProgramId});
+  visualization_sink->open();
 
   while (const auto schedule = scheduler.next()) {
     tui.poll();
@@ -212,9 +212,8 @@ int run(int argc, char ** argv)
       latest_frame.paused = command.paused;
       latest_frame.selected_side = command.selected_side;
 
-      visualization_sink->write(mcl::makeIkVisualizationFrame(
-        latest_frame, presentation, publish_count, schedule->sample_time_ns,
-        schedule->emit_time_ns));
+      visualization_sink->write(mcl::makeIkRenderBatch(
+        latest_frame, presentation, schedule->emit_time_ns));
       ++publish_count;
     }
 

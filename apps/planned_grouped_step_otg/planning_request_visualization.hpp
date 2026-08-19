@@ -6,9 +6,9 @@
 
 #include <string>
 
-#include "contracts/visualization/foxglove_planned_grouped_servo_step_v1.hpp"
+#include "contracts/visualization/foxglove_planned_grouped_step_otg_v1.hpp"
 
-namespace motion_control_lab::planned_grouped_servo_step {
+namespace motion_control_lab::planned_grouped_step_otg {
 
 inline motion_control::viz::PoseSample
 makePlanningRequestPose(const char *channel,
@@ -31,7 +31,7 @@ appendPlanningRequestPoses(motion_control::viz::RenderBatch &frame,
                            const Eigen::Isometry3d &left_pose,
                            const Eigen::Isometry3d &right_pose) {
   namespace contract =
-      motion_control_lab::contracts::foxglove_planned_grouped_servo_step_v1;
+      motion_control_lab::contracts::foxglove_planned_grouped_step_otg_v1;
   frame.poses.reserve(frame.poses.size() + 2U);
   frame.poses.push_back(makePlanningRequestPose(
       contract::kLeftPlanningRequestTopic, reference_frame, left_pose));
@@ -39,4 +39,22 @@ appendPlanningRequestPoses(motion_control::viz::RenderBatch &frame,
       contract::kRightPlanningRequestTopic, reference_frame, right_pose));
 }
 
-} // namespace motion_control_lab::planned_grouped_servo_step
+inline void appendOtgExecution(
+    motion_control::viz::RenderBatch &batch,
+    const std::vector<std::string> &joint_names,
+    const std::vector<double> &positions,
+    const std::vector<double> &velocities,
+    const std::string &reference_frame,
+    const Eigen::Isometry3d &left_pose,
+    const Eigen::Isometry3d &right_pose) {
+  namespace contract =
+      motion_control_lab::contracts::foxglove_planned_grouped_step_otg_v1;
+  batch.joint_states.push_back(motion_control::viz::JointStateSample{
+      contract::kJointOtgExecutionStateTopic, joint_names, positions, velocities});
+  batch.poses.push_back(makePlanningRequestPose(
+      contract::kLeftOtgFkTopic, reference_frame, left_pose));
+  batch.poses.push_back(makePlanningRequestPose(
+      contract::kRightOtgFkTopic, reference_frame, right_pose));
+}
+
+} // namespace motion_control_lab::planned_grouped_step_otg

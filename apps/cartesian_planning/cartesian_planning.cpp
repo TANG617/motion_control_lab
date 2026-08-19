@@ -1,8 +1,8 @@
 #include "cartesian_planning.hpp"
 
-#include "matplotlibcpp.h"
+#include "sinks/preview_sink_factory.hpp"
 
-#include <motion_control_viz/foxglove_frame_sink.hpp>
+#include "matplotlibcpp.h"
 
 #include <json/json.h>
 
@@ -591,21 +591,14 @@ std::vector<mcv::LineStrip3d> makeStaticScene(
   return lines;
 }
 
-mcv::VisualizationFrame makePlaybackFrame(
+mcv::RenderBatch makePlaybackFrame(
   const mcc::CartesianTrajectorySample & sample,
   const std::vector<mcv::LineStrip3d> & static_scene,
   bool include_static_scene,
-  std::uint64_t sequence,
-  std::int64_t sample_time_ns,
-  std::uint64_t emit_time_ns)
+  std::uint64_t timestamp_ns)
 {
-  mcv::VisualizationFrame visualization;
-  visualization.run_id = "cartesian-planning";
-  visualization.sequence = sequence;
-  visualization.sample_time_ns = sample_time_ns;
-  visualization.sample_clock = "cartesian_playback";
-  visualization.emit_time_ns = emit_time_ns;
-  visualization.status = "playing";
+  mcv::RenderBatch visualization;
+  visualization.timestamp_ns = timestamp_ns;
   if (include_static_scene) {
     visualization.line_strips = static_scene;
   }
@@ -613,8 +606,7 @@ mcv::VisualizationFrame makePlaybackFrame(
   for (const auto & frame : sample.frames) {
     Eigen::Quaterniond orientation(frame.pose.linear());
     orientation.normalize();
-    visualization.poses.push_back(mcv::NamedPose{
-      frame.frame_name,
+    visualization.poses.push_back(mcv::PoseSample{
       "/mc/cartesian/pose/" + frame.frame_name,
       frame.reference_frame_name,
       mcv::Pose3d{
@@ -635,21 +627,18 @@ void playTrajectory(
   const mcc::CartesianLineRequest & request,
   const mcc::CartesianTrajectory & trajectory)
 {
-  mcv::FoxgloveFrameSinkOptions sink_options;
-  sink_options.server_name = "mcl_cartesian_planning";
+  PreviewSinkOptions sink_options;
   sink_options.host = options.host;
   sink_options.port = options.port;
   sink_options.mcap_path = options.mcap_path;
-  mcv::FoxgloveFrameSink sink(std::move(sink_options));
-  sink.open({"cartesian-planning", "mcl_cartesian_planning"});
+  auto sink = createPreviewSink(sink_options, "mcl_cartesian_planning");
+  sink->open();
 
   stop_requested.store(false);
   std::signal(SIGINT, signalHandler);
   std::signal(SIGTERM, signalHandler);
 
   const auto static_scene = makeStaticScene(request);
-  const auto playback_origin = std::chrono::steady_clock::now();
-  std::uint64_t sequence = 0;
   do {
       const auto loop_start = std::chrono::steady_clock::now();
       bool first_sample = true;
@@ -660,18 +649,14 @@ void playTrajectory(
         if (stop_requested.load()) {
           break;
         }
-        const auto logical_time = std::chrono::duration_cast<std::chrono::nanoseconds>(
-          std::chrono::steady_clock::now() - playback_origin).count();
-        sink.write(makePlaybackFrame(
+        sink->write(makePlaybackFrame(
           sample,
           static_scene,
           first_sample,
-          sequence++,
-          logical_time,
           wallTimeNs()));
         first_sample = false;
       }
-      sink.flush();
+      sink->flush();
       if (options.once || stop_requested.load()) {
         break;
       }
@@ -680,7 +665,7 @@ void playTrajectory(
         std::chrono::duration_cast<std::chrono::steady_clock::duration>(
           std::chrono::duration<double>(options.loop_delay_s)));
   } while (!stop_requested.load());
-  sink.close();
+  sink->close();
 }
 
 }  // namespace motion_control_lab::cartesian_planning

@@ -39,8 +39,8 @@
 #include "runtime/interactive_types.hpp"
 #include "runtime/latest_value_mailbox.hpp"
 #include "runtime/rolling_percentiles.hpp"
-#include "sinks/ik_visualization.hpp"
-#include "sinks/visualization_sink_factory.hpp"
+#include "sinks/ik_render_batch.hpp"
+#include "sinks/preview_sink_factory.hpp"
 
 namespace
 {
@@ -953,7 +953,7 @@ int run(int argc, char ** argv, std::string & normal_exit_detail)
       tui.setPaused(true, "Replay timeline paused; press space to start");
     }
   }
-  auto visualization_sink = mcl::createVisualizationSink(options.visualization, kProgramId);
+  auto visualization_sink = mcl::createPreviewSink(options.visualization, kProgramId);
 
   mcl::WorkerStopController stop_controller;
   mcl::GroupedFaultState fault;
@@ -980,7 +980,7 @@ int run(int argc, char ** argv, std::string & normal_exit_detail)
                   "reference_left_twist,reference_left_acceleration,actual_fk_"
                   "left_xyz,positions,velocities\n";
 
-  visualization_sink->open({"interactive-preview", kProgramId});
+  visualization_sink->open();
   mcl::installInteractiveSignalHandlers();
 
   workers.yellow = std::thread([&]() {
@@ -1506,9 +1506,8 @@ int run(int argc, char ** argv, std::string & normal_exit_detail)
 
       mcl::IkDebugFrame visualization_debug_frame = frame;
       visualization_debug_frame.targets = armTargets(latest_red_attempt.target);
-      auto visualization_frame = mcl::makeIkVisualizationFrame(
-        visualization_debug_frame, presentation, publish_count, schedule->sample_time_ns,
-        schedule->emit_time_ns);
+      auto visualization_frame = mcl::makeIkRenderBatch(
+        visualization_debug_frame, presentation, schedule->emit_time_ns);
       mcl::planned_grouped_servo_step::appendPlanningRequestPoses(
         visualization_frame, robot.base_frame, latest_red_attempt.attempted_reference.left,
         latest_red_attempt.attempted_reference.right);

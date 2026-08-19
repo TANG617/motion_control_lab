@@ -9,11 +9,11 @@ ArmVisualizationChannels foxgloveIkVisualizationChannels()
 {
   namespace contract = contracts::foxglove_ik_v1;
   return {
-    contract::kJointStates,
-    contract::kLeftTargetPose,
-    contract::kRightTargetPose,
-    contract::kLeftEndEffectorPose,
-    contract::kRightEndEffectorPose};
+    contract::kIkOutputJointStateTopic,
+    contract::kLeftInputTargetTopic,
+    contract::kRightInputTargetTopic,
+    contract::kLeftFkOutputTopic,
+    contract::kRightFkOutputTopic};
 }
 
 const std::string & frameForSide(

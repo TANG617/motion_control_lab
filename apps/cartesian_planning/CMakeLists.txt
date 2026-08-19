@@ -15,10 +15,9 @@ target_link_libraries(
   mcl_cartesian_planning_support
   PUBLIC
     motion_control_core::motion_control_core
-    motion_control_viz::motion_control_viz
+    motion_control_lab::preview_transport
   PRIVATE
     eiquadprog::eiquadprog
-    motion_control_viz::foxglove_sink
     jsoncpp_lib
     Python3::Python
     Python3::NumPy

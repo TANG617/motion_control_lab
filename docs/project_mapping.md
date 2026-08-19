@@ -20,9 +20,11 @@ planned。
 | Replay plan | `mcl_replay_plan`；预加载输入并输出 timeline trace/manifest，不运行 solver |
 | MCC interactive apps | `apps/single_arm_servo_step/`、`apps/servo_step/`、`apps/target_solve/` 各自拥有完整的普通 `KinematicsSolver` topology 和配置；`apps/grouped_servo_step/` 与 `apps/planned_grouped_servo_step/` 各自拥有完整 Red/Yellow topology |
 | Cartesian planning preview | `apps/cartesian_planning/` 读取版本化 JSON，调用 Core `CartesianPlanner`，输出 CSV/PNG 并循环发布 Foxglove；不加载 robot model 或调用 IK |
-| Interactive support | `adapters/interactive/` 提供 CLI、独立 TUI console/presentation、source-mode controls、wall-clock scheduler、SPSC latest mailbox、periodic worker/Fault 和 Viz helpers |
+| Interactive runtime | `mcl_interactive_runtime` 提供独立 TUI console/presentation、source-mode controls、wall-clock scheduler、SPSC latest mailbox、periodic worker/Fault 与 rolling percentiles，不依赖 Viz |
+| Preview transport | `mcl_preview_transport` 提供 Lab-owned CLI/config policy 与 WebSocket/MCAP/Null sink factory |
+| IK preview projection | `mcl_ik_preview` 将 Lab `IkDebugFrame` 的 target、FK 与 joint state 投影为通用 `RenderBatch`；app-specific extension 留在 app |
 | Replay support | `adapters/replay/` 提供 solver-agnostic timeline loader、ReplayClock、provenance 与 v2 artifact mechanics；solver loop 与失败语义仍由 app 拥有 |
-| IK visualization contract | `contracts/visualization/foxglove_ik.v1.json` + `foxglove_ik_v1.hpp` 固定五条 Foxglove topic，并要求 FK 与同帧 joint state 一致 |
+| IK visualization contract | `contracts/visualization/*.json` 是唯一来源；build-tree generator 与 `motion_control_lab::visualization_contracts` 暴露 topic/ChannelSpec，并由 C++ conformance 检查 collection 对齐 |
 | Solver A/B runner | planned；需要时由正式 Experiment 的 canonical timeline 单独设计，不预留交互 backend 接口 |
 | Interactive preview | 独立 app topology + 共享 interactive support；E02 的 Foxglove sink 是只观察 canonical replay 的可选输出，不替换 ReplayClock |
 | Solver source | `third_party/placo/` 直接参与主工程构建；`third_party/OpenSoT/` 只在 E04 开启时通过隔离的 external project 构建 |
@@ -66,7 +68,7 @@ Single/Dual/Grouped app main.cpp
         |-- MCC request + solver state
         |-- TUI input/render
         |-- wall-clock scheduler
-        +-- VisualizationFrame -> Viz FrameSink
+        +-- Lab projection -> RenderBatch -> Viz RenderSink
 ```
 
 Grouped 入口的计算数据流为：

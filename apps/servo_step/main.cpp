@@ -30,8 +30,8 @@
 #include "runtime/interactive_scheduler.hpp"
 #include "runtime/interactive_types.hpp"
 #include "runtime/rolling_percentiles.hpp"
-#include "sinks/ik_visualization.hpp"
-#include "sinks/visualization_sink_factory.hpp"
+#include "sinks/ik_render_batch.hpp"
+#include "sinks/preview_sink_factory.hpp"
 
 namespace
 {
@@ -425,7 +425,7 @@ int runInteractive(
     options.tui, options.rate_hz, std::string{kTitle} + " [" + solver_title + "]", presentation,
     {{mcl::ArmSide::Left, initial_left_fk}, {mcl::ArmSide::Right, initial_right_fk}}, true,
     options.tui_enabled);
-  auto visualization_sink = mcl::createVisualizationSink(options.visualization, kProgramId);
+  auto visualization_sink = mcl::createPreviewSink(options.visualization, kProgramId);
 
   mcl::installInteractiveSignalHandlers();
   mcl::InteractiveScheduler scheduler({options.rate_hz, options.duration_s});
@@ -445,7 +445,7 @@ int runInteractive(
   latest_frame.selected_side = mcl::parseArmSide(options.tui.side);
   latest_frame.cpu_affinities = {mcl::makeCpuAffinityDebug(affinity_binding)};
 
-  visualization_sink->open({run_id, std::string{kProgramId} + ":" + solver_id});
+  visualization_sink->open();
   while (const auto schedule = scheduler.next()) {
     tui.poll();
     if (const auto reset_side = tui.consumeResetRequest()) {
@@ -480,9 +480,8 @@ int runInteractive(
       latest_frame.status = "IK accepted [" + solver_id + "]";
       latest_frame.paused = command.paused;
       latest_frame.selected_side = command.selected_side;
-      visualization_sink->write(mcl::makeIkVisualizationFrame(
-        latest_frame, presentation, publish_count, schedule->sample_time_ns,
-        schedule->emit_time_ns));
+      visualization_sink->write(mcl::makeIkRenderBatch(
+        latest_frame, presentation, schedule->emit_time_ns));
       ++publish_count;
     }
 
@@ -573,12 +572,12 @@ int runReplayWithSolver(
     targets, true, options.replay.ui_mode == "tui", mcl::TuiControlMode::Replay);
   tui.setMotionInputEnabled(false, "Replay motion editing is disabled");
 
-  mcl::VisualizationSinkOptions sink_options;
+  mcl::PreviewSinkOptions sink_options;
   sink_options.host = options.replay.visualization_host;
   sink_options.port = options.replay.visualization_port;
   sink_options.mcap_path = options.replay.visualization_mcap_path;
-  auto visualization_sink = mcl::createVisualizationSink(sink_options, kProgramId);
-  visualization_sink->open({options.replay.output_dir.filename().string(), kProgramId});
+  auto visualization_sink = mcl::createPreviewSink(sink_options, kProgramId);
+  visualization_sink->open();
   mcl::installInteractiveSignalHandlers();
 
   replay::ReplayExecutionMetadata execution;
@@ -685,8 +684,8 @@ int runReplayWithSolver(
       frame.status = "Replay source revision=" + std::to_string(source.sequence) +
                      " dropped=" + std::to_string(execution.dropped_frame_count);
       frame.paused = tui.command().paused;
-      visualization_sink->write(mcl::makeIkVisualizationFrame(
-        frame, presentation, publish_count, solver_time_ns,
+      visualization_sink->write(mcl::makeIkRenderBatch(
+        frame, presentation,
         std::chrono::duration_cast<std::chrono::nanoseconds>(
           std::chrono::system_clock::now().time_since_epoch())
           .count()));

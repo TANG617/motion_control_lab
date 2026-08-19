@@ -27,8 +27,8 @@
 #include "r1_robot_config.hpp"
 #include "runtime/interactive_scheduler.hpp"
 #include "runtime/rolling_percentiles.hpp"
-#include "sinks/ik_visualization.hpp"
-#include "sinks/visualization_sink_factory.hpp"
+#include "sinks/ik_render_batch.hpp"
+#include "sinks/preview_sink_factory.hpp"
 
 namespace
 {
@@ -138,7 +138,7 @@ int runTeleopLoop(const baseline::TeleopOptions & options, Solver & solver)
   mcl::TuiConsole tui(options.tui, options.rate_hz,
                       std::string{kTitle} + " [source " + sourceSummary() + "]", presentation,
                       initial_targets, true, options.tui_enabled);
-  auto visualization_sink = mcl::createVisualizationSink(options.visualization, kProgramId);
+  auto visualization_sink = mcl::createPreviewSink(options.visualization, kProgramId);
 
   mcl::installInteractiveSignalHandlers();
   mcl::InteractiveScheduler scheduler({options.rate_hz, options.duration_s});
@@ -157,7 +157,7 @@ int runTeleopLoop(const baseline::TeleopOptions & options, Solver & solver)
   frame.selected_side = mcl::parseArmSide(options.tui.side);
   frame.cpu_affinities = {mcl::makeCpuAffinityDebug(affinity_binding)};
 
-  visualization_sink->open({frame.run_id, kProgramId});
+  visualization_sink->open();
   while (const auto schedule = scheduler.next()) {
     tui.poll();
     if (const auto reset_side = tui.consumeResetRequest()) {
@@ -197,8 +197,8 @@ int runTeleopLoop(const baseline::TeleopOptions & options, Solver & solver)
       visualization_debug_frame.forward_kinematics = result.end_effector_forward_kinematics;
       visualization_debug_frame.target_errors = result.end_effector_target_errors;
       visualization_sink->write(
-          mcl::makeIkVisualizationFrame(visualization_debug_frame, presentation, publish_count,
-                                        schedule->sample_time_ns, schedule->emit_time_ns));
+          mcl::makeIkRenderBatch(
+            visualization_debug_frame, presentation, schedule->emit_time_ns));
       ++publish_count;
     }
 
@@ -254,12 +254,12 @@ int runReplayLoop(ReplayAppOptions options, baseline::BaselineSolver & solver,
                       mcl::TuiControlMode::Replay);
   tui.setMotionInputEnabled(false, "Replay motion editing is disabled");
 
-  mcl::VisualizationSinkOptions sink_options;
+  mcl::PreviewSinkOptions sink_options;
   sink_options.host = options.replay.visualization_host;
   sink_options.port = options.replay.visualization_port;
   sink_options.mcap_path = options.replay.visualization_mcap_path;
-  auto visualization_sink = mcl::createVisualizationSink(sink_options, kProgramId);
-  visualization_sink->open({options.replay.output_dir.filename().string(), kProgramId});
+  auto visualization_sink = mcl::createPreviewSink(sink_options, kProgramId);
+  visualization_sink->open();
   mcl::installInteractiveSignalHandlers();
 
   replay::ReplayExecutionMetadata execution;
@@ -399,8 +399,8 @@ int runReplayLoop(ReplayAppOptions options, baseline::BaselineSolver & solver,
       auto visualization_debug_frame = frame;
       visualization_debug_frame.forward_kinematics = result.end_effector_forward_kinematics;
       visualization_debug_frame.target_errors = result.end_effector_target_errors;
-      visualization_sink->write(mcl::makeIkVisualizationFrame(
-          visualization_debug_frame, presentation, publish_count, solver_time_ns,
+      visualization_sink->write(mcl::makeIkRenderBatch(
+          visualization_debug_frame, presentation,
           std::chrono::duration_cast<std::chrono::nanoseconds>(
               std::chrono::system_clock::now().time_since_epoch())
               .count()));

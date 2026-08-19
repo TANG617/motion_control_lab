@@ -29,10 +29,11 @@ target_link_libraries(
   PRIVATE
     motion_control_lab::e03_batch_support
     motion_control_lab::e03_legacy_replay_ik_engine
+    motion_control_lab::visualization_contracts
 )
 
 if(MCL_BUILD_E03_REPLAY_VISUALIZATION)
-  if(NOT TARGET motion_control_viz::foxglove_sink)
+  if(NOT TARGET motion_control_viz::foxglove)
     message(
       FATAL_ERROR
       "E03 replay visualization requires motion_control_viz Foxglove support"
@@ -40,9 +41,7 @@ if(MCL_BUILD_E03_REPLAY_VISUALIZATION)
   endif()
   target_link_libraries(
     mcl_e03_batch_replay_ik
-    PRIVATE
-      motion_control_viz::motion_control_viz
-      motion_control_viz::foxglove_sink
+    PRIVATE motion_control_viz::foxglove
   )
   target_compile_definitions(
     mcl_e03_batch_replay_ik

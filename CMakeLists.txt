@@ -45,6 +45,11 @@ option(
   ON
 )
 option(
+  MCL_BUILD_PLANNED_GROUPED_STEP_OTG
+  "Build the online-planned Red/Yellow IK plus joint-OTG application"
+  ON
+)
+option(
   MCL_BUILD_MCC_PLOTS
   "Build the optional motion_control_core matplotlib renderer"
   OFF
@@ -90,7 +95,7 @@ endif()
 set(MCL_BUILD_ANY_INTERACTIVE_IK OFF)
 if(MCL_BUILD_SINGLE_ARM_SERVO_STEP OR MCL_BUILD_SERVO_STEP OR
    MCL_BUILD_TARGET_SOLVE OR MCL_BUILD_BASELINE OR MCL_BUILD_GROUPED_SERVO_STEP OR
-   MCL_BUILD_PLANNED_GROUPED_SERVO_STEP)
+   MCL_BUILD_PLANNED_GROUPED_SERVO_STEP OR MCL_BUILD_PLANNED_GROUPED_STEP_OTG)
   set(MCL_BUILD_ANY_INTERACTIVE_IK ON)
 endif()
 
@@ -103,6 +108,77 @@ list(PREPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
 include(cmake/Dependencies.cmake)
 
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
+
+set(MCL_VISUALIZATION_CONTRACT_DIR
+    "${CMAKE_CURRENT_SOURCE_DIR}/contracts/visualization")
+set(MCL_GENERATED_CONTRACT_DIR
+    "${CMAKE_CURRENT_BINARY_DIR}/generated/contracts/visualization")
+set(MCL_CONTRACT_GENERATOR
+    "${MCL_VISUALIZATION_CONTRACT_DIR}/generate_contract_header.py")
+set(MCL_VISUALIZATION_CONTRACT_JSONS
+    "${MCL_VISUALIZATION_CONTRACT_DIR}/foxglove_ik.v1.json"
+    "${MCL_VISUALIZATION_CONTRACT_DIR}/foxglove_planned_grouped_servo_step.v1.json"
+    "${MCL_VISUALIZATION_CONTRACT_DIR}/foxglove_planned_grouped_step_otg.v1.json")
+
+set(MCL_CHANNEL_SPEC_HEADER
+    "${MCL_GENERATED_CONTRACT_DIR}/channel_spec.hpp")
+add_custom_command(
+  OUTPUT "${MCL_CHANNEL_SPEC_HEADER}"
+  COMMAND
+    "${Python3_EXECUTABLE}" "${MCL_CONTRACT_GENERATOR}"
+    --common-output "${MCL_CHANNEL_SPEC_HEADER}"
+  DEPENDS "${MCL_CONTRACT_GENERATOR}"
+  VERBATIM
+)
+
+function(mcl_generate_visualization_contract BASENAME NAMESPACE)
+  set(INPUT "${MCL_VISUALIZATION_CONTRACT_DIR}/${BASENAME}.v1.json")
+  set(OUTPUT "${MCL_GENERATED_CONTRACT_DIR}/${BASENAME}_v1.hpp")
+  add_custom_command(
+    OUTPUT "${OUTPUT}"
+    COMMAND
+      "${Python3_EXECUTABLE}" "${MCL_CONTRACT_GENERATOR}"
+      --input "${INPUT}"
+      --output "${OUTPUT}"
+      --namespace "${NAMESPACE}"
+    DEPENDS "${MCL_CONTRACT_GENERATOR}" "${INPUT}" "${MCL_CHANNEL_SPEC_HEADER}"
+    VERBATIM
+  )
+  set(MCL_GENERATED_CONTRACT_HEADERS
+      ${MCL_GENERATED_CONTRACT_HEADERS} "${OUTPUT}" PARENT_SCOPE)
+endfunction()
+
+mcl_generate_visualization_contract(
+  foxglove_ik motion_control_lab::contracts::foxglove_ik_v1)
+mcl_generate_visualization_contract(
+  foxglove_planned_grouped_servo_step
+  motion_control_lab::contracts::foxglove_planned_grouped_servo_step_v1)
+mcl_generate_visualization_contract(
+  foxglove_planned_grouped_step_otg
+  motion_control_lab::contracts::foxglove_planned_grouped_step_otg_v1)
+
+add_custom_target(
+  mcl_visualization_contract_headers
+  DEPENDS "${MCL_CHANNEL_SPEC_HEADER}" ${MCL_GENERATED_CONTRACT_HEADERS}
+)
+add_library(mcl_visualization_contracts INTERFACE)
+add_library(
+  motion_control_lab::visualization_contracts
+  ALIAS mcl_visualization_contracts
+)
+add_dependencies(
+  mcl_visualization_contracts mcl_visualization_contract_headers
+)
+target_sources(
+  mcl_visualization_contracts
+  INTERFACE "${MCL_CHANNEL_SPEC_HEADER}" ${MCL_GENERATED_CONTRACT_HEADERS}
+)
+target_include_directories(
+  mcl_visualization_contracts
+  INTERFACE "$<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/generated>"
+)
+
 if(MCL_BUILD_E04_OPENSOT_SMOKE)
   include(cmake/OpenSoTExternal.cmake)
 endif()
@@ -114,7 +190,7 @@ endif()
 
 if(MCL_BUILD_ANY_INTERACTIVE_IK OR MCL_BUILD_CARTESIAN_PLANNING OR
    MCL_BUILD_E03_REPLAY_VISUALIZATION)
-  find_package(motion_control_viz 0.3 CONFIG REQUIRED)
+  find_package(motion_control_viz 0.4 CONFIG REQUIRED)
 endif()
 
 add_subdirectory(apps/common)
@@ -185,50 +261,82 @@ target_link_libraries(
   PUBLIC motion_control_lab::data motion_control_lab::run_artifacts jsoncpp_lib
 )
 
-if(MCL_BUILD_ANY_INTERACTIVE_IK)
-
+if(MCL_BUILD_ANY_INTERACTIVE_IK OR MCL_BUILD_CARTESIAN_PLANNING OR
+   MCL_BUILD_E03_REPLAY_VISUALIZATION)
   add_library(
-    mcl_interactive_support
-    adapters/interactive/src/console/tui_help.cpp
-    adapters/interactive/src/runtime/grouped_worker.cpp
-    adapters/interactive/src/runtime/interactive_scheduler.cpp
-    adapters/interactive/src/runtime/rolling_percentiles.cpp
-    adapters/interactive/src/sinks/ik_visualization.cpp
-    adapters/interactive/src/sinks/visualization_sink_factory.cpp
-    adapters/interactive/src/controls/tui_source_controls.cpp
-    adapters/interactive/src/console/tui_console.cpp
+    mcl_preview_transport
+    adapters/interactive/src/sinks/preview_sink_factory.cpp
   )
-  add_library(motion_control_lab::interactive_support ALIAS mcl_interactive_support)
+  add_library(motion_control_lab::preview_transport ALIAS mcl_preview_transport)
   target_include_directories(
-    mcl_interactive_support
+    mcl_preview_transport
     PUBLIC
       "${CMAKE_CURRENT_SOURCE_DIR}/adapters/interactive/src"
       "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>"
   )
   target_link_libraries(
-    mcl_interactive_support
-    PUBLIC
-      Eigen3::Eigen
-      motion_control_viz::motion_control_viz
-    PRIVATE
-      ftxui::ftxui
+    mcl_preview_transport
+    PUBLIC motion_control_viz::render
   )
-
-  if(TARGET motion_control_viz::foxglove_sink)
+  if(TARGET motion_control_viz::foxglove)
     target_link_libraries(
-      mcl_interactive_support
-      PUBLIC motion_control_viz::foxglove_sink
+      mcl_preview_transport
+      PRIVATE motion_control_viz::foxglove
     )
     target_compile_definitions(
-      mcl_interactive_support
-      PRIVATE MCL_WITH_FOXGLOVE_SINK=1
+      mcl_preview_transport
+      PRIVATE MCL_WITH_FOXGLOVE_TRANSPORT=1
     )
   else()
     target_compile_definitions(
-      mcl_interactive_support
-      PRIVATE MCL_WITH_FOXGLOVE_SINK=0
+      mcl_preview_transport
+      PRIVATE MCL_WITH_FOXGLOVE_TRANSPORT=0
     )
   endif()
+endif()
+
+if(MCL_BUILD_ANY_INTERACTIVE_IK)
+
+  add_library(
+    mcl_interactive_runtime
+    adapters/interactive/src/console/tui_help.cpp
+    adapters/interactive/src/runtime/grouped_worker.cpp
+    adapters/interactive/src/runtime/interactive_scheduler.cpp
+    adapters/interactive/src/runtime/rolling_percentiles.cpp
+    adapters/interactive/src/controls/tui_source_controls.cpp
+    adapters/interactive/src/console/tui_console.cpp
+  )
+  add_library(motion_control_lab::interactive_runtime ALIAS mcl_interactive_runtime)
+  target_include_directories(
+    mcl_interactive_runtime
+    PUBLIC
+      "${CMAKE_CURRENT_SOURCE_DIR}/adapters/interactive/src"
+      "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>"
+  )
+  target_link_libraries(
+    mcl_interactive_runtime
+    PUBLIC Eigen3::Eigen
+    PRIVATE ftxui::ftxui
+  )
+
+  add_library(
+    mcl_ik_preview
+    adapters/interactive/src/sinks/ik_render_batch.cpp
+  )
+  add_library(motion_control_lab::ik_preview ALIAS mcl_ik_preview)
+  target_include_directories(
+    mcl_ik_preview
+    PUBLIC
+      "${CMAKE_CURRENT_SOURCE_DIR}/adapters/interactive/src"
+      "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>"
+  )
+  target_link_libraries(
+    mcl_ik_preview
+    PUBLIC
+      motion_control_lab::interactive_runtime
+      motion_control_lab::visualization_contracts
+      motion_control_viz::render
+  )
 
   if(MCL_BUILD_SINGLE_ARM_SERVO_STEP)
     add_subdirectory(apps/single_arm_servo_step)
@@ -248,10 +356,13 @@ if(MCL_BUILD_ANY_INTERACTIVE_IK)
   if(MCL_BUILD_PLANNED_GROUPED_SERVO_STEP)
     add_subdirectory(apps/planned_grouped_servo_step)
   endif()
+  if(MCL_BUILD_PLANNED_GROUPED_STEP_OTG)
+    add_subdirectory(apps/planned_grouped_step_otg)
+  endif()
 endif()
 
 if(MCL_BUILD_CARTESIAN_PLANNING)
-  if(NOT TARGET motion_control_viz::foxglove_sink)
+  if(NOT TARGET motion_control_viz::foxglove)
     message(
       FATAL_ERROR
       "MCL_BUILD_CARTESIAN_PLANNING requires motion_control_viz with Foxglove support"
@@ -578,22 +689,13 @@ install(
 )
 
 if(BUILD_TESTING)
-  find_package(Python3 REQUIRED COMPONENTS Interpreter)
-
   add_test(
-    NAME contracts.foxglove_ik_visualization
+    NAME contracts.visualization_generator
     COMMAND
       "${Python3_EXECUTABLE}"
-      "${CMAKE_CURRENT_SOURCE_DIR}/tests/validate_foxglove_ik_contract.py"
-      "${CMAKE_CURRENT_SOURCE_DIR}/contracts/visualization/foxglove_ik.v1.json"
-  )
-
-  add_test(
-    NAME contracts.foxglove_planned_grouped_servo_step
-    COMMAND
-      "${Python3_EXECUTABLE}"
-      "${CMAKE_CURRENT_SOURCE_DIR}/tests/validate_foxglove_planned_grouped_servo_step_contract.py"
-      "${CMAKE_CURRENT_SOURCE_DIR}/contracts/visualization/foxglove_planned_grouped_servo_step.v1.json"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/visualization_contract_generator.py"
+      "${MCL_CONTRACT_GENERATOR}"
+      ${MCL_VISUALIZATION_CONTRACT_JSONS}
   )
 
   add_executable(
@@ -625,7 +727,8 @@ if(BUILD_TESTING)
       test_interactive_ik_configuration
       PRIVATE
         motion_control_lab::app_common
-        motion_control_lab::interactive_support
+        motion_control_lab::ik_preview
+        motion_control_lab::visualization_contracts
     )
     add_test(
       NAME interactive.ik_configuration
@@ -638,7 +741,7 @@ if(BUILD_TESTING)
     )
     target_link_libraries(
       test_rolling_percentiles
-      PRIVATE motion_control_lab::interactive_support
+      PRIVATE motion_control_lab::interactive_runtime
     )
     add_test(
       NAME interactive.rolling_percentiles
@@ -652,7 +755,7 @@ if(BUILD_TESTING)
     target_link_libraries(
       test_grouped_runtime
       PRIVATE
-        motion_control_lab::interactive_support
+        motion_control_lab::interactive_runtime
         Threads::Threads
     )
     add_test(
@@ -666,7 +769,7 @@ if(BUILD_TESTING)
     )
     target_link_libraries(
       test_tui_console
-      PRIVATE motion_control_lab::interactive_support
+      PRIVATE motion_control_lab::interactive_runtime
     )
     add_test(
       NAME interactive.tui_console_pty
@@ -739,10 +842,12 @@ if(BUILD_TESTING)
     foreach(MCL_SERVO_TARGET IN ITEMS
         mcl_servo_step
         mcl_grouped_servo_step
-        mcl_planned_grouped_servo_step)
+        mcl_planned_grouped_servo_step
+        mcl_planned_grouped_step_otg)
       if(TARGET ${MCL_SERVO_TARGET})
         set(MCL_SERVO_PLANNED OFF)
-        if(MCL_SERVO_TARGET STREQUAL "mcl_planned_grouped_servo_step")
+        if(MCL_SERVO_TARGET STREQUAL "mcl_planned_grouped_servo_step" OR
+           MCL_SERVO_TARGET STREQUAL "mcl_planned_grouped_step_otg")
           set(MCL_SERVO_PLANNED ON)
         endif()
         add_test(
@@ -768,7 +873,9 @@ if(BUILD_TESTING)
           motion_control_lab::cpu_affinity
           motion_control_lab::app_common
           motion_control_core::motion_control_core
-          motion_control_lab::interactive_support
+          motion_control_lab::interactive_runtime
+          motion_control_lab::preview_transport
+          motion_control_lab::ik_preview
           motion_control_lab::replay_support
           libplaco
       )
@@ -797,7 +904,9 @@ if(BUILD_TESTING)
           motion_control_lab::cpu_affinity
           motion_control_lab::app_common
           motion_control_core::motion_control_core
-          motion_control_lab::interactive_support
+          motion_control_lab::interactive_runtime
+          motion_control_lab::preview_transport
+          motion_control_lab::ik_preview
           libplaco
       )
       add_test(

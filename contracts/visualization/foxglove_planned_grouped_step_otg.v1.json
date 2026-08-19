@@ -1,0 +1,53 @@
+{
+  "schema_version": "mcl.foxglove_planned_grouped_step_otg.v1",
+  "extends": "mcl.foxglove_ik_visualization.v1",
+  "applicability": {
+    "required_for": "mcl_planned_grouped_step_otg",
+    "other_apps": "not applicable; the base IK visualization contract remains unchanged"
+  },
+  "channels": [
+    {
+      "topic": "/mc/planning/request/left_pose",
+      "foxglove_schema": "foxglove.PoseInFrame",
+      "role": "left_planning_request",
+      "required": true,
+      "semantics": "The left Cartesian planner sample most recently submitted to Red, whether Red accepted or rejected it."
+    },
+    {
+      "topic": "/mc/planning/request/right_pose",
+      "foxglove_schema": "foxglove.PoseInFrame",
+      "role": "right_planning_request",
+      "required": true,
+      "semantics": "The right Cartesian planner sample most recently submitted to Red, whether Red accepted or rejected it."
+    },
+    {
+      "topic": "/mc/joint_controller/ruckig_joint_states",
+      "foxglove_schema": "foxglove.JointStates",
+      "role": "joint_otg_execution_state",
+      "required": true,
+      "semantics": "The full-order P/V state returned by the first JointPlanner step and committed as closed-loop execution state."
+    },
+    {
+      "topic": "/mc/debug/otg/fk/pose/left_end_effector",
+      "foxglove_schema": "foxglove.PoseInFrame",
+      "role": "left_otg_fk",
+      "required": true,
+      "semantics": "Left end-effector FK computed from the committed JointPlanner output."
+    },
+    {
+      "topic": "/mc/debug/otg/fk/pose/right_end_effector",
+      "foxglove_schema": "foxglove.PoseInFrame",
+      "role": "right_otg_fk",
+      "required": true,
+      "semantics": "Right end-effector FK computed from the committed JointPlanner output."
+    }
+  ],
+  "coherence": {
+    "attempt": "Planning request channels describe the same staged sample submitted in one Red attempt.",
+    "raw_ik": "Base joint-state and FK channels carry raw accepted IK P/V and matching raw IK solved poses.",
+    "otg": "The three OTG channels carry one committed JointPlanner sample and matching FK.",
+    "batch": "Base raw IK, planning request, and OTG extension channels are emitted in one RenderBatch and one sink write.",
+    "timestamp": "Every channel in the logical update uses the single RenderBatch timestamp.",
+    "retention": "If an attempt fails before commit, all channels retain the previous successful update."
+  }
+}

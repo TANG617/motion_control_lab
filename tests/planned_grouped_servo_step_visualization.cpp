@@ -6,7 +6,8 @@
 #include "contracts/visualization/foxglove_ik_v1.hpp"
 #include "contracts/visualization/foxglove_planned_grouped_servo_step_v1.hpp"
 #include "runtime/interactive_types.hpp"
-#include "sinks/ik_visualization.hpp"
+#include "sinks/ik_render_batch.hpp"
+#include "tests/visualization_contract_conformance.hpp"
 
 int main() {
   namespace mcl = motion_control_lab;
@@ -15,14 +16,14 @@ int main() {
   mcl::InteractiveIkPresentation presentation;
   presentation.base_frame_id = "base_link";
   presentation.joint_state_channel =
-      mcl::contracts::foxglove_ik_v1::kJointStates;
+      mcl::contracts::foxglove_ik_v1::kIkOutputJointStateTopic;
   presentation.arms = {{mcl::ArmSide::Left,
-                        mcl::contracts::foxglove_ik_v1::kLeftTargetPose,
-                        mcl::contracts::foxglove_ik_v1::kLeftEndEffectorPose,
+                        mcl::contracts::foxglove_ik_v1::kLeftInputTargetTopic,
+                        mcl::contracts::foxglove_ik_v1::kLeftFkOutputTopic,
                         {}},
                        {mcl::ArmSide::Right,
-                        mcl::contracts::foxglove_ik_v1::kRightTargetPose,
-                        mcl::contracts::foxglove_ik_v1::kRightEndEffectorPose,
+                        mcl::contracts::foxglove_ik_v1::kRightInputTargetTopic,
+                        mcl::contracts::foxglove_ik_v1::kRightFkOutputTopic,
                         {}}};
 
   mcl::IkDebugFrame debug_frame;
@@ -33,7 +34,7 @@ int main() {
       {mcl::ArmSide::Right, mcl::Pose::Identity()}};
 
   auto visualization =
-      mcl::makeIkVisualizationFrame(debug_frame, presentation, 1U, 2, 3U);
+      mcl::makeIkRenderBatch(debug_frame, presentation, 3U);
   if (visualization.poses.size() != 4U) {
     return EXIT_FAILURE;
   }
@@ -57,23 +58,22 @@ int main() {
   const auto &right = visualization.poses.at(5);
   const Eigen::Quaterniond left_orientation(left_request.linear());
   const Eigen::Quaterniond right_orientation(right_request.linear());
-  if (left.channel != contract::kLeftPlanningRequestPose ||
-      left.entity_id != contract::kLeftPlanningRequestEntity ||
+  if (left.channel != contract::kLeftPlanningRequestTopic ||
       left.frame_id != "base_link" || left.pose.position_m.at(0) != 1.0 ||
       left.pose.position_m.at(1) != 2.0 || left.pose.position_m.at(2) != 3.0 ||
       left.pose.orientation_xyzw.at(0) != left_orientation.x() ||
       left.pose.orientation_xyzw.at(1) != left_orientation.y() ||
       left.pose.orientation_xyzw.at(2) != left_orientation.z() ||
       left.pose.orientation_xyzw.at(3) != left_orientation.w() ||
-      right.channel != contract::kRightPlanningRequestPose ||
-      right.entity_id != contract::kRightPlanningRequestEntity ||
+      right.channel != contract::kRightPlanningRequestTopic ||
       right.frame_id != "base_link" || right.pose.position_m.at(0) != 4.0 ||
       right.pose.position_m.at(1) != 5.0 ||
       right.pose.position_m.at(2) != 6.0 ||
       right.pose.orientation_xyzw.at(0) != right_orientation.x() ||
       right.pose.orientation_xyzw.at(1) != right_orientation.y() ||
       right.pose.orientation_xyzw.at(2) != right_orientation.z() ||
-      right.pose.orientation_xyzw.at(3) != right_orientation.w()) {
+      right.pose.orientation_xyzw.at(3) != right_orientation.w() ||
+      !mcl::tests::requiredChannelsPresent(visualization, contract::kChannels)) {
     return EXIT_FAILURE;
   }
 

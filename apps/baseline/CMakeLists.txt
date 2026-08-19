@@ -10,7 +10,7 @@ target_include_directories(
 target_link_libraries(
   mcl_baseline_runtime
   PUBLIC
-    motion_control_lab::interactive_support
+    motion_control_lab::interactive_runtime
     libplaco
     jsoncpp_lib
 )
@@ -41,6 +41,8 @@ target_link_libraries(
     mcl_baseline_runtime
     motion_control_lab::cpu_affinity
     motion_control_lab::app_common
+    motion_control_lab::preview_transport
+    motion_control_lab::ik_preview
     motion_control_lab::replay_support
     motion_control_lab::run_artifacts
 )

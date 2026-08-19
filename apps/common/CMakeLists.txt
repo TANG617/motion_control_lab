@@ -43,5 +43,6 @@ target_link_libraries(
   PUBLIC
     motion_control_lab::r1_robot_config
     motion_control_core::motion_control_core
-    motion_control_lab::interactive_support
+    motion_control_lab::interactive_runtime
+    motion_control_lab::visualization_contracts
 )

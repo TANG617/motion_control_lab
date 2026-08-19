@@ -5,12 +5,14 @@
 #include <optional>
 #include <string>
 
-namespace motion_control_lab {
+namespace motion_control_lab
+{
 
-struct VisualizationSinkOptions {
+struct PreviewSinkOptions
+{
   std::string host;
   std::uint16_t port{};
   std::optional<std::filesystem::path> mcap_path;
 };
 
-} // namespace motion_control_lab
+}  // namespace motion_control_lab

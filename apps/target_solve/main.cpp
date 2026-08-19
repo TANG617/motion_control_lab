@@ -24,8 +24,8 @@
 #include "runtime/interactive_scheduler.hpp"
 #include "runtime/interactive_types.hpp"
 #include "runtime/rolling_percentiles.hpp"
-#include "sinks/ik_visualization.hpp"
-#include "sinks/visualization_sink_factory.hpp"
+#include "sinks/ik_render_batch.hpp"
+#include "sinks/preview_sink_factory.hpp"
 
 namespace
 {
@@ -477,7 +477,7 @@ int runInteractive(
     options.tui, options.rate_hz, std::string{kTitle} + " [" + solver_title + "]", presentation,
     {{mcl::ArmSide::Left, initial_left_fk}, {mcl::ArmSide::Right, initial_right_fk}}, true,
     options.tui_enabled);
-  auto visualization_sink = mcl::createVisualizationSink(options.visualization, kProgramId);
+  auto visualization_sink = mcl::createPreviewSink(options.visualization, kProgramId);
 
   mcl::installInteractiveSignalHandlers();
   mcl::InteractiveScheduler scheduler({options.rate_hz, options.duration_s});
@@ -497,7 +497,7 @@ int runInteractive(
   latest_frame.selected_side = mcl::parseArmSide(options.tui.side);
   latest_frame.cpu_affinities = {mcl::makeCpuAffinityDebug(affinity_binding)};
 
-  visualization_sink->open({run_id, std::string{kProgramId} + ":" + solver_id});
+  visualization_sink->open();
   while (const auto schedule = scheduler.next()) {
     tui.poll();
     if (const auto reset_side = tui.consumeResetRequest()) {
@@ -538,9 +538,8 @@ int runInteractive(
       }
       latest_frame.paused = command.paused;
       latest_frame.selected_side = command.selected_side;
-      visualization_sink->write(mcl::makeIkVisualizationFrame(
-        latest_frame, presentation, publish_count, schedule->sample_time_ns,
-        schedule->emit_time_ns));
+      visualization_sink->write(mcl::makeIkRenderBatch(
+        latest_frame, presentation, schedule->emit_time_ns));
       ++publish_count;
     }
 

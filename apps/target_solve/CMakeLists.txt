@@ -24,7 +24,9 @@ target_link_libraries(
     motion_control_lab::cpu_affinity
     motion_control_lab::app_common
     motion_control_core::motion_control_core
-    motion_control_lab::interactive_support
+    motion_control_lab::interactive_runtime
+    motion_control_lab::preview_transport
+    motion_control_lab::ik_preview
     libplaco
 )
 install(
@@ -41,7 +43,7 @@ if(BUILD_TESTING)
   target_link_libraries(
     test_target_solve_app_options
     PRIVATE
-      motion_control_lab::interactive_support
+      motion_control_lab::interactive_runtime
       motion_control_lab::r1_robot_config
   )
   add_test(

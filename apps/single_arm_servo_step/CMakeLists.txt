@@ -9,7 +9,9 @@ target_link_libraries(
     motion_control_lab::cpu_affinity
     motion_control_lab::app_common
     motion_control_core::motion_control_core
-    motion_control_lab::interactive_support
+    motion_control_lab::interactive_runtime
+    motion_control_lab::preview_transport
+    motion_control_lab::ik_preview
 )
 install(TARGETS mcl_single_arm_servo_step RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 
@@ -22,7 +24,7 @@ if(BUILD_TESTING)
   target_link_libraries(
     test_single_arm_servo_step_app_options
     PRIVATE
-      motion_control_lab::interactive_support
+      motion_control_lab::interactive_runtime
       motion_control_lab::r1_robot_config
   )
   add_test(

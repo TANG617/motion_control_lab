@@ -7,8 +7,9 @@
 #include "motion_control_lab/sha256.hpp"
 
 #if MCL_WITH_REPLAY_VISUALIZATION
-#include <motion_control_viz/foxglove_frame_sink.hpp>
-#include <motion_control_viz/frame.hpp>
+#include <motion_control_viz/foxglove_websocket_sink.hpp>
+#include <motion_control_viz/render_batch.hpp>
+#include <motion_control_viz/render_sink.hpp>
 #endif
 
 #include <Eigen/Geometry>
@@ -675,32 +676,24 @@ mcv::Pose3d visualizationPose(const Eigen::Isometry3d & pose)
     {orientation.x(), orientation.y(), orientation.z(), orientation.w()}};
 }
 
-mcv::VisualizationFrame visualizationFrame(
-  const std::string & run_id, const std::string & action_id,
-  const replay::ReplayIkVisualizationSample & sample)
+mcv::RenderBatch visualizationBatch(const replay::ReplayIkVisualizationSample & sample)
 {
-  mcv::VisualizationFrame result;
-  result.run_id = run_id;
-  result.sequence = sample.sequence;
-  result.sample_time_ns = sample.sample_time_ns;
-  result.sample_clock = "action_canonical_replay";
-  result.emit_time_ns = wallClockNanoseconds();
-  result.status = action_id + ":" + sample.status;
-  result.paused = false;
+  mcv::RenderBatch result;
+  result.timestamp_ns = wallClockNanoseconds();
   result.poses = {
-    {"left_input_target", visualization_contract::kLeftTargetPose, sample.left_target_frame_id,
+    {visualization_contract::kLeftInputTargetTopic, sample.left_target_frame_id,
      visualizationPose(sample.left_input_target)},
-    {"right_input_target", visualization_contract::kRightTargetPose, sample.right_target_frame_id,
+    {visualization_contract::kRightInputTargetTopic, sample.right_target_frame_id,
      visualizationPose(sample.right_input_target)},
-    {"left_end_effector_fk", visualization_contract::kLeftEndEffectorPose,
+    {visualization_contract::kLeftFkOutputTopic,
      sample.forward_kinematics_frame_id, visualizationPose(sample.left_end_effector_fk)},
-    {"right_end_effector_fk", visualization_contract::kRightEndEffectorPose,
+    {visualization_contract::kRightFkOutputTopic,
      sample.forward_kinematics_frame_id, visualizationPose(sample.right_end_effector_fk)}};
-  result.joints = mcv::JointStateFrame{
-    visualization_contract::kJointStates, sample.joint_names, sample.positions, sample.velocities};
-  result.diagnostics = {
-    {"ik.accepted", sample.solve_accepted ? 1.0 : 0.0, "bool"},
-    {"ik.solve_time", sample.solve_time_ms, "ms"}};
+  result.joint_states.push_back(mcv::JointStateSample{
+    visualization_contract::kIkOutputJointStateTopic,
+    sample.joint_names,
+    sample.positions,
+    sample.velocities});
   return result;
 }
 #endif
@@ -790,15 +783,16 @@ int execute(const BatchOptions & options)
 #endif
 
 #if MCL_WITH_REPLAY_VISUALIZATION
-  std::unique_ptr<mcv::FoxgloveFrameSink> visualization_sink;
+  std::unique_ptr<mcv::RenderSink> visualization_sink;
   if (options.visualize && batch_failure_code.empty()) {
     try {
-      mcv::FoxgloveFrameSinkOptions sink_options;
+      mcv::FoxgloveWebSocketSinkOptions sink_options;
       sink_options.server_name = "mcl_e03_batch_replay_ik";
       sink_options.host = options.visualization_host;
       sink_options.port = options.visualization_port;
-      visualization_sink = std::make_unique<mcv::FoxgloveFrameSink>(std::move(sink_options));
-      visualization_sink->open({run_id, "mcl_e03_batch_replay_ik"});
+      visualization_sink =
+        std::make_unique<mcv::FoxgloveWebSocketSink>(std::move(sink_options));
+      visualization_sink->open();
       std::cout << "Foxglove: " << visualization_sink->status() << '\n';
     } catch (const std::exception & error) {
       batch_failure_code = "visualization_setup_failed";
@@ -836,7 +830,7 @@ int execute(const BatchOptions & options)
           if (visualization_sink) {
             execution_config.visualization_callback =
               [&](const replay::ReplayIkVisualizationSample & sample) {
-                visualization_sink->write(visualizationFrame(run_id, action.action_id, sample));
+                visualization_sink->write(visualizationBatch(sample));
                 visualization_sequence = sample.sequence + 1;
               };
           }

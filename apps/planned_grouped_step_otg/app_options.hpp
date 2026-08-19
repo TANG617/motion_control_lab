@@ -5,10 +5,11 @@
 
 #include "adapters/replay/replay_support.hpp"
 #include "console/tui_teleop_options.hpp"
+#include "joint_target_mode.hpp"
 #include "runtime/grouped_worker.hpp"
 #include "sinks/preview_sink_options.hpp"
 
-namespace motion_control_lab::grouped_servo_step {
+namespace motion_control_lab::planned_grouped_step_otg {
 
 enum class SourceMode {
   Teleop,
@@ -27,18 +28,30 @@ struct GroupedOptions {
   PreviewSinkOptions visualization{"127.0.0.1", 8765, std::nullopt};
 };
 
-struct LaunchOptions {
+struct PlanningLimitOptions {
+  double max_linear_velocity_mps{0.8};
+  double max_linear_acceleration_mps2{4.0};
+  double max_linear_jerk_mps3{20.0};
+  double max_angular_velocity_rps{1.0};
+  double max_angular_acceleration_rps2{2.0};
+  double max_angular_jerk_rps3{10.0};
+};
+
+struct PlannedOptions {
   SourceMode source_mode{SourceMode::Teleop};
   GroupedOptions interactive;
+  PlanningLimitOptions planning;
+  JointTargetMode joint_target_mode{JointTargetMode::FutureO1Pv};
   std::optional<replay::ReplayOptions> replay;
+  bool start_paused{false};
 };
 
 void printGroupedUsage(const char *program);
 
-void printTopLevelUsage(const char *program);
+void printPlannedUsage(const char *program, SourceMode source_mode);
 
 GroupedOptions parseGroupedOptions(int argc, char **argv);
 
-LaunchOptions parseLaunchOptions(int argc, char **argv);
+PlannedOptions parsePlannedOptions(int argc, char **argv);
 
-} // namespace motion_control_lab::grouped_servo_step
+} // namespace motion_control_lab::planned_grouped_step_otg

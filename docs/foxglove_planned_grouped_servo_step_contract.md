@@ -5,6 +5,8 @@
 本合同仅适用于 `mcl_planned_grouped_servo_step`，并扩展基础
 [`mcl.foxglove_ik_visualization.v1`](./foxglove_ik_visualization_contract.md)。机器可读合同位于
 [`contracts/visualization/foxglove_planned_grouped_servo_step.v1.json`](../contracts/visualization/foxglove_planned_grouped_servo_step.v1.json)。
+topic 常量与带 `ChannelKind` 的 channel spec 由通用 generator 在 build tree 生成，JSON 是
+唯一合同来源。
 
 ## Planning request 数据流
 
@@ -23,6 +25,6 @@ sample。启动时以 warm-up reference 初始化。
 - `/mc/planning/request/{left,right}_pose` 是经过在线规划后实际送入 Red 的 reference。
 - `/mc/fk/pose/{left,right}_end_effector` 是最后 accepted joint state 的实际 FK。
 
-Planning request 随 app 的 UI/Viz update 发布，使用同一个 emit timestamp 和机器人 reference
+Planning request 随 app 的 base IK projection 追加到同一个 RenderBatch，使用同一个 timestamp 和机器人 reference
 frame（PSI R1 为 `base_link`）。本合同只发布 Pose；reference twist 和 acceleration 仍保存在
 planned app 的 TUI/debug/trace 数据中。

@@ -128,8 +128,8 @@ int main(int argc, char ** argv)
       return EXIT_FAILURE;
     }
     const auto playback = mcp::makePlaybackFrame(
-      trajectory.samples.front(), static_scene, true, 9, 10, 11);
-    if (playback.sequence != 9 || playback.poses.size() != 2 ||
+      trajectory.samples.front(), static_scene, true, 11);
+    if (playback.timestamp_ns != 11 || playback.poses.size() != 2 ||
       playback.line_strips.size() != static_scene.size() + 6 ||
       playback.poses[0].channel != "/mc/cartesian/pose/left_arm_ee_link")
     {

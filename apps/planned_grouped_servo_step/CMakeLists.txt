@@ -26,7 +26,10 @@ target_link_libraries(
     motion_control_lab::cpu_affinity
     motion_control_lab::app_common
     motion_control_lab::planned_grouped_servo_step_retarget_clamp
-    motion_control_lab::interactive_support
+    motion_control_lab::interactive_runtime
+    motion_control_lab::preview_transport
+    motion_control_lab::ik_preview
+    motion_control_lab::visualization_contracts
     motion_control_lab::replay_support
     Threads::Threads
 )
@@ -41,7 +44,7 @@ if(BUILD_TESTING)
   target_link_libraries(
     test_planned_grouped_servo_step_app_options
     PRIVATE
-      motion_control_lab::interactive_support
+      motion_control_lab::interactive_runtime
       motion_control_lab::replay_support
       motion_control_lab::r1_robot_config
   )
@@ -69,7 +72,9 @@ if(BUILD_TESTING)
   )
   target_link_libraries(
     test_planned_grouped_servo_step_visualization
-    PRIVATE motion_control_lab::interactive_support
+    PRIVATE
+      motion_control_lab::ik_preview
+      motion_control_lab::visualization_contracts
   )
   add_test(
     NAME apps.mcl_planned_grouped_servo_step_visualization

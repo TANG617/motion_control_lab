@@ -17,8 +17,8 @@ Motion Control Lab 是面向机器人遥操作 whole-body IK 的可复现实验�
 显式区分的双臂 ServoStep/TargetSolve 入口可以通过 `--solver mcc|placo` 选择实现，并在 MCC
 实现中通过 `--backend proxqp|eiquadprog` 选择 QP backend；各 app 拥有完整的 solver topology、
 任务和结果解释。grouped 双臂入口使用 MCC 独立 Red/Yellow worker。它们只复用 R1 固定参数、
-TUI/Viz 初始化和 wall-clock pacing；算法快照统一映射为
-`motion_control_viz::VisualizationFrame`。
+TUI 与 wall-clock pacing；Lab-owned IK projection 把算法快照映射为通用
+`motion_control_viz::RenderBatch`，再交给 WebSocket、MCAP 或 Null transport。
 `mcl_baseline` 是独立的 PlaCo-only production-static 对照入口：它冻结生产
 `motion_control` revision `42ed3ce3a19f5a7346874a31ec659c0298751137` 的有效任务、权重、
 初始姿态、关节 mask、限位和 TargetSolve 终止条件，不读取 `/etc/robot/software.yaml`，也不
@@ -26,6 +26,10 @@ TUI/Viz 初始化和 wall-clock pacing；算法快照统一映射为
 所有 IK app 的 Foxglove topic 与 FK 一致性要求由
 [Foxglove IK 可视化数据流合同](docs/foxglove_ik_visualization_contract.md)统一定义。
 该路径用于开发调试，不替代由 canonical timeline 驱动的可复现实验执行器。
+`mcl_interactive_runtime` 只包含 TUI、controls、scheduler、worker、mailbox 与 rolling
+percentiles，不依赖 Viz；`mcl_preview_transport` 拥有 CLI/config policy 与 sink factory；
+`mcl_ik_preview` 只负责 base IK target/FK/joint-state projection。planning request、OTG 与
+Cartesian scene 的 batch 组装仍由具体 app 拥有。
 每个交互 app 直接拥有自己的 backend topology、任务和 solver 配置；即使配置相同，也在各自
 目录中显式保留。`apps/common/` 不承载 solver 或任务语义。三个 ServoStep app 共享的
 `adapters/replay/` 只负责 timeline、clock、provenance 和 artifact mechanics；solver loop、trace
@@ -199,7 +203,8 @@ cmake --build build/replay-ik-viz --target mcl_servo_step -j8
 
 运行 `mcl_servo_step replay --execution-mode realtime --ui tui ...`，Foxglove 连接
 `ws://127.0.0.1:8765`。如需记录 visualization stream，传入 `--mcap <path>`；否则使用
-`--no-mcap`。完整 E02 命令见
+`--no-mcap`。该 MCAP 只是可选开发预览录制，不是正式实验 trace、manifest 或 artifact。
+完整 E02 命令见
 [`experiments/E02_dual_arm_replay_ik/README.md`](experiments/E02_dual_arm_replay_ik/README.md)。
 五条固定 topic 见
 [Foxglove IK 可视化数据流合同](docs/foxglove_ik_visualization_contract.md)。

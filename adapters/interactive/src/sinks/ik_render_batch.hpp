@@ -2,18 +2,16 @@
 
 #include "runtime/interactive_types.hpp"
 
-#include "motion_control_viz/frame.hpp"
+#include "motion_control_viz/render_batch.hpp"
 
 #include <cstdint>
 
 namespace motion_control_lab
 {
 
-motion_control::viz::VisualizationFrame makeIkVisualizationFrame(
+motion_control::viz::RenderBatch makeIkRenderBatch(
   const IkDebugFrame & frame,
   const InteractiveIkPresentation & presentation,
-  std::uint64_t sequence,
-  std::int64_t sample_time_ns,
-  std::uint64_t emit_time_ns);
+  std::uint64_t timestamp_ns);
 
 }  // namespace motion_control_lab

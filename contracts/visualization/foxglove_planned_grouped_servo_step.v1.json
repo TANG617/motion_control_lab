@@ -10,7 +10,6 @@
       "topic": "/mc/planning/request/left_pose",
       "foxglove_schema": "foxglove.PoseInFrame",
       "role": "left_planning_request",
-      "entity_id": "left_planning_request",
       "required": true,
       "semantics": "The left Cartesian planner sample most recently submitted to Red, whether Red accepted or rejected it."
     },
@@ -18,7 +17,6 @@
       "topic": "/mc/planning/request/right_pose",
       "foxglove_schema": "foxglove.PoseInFrame",
       "role": "right_planning_request",
-      "entity_id": "right_planning_request",
       "required": true,
       "semantics": "The right Cartesian planner sample most recently submitted to Red, whether Red accepted or rejected it."
     }

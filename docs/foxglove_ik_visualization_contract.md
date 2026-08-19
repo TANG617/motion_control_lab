@@ -5,12 +5,16 @@
 本合同适用于所有会发布 IK 可视化数据的 Motion Control Lab app。无论 app 是交互式、
 replay 还是实验 runner，都必须使用相同 topic 和语义。非 IK app 不需要、也不得伪造这些数据。
 机器可读合同位于
-[`contracts/visualization/foxglove_ik.v1.json`](../contracts/visualization/foxglove_ik.v1.json)，
-C++ 入口位于
-[`contracts/visualization/foxglove_ik_v1.hpp`](../contracts/visualization/foxglove_ik_v1.hpp)。
+[`contracts/visualization/foxglove_ik.v1.json`](../contracts/visualization/foxglove_ik.v1.json)。
+CMake 的 `motion_control_lab::visualization_contracts` target 使用通用 Python generator 将 C++
+头生成到 build tree；source tree 不保存第二份手写 topic/schema 常量。
 
 `mcl_planned_grouped_servo_step` 另外发布在线规划后实际提交给 Red 的 reference；其独立扩展
 合同见 [`foxglove_planned_grouped_servo_step_contract.md`](./foxglove_planned_grouped_servo_step_contract.md)。
+
+`mcl_planned_grouped_step_otg` 将基础 joint/FK 通道固定为 accepted raw IK，并在同一个
+RenderBatch 中发布 JointPlanner 执行状态；其独立扩展合同见
+[`foxglove_planned_grouped_step_otg_contract.md`](./foxglove_planned_grouped_step_otg_contract.md)。
 
 ## 必需数据流
 
@@ -29,8 +33,8 @@ URDF `effort` 冒充 acceleration。若后续需要 acceleration 或 effort，�
 ## 一致性不变量
 
 - 一次 visualization update 必须包含上述五条消息，并描述同一个逻辑 sample。
-- 五条消息使用同一个 `VisualizationFrame.emit_time_ns`；source/canonical sample time 继续保存在
-  Lab frame 和 run trace 中，不用它冒充当前 wall-clock emit time。
+- 五条消息使用同一个 `RenderBatch.timestamp_ns`；source/canonical sample time 继续保存在
+  Lab frame 和 run trace 中，不进入 Viz transport DTO。
 - 所有 pose 都显式携带 app 的模型 reference frame，例如 PSI R1 的 `base_link`。
 - FK topic 只能发布从同帧 `/mc/ik/joint_states` 计算得到的实际末端 pose，不能复制 target。
 - target topic 保留 app 外部输入语义。例如 E02 MCAP 输入是 TCP pose，runner 内部虽然会转换成
@@ -48,3 +52,6 @@ URDF `effort` 冒充 acceleration。若后续需要 acceleration 或 effort，�
 
 E02 replay 在等待空格阶段也会周期发布完整五通道初始帧，因此 Foxglove 可以在 replay
 clock 启动前发现 topic 并完成面板配置。
+
+可选的 preview MCAP 与 WebSocket 使用相同 RenderBatch，但 MCAP 只用于开发观察，不是正式
+实验证据；正式证据仍由 Lab trace、manifest 与 artifact 定义。
