@@ -3,7 +3,7 @@
 Motion Control Lab 是面向机器人遥操作 whole-body IK 的可复现实验仓库。研究愿景见
 [docs/experiments.md](docs/experiments.md)，实验与证据生命周期见
 [docs/experiment_architecture.md](docs/experiment_architecture.md)，app 与 TUI、Viz、scheduler、
-teleop、replay 的目标职责边界见
+teleop、replay 的现行职责边界见
 [docs/app_component_architecture.md](docs/app_component_architecture.md)。
 
 当前仓库提供第一条端到端纵向切片：
@@ -28,14 +28,13 @@ TUI 与 wall-clock pacing；Lab-owned IK projection 把算法快照映射为通�
 所有 IK app 的 Foxglove topic 与 FK 一致性要求由
 [Foxglove IK 可视化数据流合同](docs/foxglove_ik_visualization_contract.md)统一定义。
 该路径用于开发调试，不替代由 canonical timeline 驱动的可复现实验执行器。
-`mcl_interactive_runtime` 只包含 TUI、controls、scheduler、worker、mailbox 与 rolling
-percentiles，不依赖 Viz；`mcl_preview_transport` 拥有 CLI/config policy 与 sink factory；
-`mcl_ik_preview` 只负责 base IK target/FK/joint-state projection。planning request、OTG 与
-Cartesian scene 的 batch 组装仍由具体 app 拥有。
-每个交互 app 直接拥有自己的 backend topology、任务和 solver 配置；即使配置相同，也在各自
-目录中显式保留。`apps/common/` 不承载 solver 或任务语义。三个 ServoStep app 共享的
-`adapters/replay/` 只负责 timeline、clock、provenance 和 artifact mechanics；solver loop、trace
-解释与失败语义仍由各 app 自己拥有。
+共享层已拆为 solver-neutral 的 input/presentation/runtime contracts，以及 scheduler、terminal
+frontend/key router、keyboard/cartesian teleop、TUI renderer、ReplaySource、preview
+projection/transport、run artifacts、R1 config、机械 helpers 和薄 App Scaffolding targets。
+每个交互 app 直接拥有自己的 backend topology、任务、solver 配置、主循环、诊断解释以及
+TUI/Viz 专属投影；即使配置相同，也在各自目录中显式保留。旧 `apps/common/` 与
+`adapters/interactive/` 聚合层已经删除。MCAP/CSV 经相同 typed pipeline 和单一
+`ReplaySource`；solver loop、trace 解释与失败语义仍由各 app 自己拥有。
 
 E01 和 E04 都固定使用 `/workspace/models/r1.cos.urdf` 及同一左臂可达位置任务，
 分别验证 PlaCo 和 OpenSoT 求解链与证据落盘链，不构成算法性能结论。
@@ -64,6 +63,20 @@ cmake --build --preset dev --target e01_placo_smoke -j8
 ctest --preset dev
 ```
 
+不构建 FTXUI 与 Foxglove transport 的 headless/Null sink 组合是受支持的独立构建形状：
+
+```bash
+cmake -S . -B build/headless \
+  -DBUILD_TESTING=ON \
+  -DMCL_ENABLE_TUI=OFF \
+  -DMCL_ENABLE_FOXGLOVE_TRANSPORT=OFF
+cmake --build build/headless -j8
+ctest --test-dir build/headless --output-on-failure
+```
+
+此配置仍使用 `motion_control_viz::RenderBatch` 通用合同，但不链接 Foxglove transport，也不
+启动网络端口。需要 TUI 的 PTY tests 只在 `MCL_ENABLE_TUI=ON` 时注册。
+
 ## IK app CPU affinity（Linux）
 
 IK app 可以在编译时启用固定的 Linux CPU affinity；默认关闭，因此不会改变普通 Linux
@@ -81,7 +94,8 @@ SMT sibling 隔离、IRQ affinity 或实时调度优先级。交互 IK 的 TUI R
 启用状态、线程 ID、requested CPU 和内核核验后的 effective CPU；关闭构建明确显示
 `disabled`，worker 完成绑定前显示 `pending`。
 
-所有交互 IK 的 Solver/QP 与 Runtime 页还会显示 IK solve time 的 P90、P95、P99。
+所有交互 IK 的 Solver and Quadratic Programming 与 Runtime 页还会显示 IK calculation time 的
+90th、95th、99th percentile。
 统计采用 nearest-rank 定义和最近 4096 次实际求解的固定容量滑动窗口，同时显示窗口样本数
 与进程启动后的累计样本数；暂停或 Grouped worker idle 不会生成零耗时样本。
 在 MCC/PlaCo 比较中，只有包含 backend 调用与 app 侧迭代/结果提取的总 IK 耗时及其分位数是
@@ -182,8 +196,9 @@ cmake --build build/replay-ik --target mcl_servo_step -j8
 position（初始 velocity 仍为零）；可用 `--initial-joint-state-stream` 选择其他 JointState
 topic。R1 target stream 的输入语义是 TCP pose；runner 使用左右各自的 `0.1 m` TCP offset
 转换为 end-effector target 后再构造 IK request。replay solver 消费最新 target，允许丢弃
-尚未消费的旧帧并在 `ik_replay_manifest.v2` 中记录计数。`--ui tui`（默认）保留 console，
-Space 暂停/继续，`.` 单帧推进；`--ui none` 不创建终端界面。
+尚未消费的旧帧并在 `ik_replay_manifest.v2` 中记录计数。`--ui tui`（默认）保留 renderer，
+Space 暂停/继续，`.` 单帧推进。`--ui none` 只禁用渲染；replay 的 terminal input 由正交的
+`--terminal-input on|off` 控制，所以 headless 模式也可以按需保留 pause/resume/step。
 
 不指定 `--output-dir` 时，runner 会在
 `experiments/E02_dual_arm_replay_ik/runs/` 下创建新的
@@ -221,6 +236,12 @@ cmake --build /workspace/build/motion_control_lab --target mcl_e03_batch_replay_
 /workspace/build/motion_control_lab/mcl_e03_batch_replay_ik \
   --urdf /workspace/products/synrobot/modules/common/robot_description/psi_r1/urdf/Psi_R1_rev1.urdf
 ```
+
+也可通过
+`experiments/E03_psi_r1_dual_arm_motion_library_replay_ik/scripts/run_mcap_replay.sh` 启动，使用
+`MCL_LIBRARY_DIR`、`MCL_OUTPUT_ROOT`、`MCL_URDF` 设置 batch preset，并以 trailing arguments
+覆盖本次运行参数；manifest 会记录 launcher、原始 argv、resolved config 和每个 action 的
+size/SHA-256。
 
 默认产物位于
 `experiments/E03_psi_r1_dual_arm_motion_library_replay_ik/runs/<run-id>/`。增加
@@ -366,31 +387,35 @@ cmake --build build/dual-arm \
   --deadline-policy monitor
 ```
 
-五个 app 复用同一个数据驱动 TUI，不需要 app 级布局配置。`1..5`、`F1..F5` 或
-`Tab` 在 Overview、Solver/QP、Joints、Runtime 和 Events 间切换；
-`PageUp/PageDown/Home/End` 滚动当前页面，`h` 打开完整快捷键帮助。TUI 根据收到的
-solver、worker 和 collision 快照自动显示相应面板，并根据终端宽度自动分栏或改用纵向布局。
+所有交互 app 复用 solver-neutral 的标准 IK 文档构造和同一个只消费 `TuiDocument` 的
+FTXUI renderer；只有 Joint Planning、OTG、projection/clamp 等专属内容留在 app 目录。
+页面数量按快照能力为 5、6 或 7，数字键、对应的 F1–F7 和 `Tab` 动态切换；
+`PageUp/PageDown/Home/End` 滚动当前页面，`h` 或 `?` 打开完整快捷键帮助。完整布局以
+`155×74` 为验收尺寸，更小窗口继续使用滚动。
 
 两个双臂入口分别定义同值的双手 Hard position/orientation task 和 Hard joint-position limits；
-这种重复用于保持 app 独立，不抽取到 `common`。它们只共享 TUI/Viz 初始化与 R1 固定参数。
+这种重复用于保持 app 独立，不抽取到共享 component。它们只共享 renderer、transport 与 R1
+固定参数。
 `--solver` 默认为 `mcc`；该选择在进程启动时确定，不提供热切换或双求解器并跑。
 `--backend <proxqp|eiquadprog>` 默认为 `proxqp`，只选择 MCC 的 QP backend；当
 `--solver placo` 时该参数会被解析但不生效，PlaCo 始终使用自身的 eiquadprog。MCC 与 PlaCo
-都固定 floating base，并只控制 R1 配置列出的 20 个关节；position limits 使用 `1e-3` margin，
-数值 regularization 为 `1e-4`。ServoStep 每次只执行一个 QP update，`--rate` 同时定义其正
+都固定 floating base，并只控制 R1 配置列出的 20 个关节。position-limit margin 与数值
+regularization 的编译默认分别为 `1e-3` 和 `1e-4`，非 baseline app 可以通过自己的
+app-local flags 覆盖。ServoStep 每次只执行一个 QP update，`--rate` 同时定义其正
 `servo_period`/PlaCo `dt`，并启用 Hard joint-velocity limits。TargetSolve 不注册 velocity limits，
-增加权重 `1e-5` 的 initial-pose Soft joints task；最多迭代 10000 次，并使用 100 ms soft budget、
-`1e-4` Cartesian tolerance 和 `1e-8` minimum-improvement 终止规则。其 `--rate` 只控制交互求解
-和发布频率。
+增加默认权重 `1e-5` 的 initial-pose Soft joints task；默认最多迭代 10000 次，并使用
+100 ms soft budget、`1e-4` Cartesian tolerance 和 `1e-8` minimum-improvement 终止规则。
+这些实验参数由 `apps/target_solve/app_options.*` 解析；其 `--rate` 只控制交互求解和发布频率。
 
 各求解路径复用相同 TUI 和五个 IK/FK Viz 通道。TUI 标题及 Solver 页明确显示
 `MCC/ProxQP`、`MCC/eiquadprog` 或 `PlaCo/eiquadprog`；对应的 visualization run ID 仍按
 solver implementation 分别为
 `interactive-preview-mcc` 与 `interactive-preview-placo`。通用 debug frame 记录总 IK 耗时、
-P90/P95/P99、迭代/收敛、attempts/accepted/rejected 计数以及双臂 Cartesian error，便于分别
+90th/95th/99th percentile、迭代/收敛、Attempts/Accepted/Rejected 计数以及双臂 Cartesian
+error，便于分别
 运行两次后按同一口径观察。
 
-grouped 入口固定使用 `RedYellow` profile，要求 `red-rate > yellow-rate > 0`，默认分别为
+grouped 入口使用 app-local `RedYellow` profile，要求 `red-rate > yellow-rate > 0`，默认分别为
 1000 Hz 和 100 Hz。每组 period 同时是该 worker 的 deadline。默认
 `--deadline-policy strict`：任一 rejected attempt、deadline miss 或 worker exception 都触发
 first-writer Fault、停止并 join 两个 worker、保留最后 accepted Red state、关闭 sink 并返回非零。
@@ -403,12 +428,14 @@ rejected attempt 和 worker exception 在 monitor 模式下仍然触发 Fault。
 Yellow、Red 启动前会顺序预热一次；正式 run 中两者完全异步，不等待 source 的下一条
 结果。TUI、Viz 和 MCAP 只在 `ui-rate` 线程运行，不进入 Red solver 路径。
 
-Red 使用双手 Scaled position/orientation task：每只手的 position/orientation 共享一个
+Red 使用双手 Scaled position/orientation task：每只手的 position/orientation 默认共享一个
 `progress_weight=3` 的 scale，左右手则独立退化；TUI 会报告两路 scale 的
-full/degraded/stuck 状态。Red 使用 `1e-6` 的 ProxQP absolute tolerance 并显式关闭 warm start；
-Cartesian equality 与 limit 的 accepted hard-violation 上限为 `5e-4`。raw grouped 的 Red 注册
+full/degraded/stuck 状态。Red 默认使用 `1e-6` 的 ProxQP absolute tolerance 并显式关闭 warm
+start；Cartesian equality 与 limit 的默认 accepted hard-violation 上限为 `5e-4`。raw grouped 的 Red 注册
 position+velocity limits；planned grouped 还注册既定 PSI R1 acceleration limits。两者 Yellow
-都只注册 position limits。joint position limit 使用 `1e-2 rad` 内部 margin。
+都只注册 position limits。joint position limit 默认使用 `1e-2 rad` 内部 margin。这些数值、
+worker rates、deadline policy 与 collision 参数由每个 grouped app 自己的 `app_options.*` 暴露，
+不会进入 scheduler 或共享配置对象。
 
 Yellow 当前使用 4 对 app-local R1 link pair 的 Soft self-collision velocity damping：minimum
 distance `0.30 m`、influence distance `0.35 m`、gain `2 s^-1`、weight `100`；posture task 当前未
@@ -425,7 +452,31 @@ app 从 R1 URDF 所在 `robot_description/psi_r1/urdf` 布局推导 mesh package
 有 Foxglove sink 时连接 `ws://127.0.0.1:8765`。MCAP 路径存在时会拒绝覆盖。
 默认不录制 MCAP，只有显式传入 `--mcap <path>` 才会录制；`--no-mcap` 可用于显式
 关闭或覆盖前面给出的 `--mcap`。
-若安装的 Viz 没有 Foxglove target，应用仍可用 null sink 运行。
+使用 `--viz none` 或配置 `MCL_ENABLE_FOXGLOVE_TRANSPORT=OFF` 时应用使用 Null sink；该选择
+不改变 solver 或 canonical artifact 行为。
+
+### App-local 启动脚本与覆盖优先级
+
+支持 keyboard、MCAP 或 CSV 的 app 在自己的 `scripts/` 下提供对应的
+`run_keyboard.sh`、`run_mcap_replay.sh`、`run_csv_replay.sh`；Cartesian planning 提供
+`run_json_request.sh`。脚本通过根目录 `scripts/launch_app.sh` 统一处理 binary、
+`LD_LIBRARY_PATH`，以及可选的 `MCL_CPU_SET`/`MCL_RT_PRIORITY` 对应的 `taskset`/`chrt`，但不
+解析 app 的算法语义。每个脚本把 `"$@"` 放在 preset 后面，因此优先级是：
+
+```text
+app compiled defaults < script preset/environment < trailing explicit arguments
+```
+
+两个 planned grouped app 的 `run_mcap_replay.sh` 可直接运行：默认回放
+`sliced_RW1AZHYCSEFT5_RW1AZHYCSEFT5260310002_20260731015829_0.mcap`，使用左右
+`/hal/tracker/htc/*/calib_target_pose` 和首帧 `/mc/ik/joint_states`，以 10 ms、nearest/5 ms、
+realtime、monitor、start-paused preset 启动。其 `run_keyboard.sh` 使用相同的 URDF、Red/Yellow
+rate、deadline、planner limits、CPU/RT 和 TUI/Viz preset。可用 `MCL_START_PAUSED=off` 直接开始，
+以空的 `MCL_CPU_SET=` 或 `MCL_RT_PRIORITY=` 禁用对应 OS wrapper，并用 `MCL_VIZ_PORT` 更换端口。
+
+replay artifact 记录 resolved config、原始 argv、`--launcher` 标识和输入 SHA-256/provenance。
+`mcl_baseline` 接受 source/UI/Viz/output 选择，但明确拒绝 solver、backend、rate、tolerance、
+iteration、regularization、task gain/weight 等算法覆盖，继续保持 production-static。
 
 旧的 Core planning matplotlib smoke app 已迁到 Lab，并通过
 `MCL_BUILD_MCC_PLOTS=ON` 显式启用；它需要当前 Python 环境包含 NumPy 和
@@ -478,12 +529,14 @@ MoveLine，不增加 circle、spline、blend 或 waypoint 拼接语义。
 ```text
 adapters/execution/       通用 artifact store、manifest 与 SHA-256
 adapters/data/            ROS-free source、decoder、temporal/semantic projection 与 ReplayClock
-adapters/interactive/     共享 CLI、TUI、wall-clock scheduler 和 Viz helpers
-apps/common/              R1 固定参数、公共 TUI/presentation 初始化和无语义机械转换；不含 solver/task
+adapters/replay/          replay typed load、provenance 与 artifact mechanics
+contracts/input/          MotionTargetFrame、InputStatus、SourceControl、TeleopIntent、KeyEvent
+contracts/presentation/   solver-neutral AppSnapshot 与 TuiDocument
+contracts/runtime/        scheduler/runtime 共享状态合同
+components/               scheduler、terminal、teleop、标准 IK TUI、renderer、replay、Viz、R1 config 与 scaffolding
 apps/cartesian_planning/  JSON 驱动的纯 Cartesian MoveLine 规划、渲染和 Foxglove 回放
 apps/plot_core_planning/  可选的 Core planning API matplotlib smoke app
 apps/replay_plan/         不运行 solver 的 canonical timeline inspect/artifact 入口
-adapters/replay/         solver-agnostic timeline loader、clock、provenance 与 replay artifact
 apps/baseline/           PlaCo production-static teleop/replay 对照基线
 apps/servo_step/         普通双臂 ServoStep；teleop/replay 使用同一 solver topology
 apps/grouped_servo_step/ raw Red/Yellow ServoStep；Red position+velocity，Yellow position
@@ -525,5 +578,6 @@ Eigen 5 所需的 API 兼容修改。完整来源和修改清单见
 
 交互 IK 控制台使用仓库内的 FTXUI `v7.0.3` 源码，来源和归档 SHA-256 记录在
 [`third_party/ftxui/MOTION_CONTROL_LAB.md`](third_party/ftxui/MOTION_CONTROL_LAB.md)。
-该目录不是 Git submodule，也不包含嵌套 `.git`。CMake 只在至少一个 interactive IK app
-启用时构建 FTXUI；运行时 `--ui none` 不创建 console，但同一 binary 仍包含该可选 UI 能力。
+该目录不是 Git submodule，也不包含嵌套 `.git`。只有同时启用至少一个 interactive IK app 和
+`MCL_ENABLE_TUI=ON` 时才构建 FTXUI；运行时 `--ui none` 不创建 renderer，且不会隐式禁用
+terminal input。

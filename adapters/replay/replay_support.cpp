@@ -166,6 +166,9 @@ Json::Int64 asJsonInt64(std::int64_t value) { return static_cast<Json::Int64>(va
 ReplayOptions parseReplayOptions(int argc, char ** argv, bool require_urdf)
 {
   ReplayOptions result;
+  for (int index = 0; index < argc; ++index) {
+    result.original_argv.emplace_back(argv[index]);
+  }
   bool initial_joint_state_stream_set = false;
   for (int index = 1; index < argc; ++index) {
     const std::string argument = argv[index];
@@ -214,8 +217,30 @@ ReplayOptions parseReplayOptions(int argc, char ** argv, bool require_urdf)
     } else if (argument == "--run-id") {
       result.run_id = requireValue();
       validateRunId(*result.run_id);
+    } else if (argument == "--launcher") {
+      result.launcher = requireValue();
     } else if (argument == "--ui") {
       result.ui_mode = requireValue();
+    } else if (argument == "--terminal-input") {
+      const auto value = requireValue();
+      if (value == "on") {
+        result.terminal_input_enabled = true;
+      } else if (value == "off") {
+        result.terminal_input_enabled = false;
+      } else {
+        throw data::DataError(
+          data::DataErrorCode::InvalidArgument, "--terminal-input must be 'on' or 'off'");
+      }
+    } else if (argument == "--viz") {
+      const auto value = requireValue();
+      if (value == "foxglove") {
+        result.visualization_enabled = true;
+      } else if (value == "none") {
+        result.visualization_enabled = false;
+      } else {
+        throw data::DataError(
+          data::DataErrorCode::InvalidArgument, "--viz must be 'foxglove' or 'none'");
+      }
     } else if (argument == "--host" || argument == "--viz-host") {
       result.visualization_host = requireValue();
     } else if (argument == "--port" || argument == "--viz-port") {
@@ -314,8 +339,11 @@ std::string replayHelp(const std::string & program, bool include_urdf)
               "append-only E02 run\n"
            << "  --run-id <id>                    Override the auto-generated E02 "
               "run ID\n"
+           << "  --launcher <path-or-id>          Launcher identity recorded in artifacts\n"
            << "  --ui tui|none                    User interface mode (default "
               "tui)\n"
+           << "  --terminal-input on|off          Replay keyboard controls (default off)\n"
+           << "  --viz foxglove|none              Visualization transport (default none)\n"
            << "  --host <address>                 Foxglove bind address (default "
               "127.0.0.1)\n"
            << "  --port <port>                    Foxglove port (default 8765)\n"
@@ -477,10 +505,28 @@ Json::Value makeReplayManifest(
   manifest["execution"]["solver"] = execution.solver;
   manifest["execution"]["backend"] = execution.backend;
   manifest["execution"]["ui"] = options.ui_mode;
+  manifest["execution"]["terminal_input"] = options.terminal_input_enabled;
+  manifest["execution"]["visualization"] =
+    options.visualization_enabled ? "foxglove" : "none";
   manifest["execution"]["rate_hz"] = execution.rate_hz;
   manifest["execution"]["red_rate_hz"] = execution.red_rate_hz;
   manifest["execution"]["yellow_rate_hz"] = execution.yellow_rate_hz;
   manifest["execution"]["hard_realtime"] = false;
+  manifest["resolved_config"]["input_format"] = toString(options.input_format);
+  manifest["resolved_config"]["timestamp_source"] = data::toString(options.timestamp_source);
+  manifest["resolved_config"]["pairing_policy"] = data::toString(options.pairing_policy);
+  manifest["resolved_config"]["execution_mode"] = data::toString(options.execution_mode);
+  manifest["resolved_config"]["playback_rate"] = options.playback_rate;
+  manifest["resolved_config"]["target_period_ns"] = asJsonInt64(options.target_period_ns);
+  manifest["resolved_config"]["ui"] = options.ui_mode;
+  manifest["resolved_config"]["terminal_input"] = options.terminal_input_enabled;
+  manifest["resolved_config"]["visualization"] =
+    options.visualization_enabled ? "foxglove" : "none";
+  manifest["resolved_config"]["solver"] = execution.solver;
+  manifest["resolved_config"]["backend"] = execution.backend;
+  manifest["resolved_config"]["rate_hz"] = execution.rate_hz;
+  manifest["resolved_config"]["red_rate_hz"] = execution.red_rate_hz;
+  manifest["resolved_config"]["yellow_rate_hz"] = execution.yellow_rate_hz;
   manifest["statistics"]["frames"] = Json::UInt64(loaded.timeline.timeline.size());
   manifest["statistics"]["left_input"] = Json::UInt64(loaded.timeline.pairing.left_input_count);
   manifest["statistics"]["right_input"] = Json::UInt64(loaded.timeline.pairing.right_input_count);
@@ -498,6 +544,16 @@ Json::Value makeReplayManifest(
   manifest["statistics"]["deadline_misses"] = Json::UInt64(execution.deadline_miss_count);
   manifest["statistics"]["accepted_solves"] = Json::UInt64(execution.accepted_count);
   manifest["statistics"]["rejected_solves"] = Json::UInt64(execution.rejected_count);
+  manifest["invocation"]["launcher"] =
+    execution.launcher.empty() ? options.launcher : execution.launcher;
+  const auto & original_argv =
+    execution.original_argv.empty() ? options.original_argv : execution.original_argv;
+  for (const auto & argument : original_argv) {
+    manifest["invocation"]["argv"].append(argument);
+  }
+  for (const auto & [key, value] : execution.resolved_config) {
+    manifest["resolved_config"][key] = value;
+  }
   manifest["artifacts"]["trace.csv"]["sha256"] = trace_sha256;
   return manifest;
 }

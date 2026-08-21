@@ -9,7 +9,7 @@ find_package(Threads REQUIRED)
 
 set(BUILD_SHARED_LIBS OFF CACHE BOOL "Build fetched dependencies as static libraries" FORCE)
 
-if(MCL_BUILD_ANY_INTERACTIVE_IK)
+if(MCL_ENABLE_TUI AND MCL_BUILD_ANY_INTERACTIVE_IK)
   set(
     MCL_FTXUI_SOURCE_DIR
     "${PROJECT_SOURCE_DIR}/third_party/ftxui"

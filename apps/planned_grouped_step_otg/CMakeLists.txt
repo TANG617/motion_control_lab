@@ -16,25 +16,25 @@ target_link_libraries(
   PUBLIC motion_control_core::motion_control_core
 )
 
-add_executable(mcl_planned_grouped_step_otg main.cpp app_options.cpp)
-set_target_properties(
-  mcl_planned_grouped_step_otg
-  PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}"
-)
-target_link_libraries(
-  mcl_planned_grouped_step_otg
-  PRIVATE
+mcl_add_app(
+  TARGET mcl_planned_grouped_step_otg
+  SOURCES
+    main.cpp app_options.cpp diagnostics_projection.cpp tui_projection.cpp
+  LIBRARIES
     motion_control_lab::cpu_affinity
-    motion_control_lab::app_common
+    motion_control_lab::app_helpers
+    motion_control_lab::r1_robot_config
     motion_control_lab::planned_grouped_step_otg_support
-    motion_control_lab::interactive_runtime
+    motion_control_lab::scheduler
+    motion_control_lab::keyboard_input
+    motion_control_lab::standard_ik_tui
+    motion_control_lab::tui
     motion_control_lab::preview_transport
-    motion_control_lab::ik_preview
+    motion_control_lab::preview_projection
     motion_control_lab::visualization_contracts
-    motion_control_lab::replay_support
+    motion_control_lab::replay
     Threads::Threads
 )
-install(TARGETS mcl_planned_grouped_step_otg RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 
 if(BUILD_TESTING)
   add_executable(
@@ -45,8 +45,10 @@ if(BUILD_TESTING)
   target_link_libraries(
     test_planned_grouped_step_otg_app_options
     PRIVATE
-      motion_control_lab::interactive_runtime
-      motion_control_lab::replay_support
+      motion_control_lab::input_contract
+      motion_control_lab::scheduler
+      motion_control_lab::replay
+      motion_control_lab::tui
       motion_control_lab::r1_robot_config
   )
   add_test(
@@ -87,7 +89,7 @@ if(BUILD_TESTING)
   target_link_libraries(
     test_planned_grouped_step_otg_visualization
     PRIVATE
-      motion_control_lab::ik_preview
+      motion_control_lab::preview_projection
       motion_control_lab::visualization_contracts
   )
   add_test(
@@ -95,11 +97,18 @@ if(BUILD_TESTING)
     COMMAND test_planned_grouped_step_otg_visualization
   )
 
-  add_test(
-    NAME apps.mcl_planned_grouped_step_otg_help
-    COMMAND
-      "${CMAKE_COMMAND}"
-      "-DAPP=$<TARGET_FILE:mcl_planned_grouped_step_otg>"
-      -P "${PROJECT_SOURCE_DIR}/tests/check_app_help.cmake"
+  add_executable(
+    test_planned_grouped_step_otg_tui_projection
+    tests/tui_projection.cpp
+    tui_projection.cpp
   )
+  target_link_libraries(
+    test_planned_grouped_step_otg_tui_projection
+    PRIVATE motion_control_lab::standard_ik_tui
+  )
+  add_test(
+    NAME apps.mcl_planned_grouped_step_otg_tui_projection
+    COMMAND test_planned_grouped_step_otg_tui_projection
+  )
+
 endif()

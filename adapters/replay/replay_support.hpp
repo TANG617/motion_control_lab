@@ -4,8 +4,10 @@
 
 #include <cstdint>
 #include <filesystem>
+#include <map>
 #include <optional>
 #include <string>
+#include <vector>
 
 #include "adapters/data/projection/dual_arm_timeline.hpp"
 #include "adapters/data/source/data_source.hpp"
@@ -44,9 +46,13 @@ struct ReplayOptions
   std::optional<std::filesystem::path> output_root;
   std::optional<std::string> run_id;
   std::string ui_mode{"tui"};
+  bool terminal_input_enabled{false};
+  bool visualization_enabled{false};
   std::string visualization_host{"127.0.0.1"};
   std::uint16_t visualization_port{8765};
   std::optional<std::filesystem::path> visualization_mcap_path;
+  std::vector<std::string> original_argv;
+  std::string launcher;
 };
 
 struct ReplayExecutionMetadata
@@ -63,6 +69,9 @@ struct ReplayExecutionMetadata
   std::size_t accepted_count{};
   std::size_t rejected_count{};
   std::size_t deadline_miss_count{};
+  std::vector<std::string> original_argv;
+  std::string launcher;
+  std::map<std::string, std::string> resolved_config;
 };
 
 struct LoadedReplay

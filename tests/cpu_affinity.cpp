@@ -1,4 +1,4 @@
-#include "cpu_affinity.hpp"
+#include "components/app_helpers/cpu_affinity.hpp"
 
 #include <algorithm>
 #include <array>

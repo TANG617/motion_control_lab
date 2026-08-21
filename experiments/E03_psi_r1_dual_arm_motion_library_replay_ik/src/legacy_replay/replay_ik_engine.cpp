@@ -1,4 +1,5 @@
 #include "experiments/E03_psi_r1_dual_arm_motion_library_replay_ik/src/legacy_replay/replay_ik_engine.hpp"
+#include "components/replay/replay_source.hpp"
 
 #include <Eigen/Core>
 #include <algorithm>
@@ -270,7 +271,7 @@ ReplayIkCaseResult executeReplayIkCase(
   std::vector<double> velocities(positions.size(), 0.0);
   const auto fixed_positions = positions;
   const auto fixed_velocities = velocities;
-  data::ReplayClock clock(options.execution_mode, options.playback_rate);
+  ReplaySource replay_source(result.loaded, options.execution_mode, options.playback_rate);
 
   if (execution_config.before_replay) {
     execution_config.before_replay();
@@ -291,15 +292,15 @@ ReplayIkCaseResult executeReplayIkCase(
     }
   }
 
-  const auto run_start = clock.now();
   std::ostringstream trace;
   trace << replayIkTraceHeader();
   trace << std::setprecision(17);
 
-  for (const auto & frame : result.loaded.timeline.timeline) {
-    const auto scheduled = clock.deadline(run_start, frame.projected_time_ns);
-    clock.waitUntil(scheduled);
-    const auto solve_start = clock.now();
+  while (!replay_source.endOfStream()) {
+    const auto & frame = replay_source.sourceFrame();
+    const auto scheduled = replay_source.scheduledTime();
+    replay_source.waitForCurrentFrame();
+    const auto solve_start = data::ReplayClock::Clock::now();
     const auto lateness =
       options.execution_mode == data::ExecutionMode::Realtime
         ? std::max<std::int64_t>(
@@ -333,7 +334,7 @@ ReplayIkCaseResult executeReplayIkCase(
     mcc::InverseKinematicsSolution solution;
     mcc::InverseKinematicsDiagnostics diagnostics;
     const auto status = solver.solveInverseKinematics(request, solution, diagnostics);
-    const auto solve_end = clock.now();
+    const auto solve_end = data::ReplayClock::Clock::now();
     const bool accepted = status.ok() && mcc::isAccepted(solution.disposition);
     std::vector<double> output_positions = state_positions;
     std::vector<double> output_velocities = state_velocities;
@@ -383,6 +384,10 @@ ReplayIkCaseResult executeReplayIkCase(
 
     if (!accepted && execution_config.stop_on_first_error) {
       break;
+    }
+    replay_source.markFrameProcessed();
+    if (!replay_source.endOfStream() && !replay_source.advanceSequential().frame_changed) {
+      throw std::runtime_error("replay source failed to advance to the next E03 frame");
     }
   }
 

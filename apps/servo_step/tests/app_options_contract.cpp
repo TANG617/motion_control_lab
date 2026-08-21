@@ -26,13 +26,16 @@ int main() {
   char backend[] = "eiquadprog";
   char rate_option[] = "--rate";
   char rate[] = "50";
+  char regularization_option[] = "--regularization";
+  char regularization[] = "2e-4";
   char *custom_argv[]{program,       urdf_option, urdf,
                       solver_option, solver,      backend_option,
-                      backend,       rate_option, rate};
-  const auto custom = app::parseAppOptions(9, custom_argv);
+                      backend,       rate_option, rate, regularization_option,
+                      regularization};
+  const auto custom = app::parseAppOptions(11, custom_argv);
   if (custom.solver != app::SolverKind::Placo ||
       custom.backend != app::MccBackend::Eiquadprog ||
-      custom.interactive.rate_hz != 50.0) {
+      custom.interactive.rate_hz != 50.0 || custom.algorithm.regularization != 2.0e-4) {
     return EXIT_FAILURE;
   }
 

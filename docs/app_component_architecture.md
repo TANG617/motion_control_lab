@@ -2,7 +2,7 @@
 
 > 更新日期：2026-08-19
 >
-> 状态：目标架构。本轮只定义职责、依赖和迁移验收合同，不表示 Lab 已完成对应代码重构。
+> 状态：已实施。本文同时是现行职责合同和依赖验收基线。
 
 本文定义 Motion Control Lab（下文简称 MCL）的最终应用架构。
 目标是让 TUI、Viz、调度、teleop 和 replay 成为可独立测试、可被所有 app 复用的
@@ -62,19 +62,13 @@ flowchart TB
   Options --> AppB
   Options --> AppC
 
-  AppA --> Scaffold
-  AppB --> Scaffold
-  AppC --> Scaffold
   AppA --> MCC
   AppB --> MCC
   AppC --> MCC
 
-  Scaffold --> Input
-  Scaffold --> Scheduler
-  Scaffold --> TUI
-  Scaffold --> VizAdapter
-  Scaffold --> Artifacts
-  Scaffold --> Robot
+  AppA -. typed references .-> Scaffold
+  AppB -. typed references .-> Scaffold
+  AppC -. typed references .-> Scaffold
   Teleop --> Input
   Replay --> Input
   VizAdapter --> MCV
@@ -151,9 +145,13 @@ realtime、playback rate、pause/resume/step、EOS 和来源诊断。
 `motion_control_lab::tui` 接收通用 `TuiDocument`，只实现布局、页面、滚动、帮助和渲染。
 它不知道 `TargetCommand`、solver backend、task handle、replay pairing 或 Foxglove。
 
-每个 app 自己把 `AppSnapshot` 映射成 `TuiDocument`。这个 projector 属于
-`apps/<app>/`，因为“哪个诊断重要、字段如何解释”是 app 语义；真正的 FTXUI 渲染实现只存在
-一份。
+`motion_control_lab::standard_ik_tui` 把 solver-neutral `IkDebugFrame` 格式化为标准的
+Overview、Cartesian Planning、Solver and Quadratic Programming、Joint State、Runtime 和
+Events 页面。它只生成 `TuiDocument`，不依赖 FTXUI、MCC 或具体 app。
+
+每个 app 仍负责把自己的 solver/runtime 状态解释并填入 `IkDebugFrame`。Joint Planning、OTG、
+projection、clamp 等专属页面和 section 继续由 `apps/<app>/tui_projection.*` 组装。真正的
+FTXUI 渲染实现只存在一份，也不通过 callback、mode 或配置对象隐藏 app 差异。
 
 `TerminalFrontend` 拥有 terminal session 和原始事件读取。`KeyRouter` 把导航键送到 TUI，
 把运动键送到 `keyboard_teleop`。这样 `--ui none` 仍可在需要时使用键盘输入，而 TUI 也可以
@@ -190,7 +188,8 @@ Scheduler 不读取键盘，不渲染 TUI，不发布 Viz，不加载 replay，�
 
 ### Runtime scaffolding
 
-`motion_control_lab::app_scaffold` 提供 `RuntimeServices` 风格的依赖集合和 RAII 生命周期：
+`motion_control_lab::app_scaffold` 以 header-only template 提供 `RuntimeServices` typed reference
+集合和 `RuntimeLifecycle` RAII 生命周期：
 
 - 接收 app 已经选好的 input source、scheduler、terminal、TUI、Viz sink 和 artifact writer；
 - 统一执行 start、stop、close、join 等无业务语义的资源生命周期；
@@ -205,17 +204,20 @@ Scheduler 不读取键盘，不渲染 TUI，不发布 Viz，不加载 replay，�
 - 不解释 accepted/rejected、scale、collision、fault hold 等算法状态；
 - 不决定 rate、deadline policy、输出 topic 或 artifact 内容。
 
-推荐的 app composition root 形状如下；这是职责示意，不是预先锁定的 C++ API：
+app composition root 使用的实际 API 形状如下。input、scheduler、terminal、TUI、Viz 和
+artifact writer 都由 app 先行选择；scaffolding 不拥有主循环：
 
 ```cpp
 int main(int argc, char** argv) {
   const AppConfig config = parseAppOptions(argc, argv);  // app-local
-  auto input = makeInputForThisApp(config);              // shared component
-  auto runtime = AppScaffold::compose(
-      makeRuntimeServices(config, std::move(input)));
-
-  PlannedGroupedServoStepApp app(config, runtime.services());
-  return app.run();                                      // app-local semantics
+  auto input = makeInputForThisApp(config);
+  auto scheduler = makeSchedulerForThisApp(config);
+  auto services = makeRuntimeServices(
+      input, scheduler, terminal, tui, viz, artifacts);
+  auto lifecycle = makeRuntimeLifecycle(resource_a, resource_b);
+  lifecycle.start();
+  while (appLocalStateMachineTick(config, services)) {}  // app-local semantics
+  lifecycle.finish();
 }
 ```
 
@@ -230,7 +232,7 @@ apps/<app>/
   main.cpp                 # composition root
   app.hpp / app.cpp        # solver, task, run loop and state transitions
   app_options.hpp / .cpp   # only this app's runtime options
-  tui_projection.*         # AppSnapshot -> TuiDocument, when needed
+  tui_projection.*         # append app-specific pages/sections, only when needed
   viz_projection.*         # AppSnapshot -> RenderBatch, when needed
   scripts/
     run_keyboard.sh
@@ -245,7 +247,7 @@ replay clock 或 scheduler worker；但 app 会保留自己的算法和主循环
 
 ## CMake 组件边界
 
-建议最终收敛到以下 Lab 内部 targets。名称表示职责合同，实施时可按现有目录渐进迁移。
+现行实现由以下 Lab 内部 targets 组成：
 
 | Target | 唯一职责 | 禁止依赖 |
 | --- | --- | --- |
@@ -254,6 +256,8 @@ replay clock 或 scheduler worker；但 app 会保留自己的算法和主循环
 | `motion_control_lab::terminal_frontend` | terminal session、归一化 KeyEvent | solver、replay、Viz |
 | `motion_control_lab::keyboard_teleop` | KeyEvent 到 TeleopIntent/SourceControl | TUI renderer、solver、Viz |
 | `motion_control_lab::cartesian_teleop` | TeleopIntent 到 MotionTargetFrame | 具体设备、TUI、solver |
+| `motion_control_lab::keyboard_input` | 组合 terminal/router/keyboard/cartesian 的 typed keyboard source | solver、Viz、artifact |
+| `motion_control_lab::standard_ik_tui` | solver-neutral IkDebugFrame 到标准 TuiDocument | FTXUI、MCC、具体 app |
 | `motion_control_lab::tui` | TuiDocument 渲染与导航 | teleop、replay、solver、Viz |
 | `motion_control_lab::data` | typed source、decoder、temporal pipeline | app、solver、TUI、Viz |
 | `motion_control_lab::replay` | 单一 replay source 和 clock/state machine | app、solver、TUI、Viz |
@@ -262,10 +266,32 @@ replay clock 或 scheduler worker；但 app 会保留自己的算法和主循环
 | `motion_control_lab::preview_transport` | WebSocket/MCAP/Null sink 选择和生命周期 | solver、teleop、replay |
 | `motion_control_lab::r1_robot_config` | 固定 joint/frame/TCP/default pose | app policy、solver/task config |
 | `motion_control_lab::app_helpers` | 无业务语义的机械转换 | 具体 app、solver/task policy |
-| `motion_control_lab::app_scaffold` | typed services、RAII、CMake/目录样板 | CLI、solver/task、统一 run loop |
+| `motion_control_lab::app_scaffold` | typed services 与 RAII lifecycle | CLI、solver/task、统一 run loop |
+| `mcl_add_app(...)` | executable output/install/help smoke/script install | solver/task 生成、CLI 语义 |
 
 这些 target 是 MCL 内部 implementation detail。不要让根仓、生产 SynRobot 或
 `motion_control_core` 依赖它们。
+
+现行直接依赖链为：
+
+```text
+terminal_frontend -> input_contract
+keyboard_teleop   -> input_contract
+cartesian_teleop  -> input_contract
+keyboard_input    -> terminal_frontend + keyboard_teleop + cartesian_teleop
+scheduler         -> runtime_contract + Threads
+standard_ik_tui   -> presentation_contract
+tui               -> input_contract + presentation_contract + [FTXUI when enabled]
+data              -> mcap + Eigen + Threads
+replay            -> data + input_contract + run_artifacts
+app_helpers       -> cpu_affinity + presentation_contract
+app_scaffold      -> runtime_contract
+preview_projection -> presentation_contract + r1_robot_config + visualization_contracts
+preview_transport  -> motion_control_viz::render + [motion_control_viz::foxglove when enabled]
+```
+
+方括号项受 `MCL_ENABLE_TUI` 或 `MCL_ENABLE_FOXGLOVE_TRANSPORT` 控制。`mcl_add_app(...)`
+只按调用方显式列出的 `LIBRARIES` 建立 app 依赖，不注入统一 runtime。
 
 ## App 所有权与隔离
 
@@ -276,7 +302,7 @@ replay clock 或 scheduler worker；但 app 会保留自己的算法和主循环
 - planner/OTG/collision 的算法策略；
 - app rate、deadline policy、fault/rejection 解释和状态转换；
 - app-local `AppConfig`、默认值和 option parser；
-- `AppSnapshot -> TuiDocument/RenderBatch` 的语义投影；
+- solver/runtime 状态到 `IkDebugFrame` 的语义投影，以及专属 TUI/Viz 页面内容；
 - 本 app 的 run artifact 内容和实验解释。
 
 共享 `r1_robot_config` 只保存固定 R1 joint、frame、TCP 和默认 pose。production-static
@@ -345,7 +371,7 @@ gain/weight/enforcement/mask、collision 参数、planning/OTG limits、worker r
 
 ## App 类型与 source 能力
 
-首轮迁移保持现有 app 能力，不为了统一外观给所有 app 强行增加所有 source：
+当前实现保持各 app 原有能力，不为了统一外观给所有 app 强行增加所有 source：
 
 | App 类别 | 目标 source | 说明 |
 | --- | --- | --- |
@@ -356,7 +382,10 @@ gain/weight/enforcement/mask、collision 参数、planning/OTG limits、worker r
 | replay-plan | headless MCAP/CSV | 只检查 timeline 和 artifact，不运行 solver |
 | E03 batch | batch MCAP replay | 复用 ReplaySource，批处理与失败隔离留在 E03 orchestration |
 
-## 目标目录
+E03 对应的 `experiments/E03_psi_r1_dual_arm_motion_library_replay_ik/scripts/run_mcap_replay.sh`
+表达 motion-library batch preset；它不创建第二套 MCAP runner。
+
+## 已实施目录
 
 ```text
 motion-control-lab/
@@ -374,25 +403,23 @@ motion-control-lab/
       cartesian/
     replay/
     visualization/
-    run_artifacts/
     robot/r1/
   adapters/
-    data/mcap/
-    data/csv/
-    visualization/
+    data/                    # physical source、decoder、temporal/semantic projection
+    replay/                  # typed load、provenance、manifest mechanics
+    execution/               # run artifacts 与 SHA-256
   apps/
-    common/                  # 迁移期目录；最终由窄 component targets 取代
     <app>/
   experiments/
   analyses/
 ```
 
-目录名可以在实施时微调，但 component target 的依赖合同不能退化为新的大而全
-`interactive_runtime` 或 `app_common`。
+旧 `apps/common/` 和 `adapters/interactive/` 中的聚合实现已删除；上述 component target 的
+依赖合同不得退化为新的大而全聚合层。
 
-## 验收合同
+## 已实施验收
 
-代码迁移完成时至少满足：
+当前实现满足：
 
 1. CMake/静态检查证明任何 `apps/<a>` 都不 include 或 link `apps/<b>`。
 2. Scheduler、keyboard teleop、replay、TUI 和 Viz adapter 各自有不启动 solver 的单元测试。
@@ -407,5 +434,9 @@ motion-control-lab/
 8. 删除或拆分现有过宽的 `interactive_runtime`、`app_common` 后，不再有等价的大聚合 target
    以新名字回归。
 9. production-static baseline 的冻结参数仍不可覆盖，且其 resolved config/artifact 可审计。
-10. 更新 Lab README、`apps/AGENTS.md`、CMake dependency tests 和各 app 脚本后，再把本文状态
-    从“目标架构”改为“已实施”。
+10. Lab README、`apps/AGENTS.md`、CMake dependency tests、app scripts 与本文保持同步。
+
+这些边界由 `tests/architecture_boundaries.py`、独立 component tests、每个 app 的 option/help
+tests、TUI PTY smoke、完整 CTest，以及关闭 `MCL_ENABLE_TUI` 与
+`MCL_ENABLE_FOXGLOVE_TRANSPORT` 的隔离构建共同验证。架构变更必须同时更新这些检查；不能只
+修改本文状态。

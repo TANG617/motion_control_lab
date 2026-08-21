@@ -25,20 +25,22 @@
 
 #include "adapters/replay/replay_support.hpp"
 #include "app_options.hpp"
-#include "console/tui_console.hpp"
-#include "cpu_affinity.hpp"
-#include "ik_app_utils.hpp"
+#include "components/app_helpers/app_helpers.hpp"
+#include "components/replay/replay_source.hpp"
+#include "components/robot/r1/r1_robot_config.hpp"
+#include "components/scheduler/rolling_percentiles.hpp"
+#include "components/scheduler/single_rate_scheduler.hpp"
+#include "components/teleop/keyboard/keyboard_target_source.hpp"
+#include "components/tui/tui_renderer.hpp"
+#include "components/visualization/preview_projection.hpp"
+#include "components/visualization/preview_transport.hpp"
+#include "contracts/presentation/ik_app_snapshot.hpp"
+#include "diagnostics_projection.hpp"
 #include "motion_control_lab/run_artifacts.hpp"
 #include "motion_control_lab/sha256.hpp"
-#include "r1_interactive_config.hpp"
-#include "r1_robot_config.hpp"
-#include "runtime/grouped_worker.hpp"
-#include "runtime/interactive_scheduler.hpp"
-#include "runtime/interactive_types.hpp"
-#include "runtime/latest_value_mailbox.hpp"
-#include "runtime/rolling_percentiles.hpp"
-#include "sinks/ik_render_batch.hpp"
-#include "sinks/preview_sink_factory.hpp"
+#include "components/scheduler/grouped_worker.hpp"
+#include "components/scheduler/latest_value_mailbox.hpp"
+#include "components/tui/standard_ik_tui.hpp"
 
 namespace
 {
@@ -58,18 +60,8 @@ constexpr const char * kTitle = "Motion Control Grouped Dual-arm IK";
 constexpr std::array<unsigned int, 1> kUiCpuAffinity{29};
 constexpr std::array<unsigned int, 1> kRedCpuAffinity{31};
 constexpr std::array<unsigned int, 1> kYellowCpuAffinity{30};
-constexpr double kMaximumAcceptedHardViolation = 5.0e-4;
-constexpr double kJointPositionLimitMarginRad = 1.0e-2;
-constexpr double kCartesianProgressWeight = 3.0;
-constexpr double kRedProxQpAbsoluteTolerance = 1.0e-6;
-constexpr double kYellowPostureWeight = 1.0;
 constexpr double kDefaultPostureJointWeightMultiplier = 1.0e-3;
 constexpr double kArmJoint4PostureWeightMultiplier = 1.0e-1;
-constexpr double kYellowToRedCouplingWeight = 10.0;
-constexpr double kMinimumCollisionDistanceM = 0.3;
-constexpr double kCollisionInfluenceDistanceM = 0.35;
-constexpr double kCollisionDampingGainPerS = 2.0;
-constexpr double kCollisionWeight = 100.0;
 constexpr std::array<std::string_view, 4> kWaistJointNames{
   "torso_yaw_joint", "torso_pitch_joint", "knee_pitch_joint", "ankle_pitch_joint"};
 bool operationSucceeded(const mcc::Status & status) { return status.ok(); }
@@ -332,12 +324,13 @@ mcc::SelfCollisionModelDescription collisionModelDescription(
 
 CartesianHandles addCartesianTasks(
   mcc::KinematicsSolverBuilder & builder, mcc::SolverGroup group, const std::string & prefix,
-  const mcl::R1RobotConfig & robot)
+  const mcl::R1RobotConfig & robot,
+  const mcl::grouped_servo_step::SolverOptions & options)
 {
   CartesianHandles handles;
 
   mcc::TaskScaleGroupConfig scale;
-  scale.progress_weight = kCartesianProgressWeight;
+  scale.progress_weight = options.cartesian_progress_weight;
   scale.name = prefix + "-left-cartesian-progress";
   requireOk(
     builder.addTaskScaleGroup(group, scale, handles.left_scale),
@@ -348,7 +341,7 @@ CartesianHandles addCartesianTasks(
     "Failed to register " + scale.name);
 
   mcc::GroupedScaledTaskConfig position;
-  position.enforcement.feasibility_tolerance = kMaximumAcceptedHardViolation;
+  position.enforcement.feasibility_tolerance = options.maximum_accepted_hard_violation;
   position.scale_group = handles.left_scale;
   position.name = prefix + "-left-position";
   requireOk(
@@ -363,7 +356,7 @@ CartesianHandles addCartesianTasks(
     "Failed to register " + position.name);
 
   mcc::GroupedScaledTaskConfig orientation;
-  orientation.enforcement.feasibility_tolerance = kMaximumAcceptedHardViolation;
+  orientation.enforcement.feasibility_tolerance = options.maximum_accepted_hard_violation;
   orientation.scale_group = handles.left_scale;
   orientation.name = prefix + "-left-orientation";
   requireOk(
@@ -379,21 +372,25 @@ CartesianHandles addCartesianTasks(
   return handles;
 }
 
-void addPositionLimits(mcc::KinematicsSolverBuilder & builder, mcc::SolverGroup group)
+void addPositionLimits(
+  mcc::KinematicsSolverBuilder & builder, mcc::SolverGroup group,
+  const mcl::grouped_servo_step::SolverOptions & options)
 {
   mcc::JointPositionLimitConfig position;
-  position.margin = kJointPositionLimitMarginRad;
-  position.enforcement = mcc::HardEnforcement{kMaximumAcceptedHardViolation};
+  position.margin = options.joint_position_margin_rad;
+  position.enforcement = mcc::HardEnforcement{options.maximum_accepted_hard_violation};
   mcc::GroupedJointPositionLimitHandle position_handle;
   requireOk(
     builder.addJointPositionLimits(group, position, position_handle),
     "Failed to register grouped joint-position limits");
 }
 
-void addVelocityLimits(mcc::KinematicsSolverBuilder & builder, mcc::SolverGroup group)
+void addVelocityLimits(
+  mcc::KinematicsSolverBuilder & builder, mcc::SolverGroup group,
+  const mcl::grouped_servo_step::SolverOptions & options)
 {
   mcc::JointVelocityLimitConfig velocity;
-  velocity.enforcement = mcc::HardEnforcement{kMaximumAcceptedHardViolation};
+  velocity.enforcement = mcc::HardEnforcement{options.maximum_accepted_hard_violation};
   mcc::GroupedJointVelocityLimitHandle velocity_handle;
   requireOk(
     builder.addJointVelocityLimits(group, velocity, velocity_handle),
@@ -539,12 +536,12 @@ std::string taskScaleStatus(const RedOutputSnapshot & output)
 
 void fillSelfCollisionDebug(
   const StateSnapshot & input_state, const mcc::SelfCollisionDiagnostics & diagnostics,
-  mcl::SelfCollisionDebug & output)
+  const mcl::grouped_servo_step::SolverOptions & options, mcl::SelfCollisionDebug & output)
 {
   output.label = "Yellow self-collision";
   output.input_state_sequence = input_state.sequence;
-  output.minimum_distance_m = kMinimumCollisionDistanceM;
-  output.influence_distance_m = kCollisionInfluenceDistanceM;
+  output.minimum_distance_m = options.minimum_collision_distance_m;
+  output.influence_distance_m = options.collision_influence_distance_m;
   output.minimum_distance_before_m = diagnostics.minimum_distance_before_m;
   output.minimum_distance_after_m = diagnostics.minimum_distance_after_m;
   output.margin_shortfall_m = diagnostics.margin_shortfall_m;
@@ -596,6 +593,7 @@ int run(int argc, char ** argv, std::string & normal_exit_detail)
     affinity_domain.bindCurrentThread(kProgramId, "ui", kUiCpuAffinity);
   const auto & robot = mcl::r1RobotConfig();
   std::optional<replay::LoadedReplay> loaded_replay;
+  std::optional<replay::ReplaySource> replay_source;
   if (launch.replay.has_value()) {
     if (!launch.replay->output_dir_explicit) {
       const std::string run_id = launch.replay->run_id.value_or(
@@ -608,6 +606,8 @@ int run(int argc, char ** argv, std::string & normal_exit_detail)
     if (loaded_replay->timeline.timeline.empty()) {
       throw std::runtime_error("replay timeline is empty");
     }
+    replay_source.emplace(
+      *loaded_replay, launch.replay->execution_mode, launch.replay->playback_rate);
     replay::createOutputDirectory(launch.replay->output_dir);
   }
   const auto & joint_names = robot.joint_names;
@@ -655,21 +655,22 @@ int run(int argc, char ** argv, std::string & normal_exit_detail)
   solver_config.yellow.servo_period = 1.0 / options.yellow_rate_hz;
   solver_config.yellow.maximum_iterations = 1;
   solver_config.yellow.soft_solve_time_budget_ms = 1000.0 / options.yellow_rate_hz;
-  solver_config.yellow_to_red.enforcement = mcc::squaredL2Penalty(kYellowToRedCouplingWeight, 1);
+  solver_config.yellow_to_red.enforcement =
+    mcc::squaredL2Penalty(options.solver.yellow_to_red_coupling_weight, 1);
   for (auto * config : {&solver_config.red, &solver_config.yellow}) {
     config->joint_limit_policy = mcc::KinematicsJointLimitPolicy::ExplicitRequirements;
     config->qp.backend = mcc::QpBackend::ProxQp;
-    config->qp.regularization = 1.0e-4;
-    config->position_tolerance_m = 1.0e-4;
-    config->orientation_tolerance_rad = 1.0e-4;
+    config->qp.regularization = options.solver.regularization;
+    config->position_tolerance_m = options.solver.position_tolerance_m;
+    config->orientation_tolerance_rad = options.solver.orientation_tolerance_rad;
     config->minimum_position_improvement_m = 1.0e-8;
     config->minimum_orientation_improvement_rad = 1.0e-8;
-    config->maximum_accepted_hard_violation = kMaximumAcceptedHardViolation;
+    config->maximum_accepted_hard_violation = options.solver.maximum_accepted_hard_violation;
   }
   // A target step changes the scaled-equality columns, so Red starts each 1 ms
   // QP from a neutral guess and requests matching convergence/infeasibility
   // accuracy from the ProxQP adapter.
-  solver_config.red.qp.proxqp.absolute_tolerance = kRedProxQpAbsoluteTolerance;
+  solver_config.red.qp.proxqp.absolute_tolerance = options.solver.red_proxqp_absolute_tolerance;
   solver_config.red.qp.proxqp.warm_start_enabled = false;
 
   mcc::KinematicsSolverBuilder builder;
@@ -677,10 +678,10 @@ int run(int argc, char ** argv, std::string & normal_exit_detail)
     builder.configure(model, active_joint_names, solver_config),
     "Failed to configure grouped IK builder");
   GroupedHandles handles;
-  handles.red = addCartesianTasks(builder, mcc::SolverGroup::Red, "red", robot);
+  handles.red = addCartesianTasks(builder, mcc::SolverGroup::Red, "red", robot, options.solver);
   mcc::PostureTaskConfig yellow_posture;
   yellow_posture.name = "yellow-initial-posture";
-  yellow_posture.enforcement = mcc::squaredL2Penalty(kYellowPostureWeight, 1);
+  yellow_posture.enforcement = mcc::squaredL2Penalty(options.solver.yellow_posture_weight, 1);
   yellow_posture.reference_positions = initial_state.positions;
   yellow_posture.role = mcc::PostureTaskRole::Convergence;
   yellow_posture.joint_weight_multipliers =
@@ -694,17 +695,17 @@ int run(int argc, char ** argv, std::string & normal_exit_detail)
   //   handles.yellow_posture), "Failed to register Yellow initial-posture
   //   task");
   mcc::SelfCollisionAvoidanceConfig collision_config;
-  collision_config.minimum_distance_m = kMinimumCollisionDistanceM;
-  collision_config.influence_distance_m = kCollisionInfluenceDistanceM;
-  collision_config.damping_gain_per_s = kCollisionDampingGainPerS;
-  collision_config.weight = kCollisionWeight;
+  collision_config.minimum_distance_m = options.solver.minimum_collision_distance_m;
+  collision_config.influence_distance_m = options.solver.collision_influence_distance_m;
+  collision_config.damping_gain_per_s = options.solver.collision_damping_gain_per_s;
+  collision_config.weight = options.solver.collision_weight;
   requireOk(
     builder.addSelfCollisionAvoidance(
       mcc::SolverGroup::Yellow, collision_model, collision_config, handles.yellow_collision),
     "Failed to register Yellow self-collision avoidance");
-  addPositionLimits(builder, mcc::SolverGroup::Red);
-  addVelocityLimits(builder, mcc::SolverGroup::Red);
-  addPositionLimits(builder, mcc::SolverGroup::Yellow);
+  addPositionLimits(builder, mcc::SolverGroup::Red, options.solver);
+  addVelocityLimits(builder, mcc::SolverGroup::Red, options.solver);
+  addPositionLimits(builder, mcc::SolverGroup::Yellow, options.solver);
 
   mcc::GroupedKinematicsSolver solver;
   requireOk(builder.finalize(solver), "Failed to finalize grouped IK solver");
@@ -727,7 +728,7 @@ int run(int argc, char ** argv, std::string & normal_exit_detail)
   TargetSnapshot initial_target = warmup_target;
   initial_target.revision = 1;
   if (loaded_replay.has_value()) {
-    const auto & first = loaded_replay->timeline.timeline.at(0);
+    const auto & first = replay_source->sourceFrame();
     initial_target.left = first.value.left.pose * robot.left_tcp_offset.inverse();
     initial_target.right = first.value.right.pose * robot.right_tcp_offset.inverse();
   }
@@ -758,7 +759,8 @@ int run(int argc, char ** argv, std::string & normal_exit_detail)
     requireOk(
       solver.getSelfCollisionDiagnostics(handles.yellow_collision, initial_collision_diagnostics),
       "Failed to query Yellow self-collision diagnostics after warm-up");
-    fillSelfCollisionDebug(initial_state, initial_collision_diagnostics, initial_collision_debug);
+    fillSelfCollisionDebug(
+      initial_state, initial_collision_diagnostics, options.solver, initial_collision_debug);
     initial_yellow_solver_debug =
       mcl::makeSolverDebug("Yellow", diagnostics, solution.kinematics_solution.disposition);
 
@@ -803,14 +805,20 @@ int run(int argc, char ** argv, std::string & normal_exit_detail)
   yellow_solver_to_ui.publish(initial_yellow_solver_debug);
 
   const auto presentation = mcl::makeArmPresentation(robot, mcl::foxgloveIkVisualizationChannels());
-  mcl::TuiConsole tui(
-    options.tui, options.ui_rate_hz, kTitle, presentation,
-    {{mcl::ArmSide::Left, initial_target.left}, {mcl::ArmSide::Right, initial_target.right}}, true,
-    options.tui_enabled,
-    launch.source_mode == SourceMode::Replay ? mcl::TuiControlMode::Replay
-                                             : mcl::TuiControlMode::Teleop);
+  const bool terminal_input_enabled =
+    launch.source_mode == SourceMode::Teleop ||
+    (launch.replay.has_value() && launch.replay->terminal_input_enabled);
+  mcl::TerminalFrontend terminal({terminal_input_enabled, options.tui_enabled});
+  mcl::KeyboardTargetSource input(
+    terminal,
+    launch.source_mode == SourceMode::Replay
+      ? mcl::KeyboardSourceMode::Replay
+      : mcl::KeyboardSourceMode::Teleop,
+    options.tui,
+    {{mcl::ArmSide::Left, initial_target.left}, {mcl::ArmSide::Right, initial_target.right}}, true);
+  mcl::TuiRenderer tui(options.tui_enabled);
   if (launch.source_mode == SourceMode::Replay) {
-    tui.setMotionInputEnabled(false, "Replay motion editing is disabled");
+    input.setMotionInputEnabled(false, "Replay motion editing is disabled");
   }
   auto visualization_sink = mcl::createPreviewSink(options.visualization, kProgramId);
 
@@ -826,8 +834,6 @@ int run(int argc, char ** argv, std::string & normal_exit_detail)
   std::size_t replay_accepted_solve_count = 0;
   std::size_t replay_rejected_solve_count = 0;
   std::atomic<std::uint64_t> replay_last_consumed_revision{0};
-  std::atomic<std::size_t> replay_consumed_frame_count{0};
-  std::atomic<std::size_t> replay_dropped_frame_count{0};
   replay_trace << "attempt,source_revision,original_logical_timestamp_ns,"
                   "source_time_from_start_ns,"
                   "projected_timestamp_ns,left_header_stamp_ns,left_log_time_"
@@ -837,7 +843,7 @@ int run(int argc, char ** argv, std::string & normal_exit_detail)
                   "solve_time_ms,maximum_hard_violation,positions,velocities\n";
 
   visualization_sink->open();
-  mcl::installInteractiveSignalHandlers();
+  mcl::installRuntimeSignalHandlers();
 
   workers.yellow = std::thread([&]() {
     const auto affinity_binding =
@@ -864,7 +870,7 @@ int run(int argc, char ** argv, std::string & normal_exit_detail)
           requireOk(
             solver.getSelfCollisionDiagnostics(handles.yellow_collision, collision_diagnostics),
             "Failed to query accepted Yellow self-collision diagnostics");
-          fillSelfCollisionDebug(state, collision_diagnostics, collision_debug);
+          fillSelfCollisionDebug(state, collision_diagnostics, options.solver, collision_debug);
           collision_to_ui.publish(collision_debug);
         }
         mcl::updateSolverDebug(
@@ -896,13 +902,7 @@ int run(int argc, char ** argv, std::string & normal_exit_detail)
       {mcl::WorkerGroup::Red, options.red_rate_hz, options.deadline_policy}, stop_controller, fault,
       red_worker_diagnostics, [&](double, std::int64_t sample_time_ns) {
         if (target_to_red.readLatest(target) && loaded_replay.has_value()) {
-          const std::uint64_t previous_revision =
-            replay_last_consumed_revision.exchange(target.revision);
-          ++replay_consumed_frame_count;
-          if (previous_revision > 0U && target.revision > previous_revision + 1U) {
-            replay_dropped_frame_count +=
-              static_cast<std::size_t>(target.revision - previous_revision - 1U);
-          }
+          replay_last_consumed_revision.store(target.revision);
         }
         if (rejected_target_revision.has_value() && target.revision == *rejected_target_revision) {
           return mcl::WorkerIterationResult{
@@ -1000,7 +1000,7 @@ int run(int argc, char ** argv, std::string & normal_exit_detail)
       });
   });
 
-  mcl::InteractiveScheduler ui_scheduler({options.ui_rate_hz, options.duration_s});
+  mcl::SingleRateScheduler ui_scheduler({options.ui_rate_hz, options.duration_s});
   TargetSnapshot published_target = initial_target;
   TargetSnapshot last_command_target = initial_target;
   RedOutputSnapshot latest_output = initial_output;
@@ -1016,10 +1016,6 @@ int run(int argc, char ** argv, std::string & normal_exit_detail)
   std::optional<mcl::IkRuntimeState> last_visualized_runtime_state;
   std::uint64_t last_visualized_rejected_target_revision = 0;
   std::size_t publish_count = 0;
-  std::size_t replay_source_index = 0;
-  std::int64_t replay_timeline_time_ns = 0;
-  auto replay_clock_origin = std::chrono::steady_clock::now();
-  bool replay_clock_was_paused = false;
   bool replay_completed = false;
   mcl::IkDebugFrame frame;
   frame.joint_names = joint_names;
@@ -1058,10 +1054,10 @@ int run(int argc, char ** argv, std::string & normal_exit_detail)
           latest_red_attempt.target.revision == published_target.revision &&
           latest_red_attempt.target.revision != handled_rejected_target_revision) {
           handled_rejected_target_revision = latest_red_attempt.target.revision;
-          tui.setTargetPose(
+          input.setTargetPose(
             mcl::ArmSide::Left, latest_output.accepted_target.left,
             "Restoring last accepted Red target");
-          tui.setTargetPose(
+          input.setTargetPose(
             mcl::ArmSide::Right, latest_output.accepted_target.right,
             "Red target rejected; edit from the last accepted "
             "target to retry");
@@ -1071,7 +1067,7 @@ int run(int argc, char ** argv, std::string & normal_exit_detail)
         latest_red_attempt.state == RedAttemptState::Accepted && rejected_target.has_value() &&
         latest_red_attempt.target.revision > rejected_target->revision) {
         rejected_target.reset();
-        tui.setStatus("Red accepted the new target; grouped IK resumed");
+        input.setStatus("Red accepted the new target; grouped IK resumed");
       } else if (latest_red_attempt.state == RedAttemptState::FatalRejected) {
         rejected_target = mcl::RejectedTargetDebug{
           latest_red_attempt.target.revision, armTargets(latest_red_attempt.target),
@@ -1083,92 +1079,65 @@ int run(int argc, char ** argv, std::string & normal_exit_detail)
       if (const auto recorded_fault = fault.snapshot()) {
         held_fault = *recorded_fault;
         workers.join();
-        tui.setMotionInputEnabled(
+        input.setMotionInputEnabled(
           false, std::string{"FAULT HOLD: "} + mcl::workerGroupName(recorded_fault->group) + " " +
                    mcl::workerFailureName(recorded_fault->failure));
       }
     }
 
-    tui.poll();
+    const auto input_update = input.poll(schedule->dt);
+    for (const auto & event : input_update.navigation) {
+      tui.handleNavigation(event);
+    }
     if (!held_fault.has_value()) {
-      if (const auto reset_side = tui.consumeResetRequest()) {
-        tui.setTargetPose(
+      if (const auto reset_side = input.consumeResetRequest()) {
+        input.setTargetPose(
           *reset_side,
           *reset_side == mcl::ArmSide::Left ? latest_output.left_pose : latest_output.right_pose,
           std::string{"Reset "} + mcl::armSideName(*reset_side) + " target from latest Red output");
       }
     }
-    const auto & command = tui.command();
-    if (command.stop_requested) {
+    if (input.stopRequested()) {
       break;
     }
 
     if (launch.source_mode == SourceMode::Replay && !held_fault.has_value()) {
-      const bool single_step = tui.consumeSingleStepRequest();
-      std::size_t next_index = replay_source_index;
-      if (single_step) {
-        if (next_index + 1U < loaded_replay->timeline.timeline.size()) {
-          ++next_index;
-          replay_timeline_time_ns =
-            loaded_replay->timeline.timeline.at(next_index).projected_time_ns;
-        }
-        if (launch.replay->execution_mode == mcl::data::ExecutionMode::Realtime) {
-          replay_clock_was_paused = true;
-        }
-      } else if (launch.replay->execution_mode == mcl::data::ExecutionMode::Batch) {
-        if (
-          !command.paused && next_index + 1U < loaded_replay->timeline.timeline.size() &&
-          replay_last_consumed_revision.load() >= published_target.revision) {
-          ++next_index;
-        }
-      } else if (command.paused) {
-        if (!replay_clock_was_paused) {
-          const auto elapsed = std::chrono::steady_clock::now() - replay_clock_origin;
-          replay_timeline_time_ns = static_cast<std::int64_t>(std::llround(
-            std::chrono::duration<double>(elapsed).count() * 1.0e9 * launch.replay->playback_rate));
-        }
-        replay_clock_was_paused = true;
-      } else {
-        if (replay_clock_was_paused) {
-          const auto replay_elapsed = std::chrono::duration<double>(
-            static_cast<double>(replay_timeline_time_ns) / (1.0e9 * launch.replay->playback_rate));
-          replay_clock_origin =
-            std::chrono::steady_clock::now() -
-            std::chrono::duration_cast<std::chrono::steady_clock::duration>(replay_elapsed);
-          replay_clock_was_paused = false;
-        }
-        const auto elapsed = std::chrono::steady_clock::now() - replay_clock_origin;
-        replay_timeline_time_ns = static_cast<std::int64_t>(std::llround(
-          std::chrono::duration<double>(elapsed).count() * 1.0e9 * launch.replay->playback_rate));
-        while (next_index + 1U < loaded_replay->timeline.timeline.size() &&
-               loaded_replay->timeline.timeline.at(next_index + 1U).projected_time_ns <=
-                 replay_timeline_time_ns) {
-          ++next_index;
-        }
+      for (const auto control : input.consumeSourceControls()) {
+        replay_source->applyControl(control);
       }
-      if (next_index > replay_source_index) {
-        replay_source_index = next_index;
-        const auto & source = loaded_replay->timeline.timeline.at(replay_source_index);
+      const bool worker_consumed_current =
+        replay_last_consumed_revision.load() >= published_target.revision;
+      const bool may_advance =
+        launch.replay->execution_mode == mcl::data::ExecutionMode::Realtime ||
+        worker_consumed_current;
+      const auto advance = may_advance
+        ? replay_source->advance(
+            static_cast<std::int64_t>(std::llround(1.0e9 / options.ui_rate_hz)))
+        : replay::ReplayAdvance{};
+      replay_source->waitForCurrentFrame();
+      input.setPaused(replay_source->paused(), replay_source->status().detail);
+      if (advance.frame_changed) {
+        const auto & source = replay_source->sourceFrame();
         published_target.revision = source.sequence + 1U;
         published_target.left = source.value.left.pose * robot.left_tcp_offset.inverse();
         published_target.right = source.value.right.pose * robot.right_tcp_offset.inverse();
         last_command_target = published_target;
         target_to_red.publish(published_target);
-        tui.setTargetPose(mcl::ArmSide::Left, published_target.left, "Replay goal advanced");
-        tui.setTargetPose(mcl::ArmSide::Right, published_target.right, "Replay goal advanced");
+        input.setTargetPose(mcl::ArmSide::Left, published_target.left, "Replay goal advanced");
+        input.setTargetPose(mcl::ArmSide::Right, published_target.right, "Replay goal advanced");
       }
     }
 
     if (schedule->update_due) {
       if (
-        launch.source_mode == SourceMode::Teleop && !held_fault.has_value() && !command.paused &&
-        !sameTargetPoses(last_command_target, command.targets)) {
-        published_target = targetSnapshot(command.targets, published_target.revision + 1);
+        launch.source_mode == SourceMode::Teleop && !held_fault.has_value() && !input.paused() &&
+        !sameTargetPoses(last_command_target, input.targets())) {
+        published_target = targetSnapshot(input.targets(), published_target.revision + 1);
         last_command_target = published_target;
         target_to_red.publish(published_target);
       }
 
-      frame.targets = command.targets;
+      frame.targets = input.targets();
       frame.forward_kinematics = {
         {mcl::ArmSide::Left, latest_output.left_pose},
         {mcl::ArmSide::Right, latest_output.right_pose}};
@@ -1235,8 +1204,8 @@ int run(int argc, char ** argv, std::string & normal_exit_detail)
          latest_output.right_orientation_error_rad}};
       frame.self_collisions = {latest_collision_debug};
       frame.rejected_target = rejected_target;
-      frame.paused = command.paused;
-      frame.selected_side = command.selected_side;
+      frame.paused = input.paused();
+      frame.selected_side = input.selectedSide();
 
       const std::uint64_t rejected_revision =
         rejected_target.has_value() ? rejected_target->revision : 0;
@@ -1251,14 +1220,18 @@ int run(int argc, char ** argv, std::string & normal_exit_detail)
         last_visualized_rejected_target_revision = rejected_revision;
         ++publish_count;
       }
-      tui.render(frame, publish_count, visualization_sink->status());
+      tui.render(mcl::makeStandardIkTuiDocument(
+        frame, presentation, publish_count, visualization_sink->status(), kTitle,
+        input.status()));
 
       if (
         launch.source_mode == SourceMode::Replay &&
-        replay_source_index + 1U == loaded_replay->timeline.timeline.size() &&
         latest_output.accepted_target.revision == published_target.revision) {
-        replay_completed = true;
-        break;
+        replay_source->markFrameProcessed();
+        if (replay_source->endOfStream()) {
+          replay_completed = true;
+          break;
+        }
       }
     }
     if (
@@ -1289,11 +1262,22 @@ int run(int argc, char ** argv, std::string & normal_exit_detail)
     execution.backend = "proxqp";
     execution.red_rate_hz = options.red_rate_hz;
     execution.yellow_rate_hz = options.yellow_rate_hz;
-    execution.consumed_frame_count = replay_consumed_frame_count.load();
-    execution.dropped_frame_count = replay_dropped_frame_count.load();
+    execution.consumed_frame_count = replay_source->consumedFrameCount();
+    execution.dropped_frame_count = replay_source->droppedFrameCount();
     execution.accepted_count = replay_accepted_solve_count;
     execution.rejected_count = replay_rejected_solve_count;
-    execution.deadline_miss_count = red_stats.deadline_miss_count;
+    execution.deadline_miss_count =
+      red_stats.deadline_miss_count + replay_source->deadlineMissCount();
+    execution.resolved_config = {
+      {"regularization", std::to_string(options.solver.regularization)},
+      {"maximum_hard_violation", std::to_string(options.solver.maximum_accepted_hard_violation)},
+      {"cartesian_progress_weight", std::to_string(options.solver.cartesian_progress_weight)},
+      {"red_proxqp_absolute_tolerance", std::to_string(options.solver.red_proxqp_absolute_tolerance)},
+      {"yellow_to_red_coupling_weight", std::to_string(options.solver.yellow_to_red_coupling_weight)},
+      {"minimum_collision_distance_m", std::to_string(options.solver.minimum_collision_distance_m)},
+      {"collision_influence_distance_m", std::to_string(options.solver.collision_influence_distance_m)},
+      {"collision_weight", std::to_string(options.solver.collision_weight)},
+    };
     const auto manifest = replay::makeReplayManifest(
       *launch.replay, *loaded_replay, execution, mcl::sha256_file(trace_path));
     replay::writeTextFile(launch.replay->output_dir / "manifest.json", jsonText(manifest));

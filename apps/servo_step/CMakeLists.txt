@@ -1,7 +1,20 @@
-add_executable(mcl_servo_step main.cpp app_options.cpp)
-set_target_properties(
-  mcl_servo_step
-  PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}"
+mcl_add_app(
+  TARGET mcl_servo_step
+  SOURCES main.cpp app_options.cpp diagnostics_projection.cpp
+  LIBRARIES
+    motion_control_lab::cpu_affinity
+    motion_control_lab::app_helpers
+    motion_control_lab::r1_robot_config
+    motion_control_core::motion_control_core
+    motion_control_lab::scheduler
+    motion_control_lab::keyboard_input
+    motion_control_lab::standard_ik_tui
+    motion_control_lab::tui
+    motion_control_lab::preview_transport
+    motion_control_lab::preview_projection
+    motion_control_lab::replay
+    motion_control_lab::run_artifacts
+    libplaco
 )
 if(APPLE)
   set_property(
@@ -18,23 +31,6 @@ else()
     PRIVATE "LINKER:--disable-new-dtags"
   )
 endif()
-target_link_libraries(
-  mcl_servo_step
-  PRIVATE
-    motion_control_lab::cpu_affinity
-    motion_control_lab::app_common
-    motion_control_core::motion_control_core
-    motion_control_lab::interactive_runtime
-    motion_control_lab::preview_transport
-    motion_control_lab::ik_preview
-    motion_control_lab::replay_support
-    libplaco
-)
-install(
-  TARGETS mcl_servo_step
-  RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
-)
-
 if(BUILD_TESTING)
   add_executable(
     test_servo_step_app_options
@@ -44,8 +40,9 @@ if(BUILD_TESTING)
   target_link_libraries(
     test_servo_step_app_options
     PRIVATE
-      motion_control_lab::interactive_runtime
-      motion_control_lab::replay_support
+      motion_control_lab::input_contract
+      motion_control_lab::replay
+      motion_control_lab::tui
       motion_control_lab::r1_robot_config
   )
   add_test(
@@ -53,11 +50,4 @@ if(BUILD_TESTING)
     COMMAND test_servo_step_app_options
   )
 
-  add_test(
-    NAME apps.mcl_servo_step_help
-    COMMAND
-      "${CMAKE_COMMAND}"
-      "-DAPP=$<TARGET_FILE:mcl_servo_step>"
-      -P "${PROJECT_SOURCE_DIR}/tests/check_app_help.cmake"
-  )
 endif()

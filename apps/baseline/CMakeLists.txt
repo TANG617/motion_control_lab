@@ -10,15 +10,27 @@ target_include_directories(
 target_link_libraries(
   mcl_baseline_runtime
   PUBLIC
-    motion_control_lab::interactive_runtime
+    motion_control_lab::presentation_contract
     libplaco
     jsoncpp_lib
 )
 
-add_executable(mcl_baseline main.cpp app_options.cpp)
-set_target_properties(
-  mcl_baseline
-  PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}"
+mcl_add_app(
+  TARGET mcl_baseline
+  SOURCES main.cpp app_options.cpp
+  LIBRARIES
+    mcl_baseline_runtime
+    motion_control_lab::cpu_affinity
+    motion_control_lab::app_helpers
+    motion_control_lab::r1_robot_config
+    motion_control_lab::scheduler
+    motion_control_lab::keyboard_input
+    motion_control_lab::standard_ik_tui
+    motion_control_lab::tui
+    motion_control_lab::preview_transport
+    motion_control_lab::preview_projection
+    motion_control_lab::replay
+    motion_control_lab::run_artifacts
 )
 if(APPLE)
   set_property(
@@ -35,22 +47,6 @@ else()
     PRIVATE "LINKER:--disable-new-dtags"
   )
 endif()
-target_link_libraries(
-  mcl_baseline
-  PRIVATE
-    mcl_baseline_runtime
-    motion_control_lab::cpu_affinity
-    motion_control_lab::app_common
-    motion_control_lab::preview_transport
-    motion_control_lab::ik_preview
-    motion_control_lab::replay_support
-    motion_control_lab::run_artifacts
-)
-install(
-  TARGETS mcl_baseline
-  RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
-)
-
 if(BUILD_TESTING)
   find_package(Python3 REQUIRED COMPONENTS Interpreter)
   set(MCL_BASELINE_TEST_MODEL "/workspace/models/r1.cos.urdf")
@@ -63,7 +59,8 @@ if(BUILD_TESTING)
     test_baseline_app_options
     PRIVATE
       mcl_baseline_runtime
-      motion_control_lab::replay_support
+      motion_control_lab::replay
+      motion_control_lab::tui
       motion_control_lab::r1_robot_config
   )
   add_test(
@@ -71,13 +68,6 @@ if(BUILD_TESTING)
     COMMAND test_baseline_app_options
   )
 
-  add_test(
-    NAME apps.mcl_baseline_help
-    COMMAND
-      "${CMAKE_COMMAND}"
-      "-DAPP=$<TARGET_FILE:mcl_baseline>"
-      -P "${PROJECT_SOURCE_DIR}/tests/check_app_help.cmake"
-  )
   add_test(
     NAME apps.mcl_baseline_subcommands
     COMMAND
@@ -97,6 +87,19 @@ if(BUILD_TESTING)
   add_test(
     NAME apps.mcl_baseline_config_contract
     COMMAND test_baseline_config_contract
+  )
+
+  add_executable(
+    test_baseline_tui_projection
+    tests/tui_projection.cpp
+  )
+  target_link_libraries(
+    test_baseline_tui_projection
+    PRIVATE motion_control_lab::standard_ik_tui
+  )
+  add_test(
+    NAME apps.mcl_baseline_tui_projection
+    COMMAND test_baseline_tui_projection
   )
 
   add_executable(
@@ -136,19 +139,21 @@ if(BUILD_TESTING)
         "LD_LIBRARY_PATH=path_list_prepend:$<TARGET_FILE_DIR:libplaco>"
   )
 
-  add_test(
-    NAME apps.mcl_baseline_teleop_pty
-    COMMAND
-      "${Python3_EXECUTABLE}"
-      "${CMAKE_CURRENT_SOURCE_DIR}/tests/run_baseline_pty.py"
-      "$<TARGET_FILE:mcl_baseline>"
-      "${MCL_BASELINE_TEST_MODEL}"
-  )
-  set_tests_properties(
-    apps.mcl_baseline_teleop_pty
-    PROPERTIES
-      TIMEOUT 20
-      ENVIRONMENT_MODIFICATION
-        "LD_LIBRARY_PATH=path_list_prepend:$<TARGET_FILE_DIR:libplaco>"
-  )
+  if(MCL_ENABLE_TUI)
+    add_test(
+      NAME apps.mcl_baseline_teleop_pty
+      COMMAND
+        "${Python3_EXECUTABLE}"
+        "${CMAKE_CURRENT_SOURCE_DIR}/tests/run_baseline_pty.py"
+        "$<TARGET_FILE:mcl_baseline>"
+        "${MCL_BASELINE_TEST_MODEL}"
+    )
+    set_tests_properties(
+      apps.mcl_baseline_teleop_pty
+      PROPERTIES
+        TIMEOUT 20
+        ENVIRONMENT_MODIFICATION
+          "LD_LIBRARY_PATH=path_list_prepend:$<TARGET_FILE_DIR:libplaco>"
+    )
+  endif()
 endif()

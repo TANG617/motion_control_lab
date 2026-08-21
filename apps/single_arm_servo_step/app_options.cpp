@@ -7,8 +7,8 @@
 #include <stdexcept>
 #include <string>
 
-#include "console/tui_help.hpp"
-#include "r1_robot_config.hpp"
+#include "components/robot/r1/r1_robot_config.hpp"
+#include "components/tui/tui_help.hpp"
 
 namespace motion_control_lab::single_arm_servo_step {
 namespace {
@@ -25,6 +25,14 @@ double parsePositiveDouble(const std::string &name, const std::string &value) {
   const double parsed = std::stod(value);
   if (parsed <= 0.0 || !std::isfinite(parsed)) {
     throw std::runtime_error(name + " must be a positive finite value");
+  }
+  return parsed;
+}
+
+double parseNonnegativeDouble(const std::string &name, const std::string &value) {
+  const double parsed = std::stod(value);
+  if (parsed < 0.0 || !std::isfinite(parsed)) {
+    throw std::runtime_error(name + " must be a finite non-negative value");
   }
   return parsed;
 }
@@ -66,6 +74,7 @@ void printUsage(const char *program) {
       << "  --rate <hz>         IK and publish rate in Hz (default: "
       << defaults.rate_hz << ")\n"
       << "  --ui <tui|none>     User interface mode (default: tui)\n"
+      << "  --viz <foxglove|none> Visualization transport (default: foxglove)\n"
       << "  --duration <sec>    Stop after seconds; 0 runs until Ctrl-C "
          "(default: "
       << defaults.duration_s << ")\n"
@@ -77,6 +86,16 @@ void printUsage(const char *program) {
       << defaults.tui.max_step_m << ")\n"
       << "  --rotation-step-deg <deg> TCP local-axis rotation step (default: "
       << defaults.tui.rotation_step_deg << ")\n"
+      << "  --regularization <value> QP regularization (default: "
+      << defaults.regularization << ")\n"
+      << "  --maximum-iterations <count> Servo solver iterations (default: "
+      << defaults.maximum_iterations << ")\n"
+      << "  --position-tolerance-m <value> Position tolerance (default: "
+      << defaults.position_tolerance_m << ")\n"
+      << "  --orientation-tolerance-rad <value> Orientation tolerance (default: "
+      << defaults.orientation_tolerance_rad << ")\n"
+      << "  --joint-position-margin-rad <value> Joint limit margin (default: "
+      << defaults.joint_position_margin_rad << ")\n"
       << "  --mcap <path>       Write MCAP output to path when Foxglove is "
          "enabled\n"
       << "  --no-mcap           Disable MCAP output (default)\n"
@@ -119,6 +138,15 @@ AppOptions parseAppOptions(int argc, char **argv) {
       } else {
         throw std::runtime_error("ui must be either 'tui' or 'none'");
       }
+    } else if (argument == "--viz") {
+      const auto value = requireValue(index, argc, argv, argument);
+      if (value == "foxglove") {
+        options.visualization.enabled = true;
+      } else if (value == "none") {
+        options.visualization.enabled = false;
+      } else {
+        throw std::runtime_error("viz must be either 'foxglove' or 'none'");
+      }
     } else if (argument == "--duration") {
       options.duration_s = std::stod(requireValue(index, argc, argv, argument));
       if (options.duration_s < 0.0 || !std::isfinite(options.duration_s)) {
@@ -136,6 +164,23 @@ AppOptions parseAppOptions(int argc, char **argv) {
     } else if (argument == "--rotation-step-deg") {
       options.tui.rotation_step_deg = parsePositiveDouble(
           "rotation step", requireValue(index, argc, argv, argument));
+    } else if (argument == "--regularization") {
+      options.regularization = parsePositiveDouble(
+          "regularization", requireValue(index, argc, argv, argument));
+    } else if (argument == "--maximum-iterations") {
+      options.maximum_iterations = std::stoi(requireValue(index, argc, argv, argument));
+      if (options.maximum_iterations <= 0) {
+        throw std::runtime_error("maximum iterations must be positive");
+      }
+    } else if (argument == "--position-tolerance-m") {
+      options.position_tolerance_m = parsePositiveDouble(
+          "position tolerance", requireValue(index, argc, argv, argument));
+    } else if (argument == "--orientation-tolerance-rad") {
+      options.orientation_tolerance_rad = parsePositiveDouble(
+          "orientation tolerance", requireValue(index, argc, argv, argument));
+    } else if (argument == "--joint-position-margin-rad") {
+      options.joint_position_margin_rad = parseNonnegativeDouble(
+          "joint position margin", requireValue(index, argc, argv, argument));
     } else if (argument == "--mcap") {
       options.visualization.mcap_path =
           std::filesystem::path{requireValue(index, argc, argv, argument)};

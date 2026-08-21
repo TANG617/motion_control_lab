@@ -26,11 +26,14 @@ int main() {
   char yellow[] = "40";
   char ui_option[] = "--ui";
   char ui[] = "none";
+  char collision_option[] = "--collision-weight";
+  char collision[] = "12";
   char *custom_argv[]{program,       urdf_option, urdf,      red_option, red,
-                      yellow_option, yellow,      ui_option, ui};
-  const auto custom = app::parseGroupedOptions(9, custom_argv);
+                      yellow_option, yellow,      ui_option, ui,
+                      collision_option, collision};
+  const auto custom = app::parseGroupedOptions(11, custom_argv);
   if (custom.red_rate_hz != 200.0 || custom.yellow_rate_hz != 40.0 ||
-      custom.tui_enabled) {
+      custom.tui_enabled || custom.solver.collision_weight != 12.0) {
     return EXIT_FAILURE;
   }
 

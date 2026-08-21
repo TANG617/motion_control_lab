@@ -26,12 +26,16 @@ int main() {
   char yellow[] = "80";
   char policy_option[] = "--deadline-policy";
   char policy[] = "monitor";
+  char regularization_option[] = "--regularization";
+  char regularization[] = "2e-4";
   char *custom_argv[]{program,    urdf_option,   urdf,
                       red_option, red,           yellow_option,
-                      yellow,     policy_option, policy};
-  const auto custom = app::parseGroupedOptions(9, custom_argv);
+                      yellow,     policy_option, policy, regularization_option,
+                      regularization};
+  const auto custom = app::parseGroupedOptions(11, custom_argv);
   if (custom.red_rate_hz != 800.0 || custom.yellow_rate_hz != 80.0 ||
-      custom.deadline_policy != motion_control_lab::DeadlinePolicy::Monitor) {
+      custom.deadline_policy != motion_control_lab::DeadlinePolicy::Monitor ||
+      custom.solver.regularization != 2.0e-4) {
     return EXIT_FAILURE;
   }
 

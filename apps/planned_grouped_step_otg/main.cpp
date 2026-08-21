@@ -26,23 +26,25 @@
 
 #include "adapters/replay/replay_support.hpp"
 #include "app_options.hpp"
-#include "console/tui_console.hpp"
-#include "cpu_affinity.hpp"
-#include "ik_app_utils.hpp"
+#include "components/app_helpers/app_helpers.hpp"
+#include "components/replay/replay_source.hpp"
+#include "components/robot/r1/r1_robot_config.hpp"
+#include "components/scheduler/grouped_worker.hpp"
+#include "components/scheduler/latest_value_mailbox.hpp"
+#include "components/scheduler/rolling_percentiles.hpp"
+#include "components/scheduler/single_rate_scheduler.hpp"
+#include "components/teleop/keyboard/keyboard_target_source.hpp"
+#include "components/tui/tui_renderer.hpp"
+#include "components/visualization/preview_projection.hpp"
+#include "components/visualization/preview_transport.hpp"
+#include "contracts/presentation/ik_app_snapshot.hpp"
+#include "diagnostics_projection.hpp"
 #include "joint_target_processing.hpp"
 #include "motion_control_lab/run_artifacts.hpp"
 #include "motion_control_lab/sha256.hpp"
 #include "planning_request_visualization.hpp"
-#include "r1_interactive_config.hpp"
-#include "r1_robot_config.hpp"
 #include "retarget_state_clamp.hpp"
-#include "runtime/grouped_worker.hpp"
-#include "runtime/interactive_scheduler.hpp"
-#include "runtime/interactive_types.hpp"
-#include "runtime/latest_value_mailbox.hpp"
-#include "runtime/rolling_percentiles.hpp"
-#include "sinks/ik_render_batch.hpp"
-#include "sinks/preview_sink_factory.hpp"
+#include "tui_projection.hpp"
 
 namespace
 {
@@ -51,9 +53,9 @@ namespace mcc = motion_control::core;
 namespace mcl = motion_control_lab;
 namespace replay = motion_control_lab::replay;
 
+using mcl::planned_grouped_step_otg::parsePlannedOptions;
 using mcl::planned_grouped_step_otg::PlanningLimitOptions;
 using mcl::planned_grouped_step_otg::SourceMode;
-using mcl::planned_grouped_step_otg::parsePlannedOptions;
 
 using mcl::toEigen;
 using mcl::toStdVector;
@@ -63,24 +65,12 @@ constexpr const char * kTitle = "Motion Control Planned Grouped Step OTG";
 constexpr std::array<unsigned int, 1> kUiCpuAffinity{5};
 constexpr std::array<unsigned int, 1> kRedCpuAffinity{6};
 constexpr std::array<unsigned int, 1> kYellowCpuAffinity{7};
-constexpr double kMaximumAcceptedHardViolation = 5.0e-4;
-constexpr double kJointPositionLimitMarginRad = 1.0e-2;
-constexpr double kCartesianProgressWeight = 100.0;
-constexpr double kRedProxQpAbsoluteTolerance = 2.0e-5;
-constexpr double kRedProxQpPrimalInfeasibilityTolerance = 1.0e-12;
-constexpr double kYellowPostureWeight = 1.0;
 constexpr double kDefaultPostureJointWeightMultiplier = 1.0e-3;
 constexpr double kArmJoint4PostureWeightMultiplier = 1.0e-1;
-constexpr double kYellowToRedCouplingWeight = 1.0;
-constexpr double kMinimumCollisionDistanceM = 0.1;
-constexpr double kCollisionInfluenceDistanceM = 0.15;
-constexpr double kCollisionDampingGainPerS = 2.0;
-constexpr double kCollisionWeight = 10.0;
 constexpr std::array<double, 20> kRedMaximumJointAccelerationsRadPerS2{
-  6.0,  6.0,  6.0,  4.0,   4.0,   4.0,   10.10, 10.10, 12.42, 12.48,
-  16.2, 16.2, 16.2, 10.10, 10.10, 12.42, 12.48, 16.2,  16.2,  16.2};
-constexpr std::array<std::string_view, 2> kWaistJointNames{
-  "knee_pitch_joint", "ankle_pitch_joint"};
+    6.0,  6.0,  6.0,  4.0,   4.0,   4.0,   10.10, 10.10, 12.42, 12.48,
+    16.2, 16.2, 16.2, 10.10, 10.10, 12.42, 12.48, 16.2,  16.2,  16.2};
+constexpr std::array<std::string_view, 2> kWaistJointNames{"knee_pitch_joint", "ankle_pitch_joint"};
 bool operationSucceeded(const mcc::Status & status) { return status.ok(); }
 
 bool isWaistJoint(const std::string & joint_name)
@@ -96,12 +86,11 @@ void requireOk(const mcc::Status & status, const std::string &)
   }
 }
 
-const mcc::FramePose & requirePose(
-  const std::vector<mcc::FramePose> & poses, const std::string & frame_name)
+const mcc::FramePose & requirePose(const std::vector<mcc::FramePose> & poses,
+                                   const std::string & frame_name)
 {
-  return *std::find_if(poses.begin(), poses.end(), [&](const mcc::FramePose & pose) {
-    return pose.frame_name == frame_name;
-  });
+  return *std::find_if(poses.begin(), poses.end(),
+                       [&](const mcc::FramePose & pose) { return pose.frame_name == frame_name; });
 }
 
 const mcl::ArmTarget & requireTarget(const std::vector<mcl::ArmTarget> & targets, mcl::ArmSide side)
@@ -141,6 +130,7 @@ struct RedOutputSnapshot
   TargetSnapshot source_goal;
   mcc::CartesianTrajectorySample accepted_planner_sample;
   mcc::PlanningState planner_state{mcc::PlanningState::Idle};
+  mcc::PlanningDiagnostics cartesian_plan_diagnostics;
   StateSnapshot state;
   Eigen::VectorXd raw_ik_positions;
   Eigen::VectorXd raw_ik_velocities;
@@ -168,9 +158,11 @@ struct RedOutputSnapshot
   mcl::SolverDebug solver_debug;
 };
 
-mcc::CartesianRetargetRequest makeRetargetRequest(
-  const TargetSnapshot & goal, const mcc::CartesianTrajectorySample & accepted,
-  const mcl::R1RobotConfig & robot, const PlanningLimitOptions & limits, double rate_hz)
+mcc::CartesianRetargetRequest makeRetargetRequest(const TargetSnapshot & goal,
+                                                  const mcc::CartesianTrajectorySample & accepted,
+                                                  const mcl::R1RobotConfig & robot,
+                                                  const PlanningLimitOptions & limits,
+                                                  double rate_hz)
 {
   mcc::CartesianRetargetRequest request;
   request.reference_frame_name = robot.base_frame;
@@ -178,18 +170,18 @@ mcc::CartesianRetargetRequest makeRetargetRequest(
   request.synchronization = mcc::TrajectorySynchronization::Time;
   request.limits.max_linear_velocity = Eigen::Vector3d::Constant(limits.max_linear_velocity_mps);
   request.limits.max_linear_acceleration =
-    Eigen::Vector3d::Constant(limits.max_linear_acceleration_mps2);
+      Eigen::Vector3d::Constant(limits.max_linear_acceleration_mps2);
   request.limits.max_linear_jerk = Eigen::Vector3d::Constant(limits.max_linear_jerk_mps3);
   request.limits.max_rotation_vector_velocity =
-    Eigen::Vector3d::Constant(limits.max_angular_velocity_rps);
+      Eigen::Vector3d::Constant(limits.max_angular_velocity_rps);
   request.limits.max_rotation_vector_acceleration =
-    Eigen::Vector3d::Constant(limits.max_angular_acceleration_rps2);
+      Eigen::Vector3d::Constant(limits.max_angular_acceleration_rps2);
   request.limits.max_rotation_vector_jerk = Eigen::Vector3d::Constant(limits.max_angular_jerk_rps3);
-  request.segments = {
-    {robot.left_end_effector_frame, accepted.frames.at(0).pose, accepted.frames.at(0).twist,
-     accepted.frames.at(0).acceleration, goal.left},
-    {robot.right_end_effector_frame, accepted.frames.at(1).pose, accepted.frames.at(1).twist,
-     accepted.frames.at(1).acceleration, goal.right}};
+  request.segments = {{robot.left_end_effector_frame, accepted.frames.at(0).pose,
+                       accepted.frames.at(0).twist, accepted.frames.at(0).acceleration, goal.left},
+                      {robot.right_end_effector_frame, accepted.frames.at(1).pose,
+                       accepted.frames.at(1).twist, accepted.frames.at(1).acceleration,
+                       goal.right}};
   return request;
 }
 
@@ -211,21 +203,36 @@ struct RedAttemptSnapshot
   std::string detail;
 };
 
-const char * retargetClampComponentName(
-  mcl::planned_grouped_step_otg::RetargetClampComponent component)
+const char *
+retargetClampComponentName(mcl::planned_grouped_step_otg::RetargetClampComponent component)
 {
   using Component = mcl::planned_grouped_step_otg::RetargetClampComponent;
   switch (component) {
-    case Component::LinearVelocity:
-      return "linear_velocity";
-    case Component::AngularVelocity:
-      return "angular_velocity";
-    case Component::LinearAcceleration:
-      return "linear_acceleration";
-    case Component::AngularAcceleration:
-      return "angular_acceleration";
+  case Component::LinearVelocity: return "linear_velocity";
+  case Component::AngularVelocity: return "angular_velocity";
+  case Component::LinearAcceleration: return "linear_acceleration";
+  case Component::AngularAcceleration: return "angular_acceleration";
   }
   return "unknown";
+}
+
+const char * compactJointName(std::size_t index)
+{
+  constexpr std::array<const char *, mcl::planned_grouped_step_otg::kR1JointCount> kNames{
+      "HY", "HP", "TY", "TP", "KP", "AP", "L1", "L2", "L3", "L4",
+      "L5", "L6", "L7", "R1", "R2", "R3", "R4", "R5", "R6", "R7"};
+  return kNames.at(index);
+}
+
+const char * projectionFlag(mcl::planned_grouped_step_otg::ProjectionComponent component)
+{
+  using Component = mcl::planned_grouped_step_otg::ProjectionComponent;
+  switch (component) {
+  case Component::VelocityLimit: return "V";
+  case Component::AccelerationLimit: return "A";
+  case Component::JerkStoppingEnvelope: return "J";
+  }
+  return "?";
 }
 
 std::string retargetClampDetail(const RedAttemptSnapshot & attempt)
@@ -236,8 +243,8 @@ std::string retargetClampDetail(const RedAttemptSnapshot & attempt)
 
   constexpr std::array<const char *, 3> kAxisNames{"x", "y", "z"};
   std::ostringstream detail;
-  detail << std::setprecision(9) << "retarget_clamp revision="
-         << attempt.retarget_clamp_target_revision
+  detail << std::setprecision(9)
+         << "retarget_clamp revision=" << attempt.retarget_clamp_target_revision
          << " components=" << attempt.retarget_clamp.clamped_component_count
          << " max_limit_ratio=" << attempt.retarget_clamp.maximum_limit_ratio;
   for (std::size_t index = 0U; index < attempt.retarget_clamp.clamped_component_count; ++index) {
@@ -270,7 +277,7 @@ struct GroupedHandles
 struct WorkerThreads
 {
   explicit WorkerThreads(mcl::WorkerStopController & stop_controller)
-  : stop_controller(stop_controller)
+      : stop_controller(stop_controller)
   {
   }
 
@@ -300,8 +307,8 @@ struct WorkerThreads
 std::vector<mcl::ArmTarget> armTargets(const TargetSnapshot & target)
 {
   return {
-    {mcl::ArmSide::Left, target.left},
-    {mcl::ArmSide::Right, target.right},
+      {mcl::ArmSide::Left, target.left},
+      {mcl::ArmSide::Right, target.right},
   };
 }
 
@@ -314,16 +321,16 @@ TargetSnapshot targetSnapshot(const std::vector<mcl::ArmTarget> & targets, std::
   return result;
 }
 
-bool sameTargetPoses(
-  const TargetSnapshot & target, const std::vector<mcl::ArmTarget> & command_targets)
+bool sameTargetPoses(const TargetSnapshot & target,
+                     const std::vector<mcl::ArmTarget> & command_targets)
 {
   constexpr double kPoseComparisonTolerance = 1.0e-12;
   return target.left.matrix().isApprox(
-           requireTarget(command_targets, mcl::ArmSide::Left).target_pose.matrix(),
-           kPoseComparisonTolerance) &&
+             requireTarget(command_targets, mcl::ArmSide::Left).target_pose.matrix(),
+             kPoseComparisonTolerance) &&
          target.right.matrix().isApprox(
-           requireTarget(command_targets, mcl::ArmSide::Right).target_pose.matrix(),
-           kPoseComparisonTolerance);
+             requireTarget(command_targets, mcl::ArmSide::Right).target_pose.matrix(),
+             kPoseComparisonTolerance);
 }
 
 std::string faultSummary(const mcl::GroupedWorkerFault & fault)
@@ -346,14 +353,14 @@ std::string failureLayer(const mcl::GroupedWorkerFault & fault)
   if (fault.failure == mcl::WorkerFailureKind::DeadlineMiss) {
     return "scheduler-deadline";
   }
-  const std::array<std::pair<std::string_view, std::string_view>, 7> layers{{
-    {"Cartesian replan", "cartesian-replan"},
-    {"Cartesian planner step", "cartesian-step"},
-    {"joint target projection", "joint-target-projection"},
-    {"JointPlanner plan", "joint-plan"},
-    {"JointPlanner step", "joint-step"},
-    {"OTG execution-state FK", "otg-fk"},
-    {"Red", "red-ik"}}};
+  const std::array<std::pair<std::string_view, std::string_view>, 7> layers{
+      {{"Cartesian replan", "cartesian-replan"},
+       {"Cartesian planner step", "cartesian-step"},
+       {"joint target projection", "joint-target-projection"},
+       {"JointPlanner plan", "joint-plan"},
+       {"JointPlanner step", "joint-step"},
+       {"OTG execution-state FK", "otg-fk"},
+       {"Red", "red-ik"}}};
   for (const auto & layer : layers) {
     if (fault.detail.find(layer.first) != std::string::npos) {
       return std::string{layer.second};
@@ -376,13 +383,11 @@ double maximumAbsolute(const Eigen::VectorXd & values)
 
 std::pair<double, double> poseError(const mcc::Pose & target, const mcc::Pose & actual)
 {
-  return {
-    (target.translation() - actual.translation()).norm(),
-    Eigen::AngleAxisd(target.linear() * actual.linear().transpose()).angle()};
+  return {(target.translation() - actual.translation()).norm(),
+          Eigen::AngleAxisd(target.linear() * actual.linear().transpose()).angle()};
 }
 
-template <typename Derived>
-std::string traceEigenVector(const Eigen::MatrixBase<Derived> & values)
+template <typename Derived> std::string traceEigenVector(const Eigen::MatrixBase<Derived> & values)
 {
   std::ostringstream output;
   output << '"' << std::setprecision(17);
@@ -414,16 +419,15 @@ std::string tracePose(const mcc::Pose & pose)
 {
   const Eigen::Quaterniond orientation(pose.linear());
   std::ostringstream output;
-  output << '"' << std::setprecision(17) << pose.translation().x() << ';'
-         << pose.translation().y() << ';' << pose.translation().z() << ';'
-         << orientation.x() << ';' << orientation.y() << ';' << orientation.z() << ';'
-         << orientation.w() << '"';
+  output << '"' << std::setprecision(17) << pose.translation().x() << ';' << pose.translation().y()
+         << ';' << pose.translation().z() << ';' << orientation.x() << ';' << orientation.y() << ';'
+         << orientation.z() << ';' << orientation.w() << '"';
   return output.str();
 }
 
-std::string traceProjectionEvents(
-  const mcl::planned_grouped_step_otg::ProjectionDiagnostics & diagnostics,
-  const std::vector<std::string> & joint_names)
+std::string
+traceProjectionEvents(const mcl::planned_grouped_step_otg::ProjectionDiagnostics & diagnostics,
+                      const std::vector<std::string> & joint_names)
 {
   std::ostringstream output;
   for (std::size_t index = 0U; index < diagnostics.events.size(); ++index) {
@@ -449,9 +453,8 @@ void appendCsvRow(std::ostringstream & output, const std::vector<std::string> & 
   output << '\n';
 }
 
-void applyReplayInitialState(
-  const replay::LoadedReplay & loaded, const mcl::R1RobotConfig & robot,
-  Eigen::VectorXd & positions, Eigen::VectorXd & velocities)
+void applyReplayInitialState(const replay::LoadedReplay & loaded, const mcl::R1RobotConfig & robot,
+                             Eigen::VectorXd & positions, Eigen::VectorXd & velocities)
 {
   if (!loaded.initial_joint_state.has_value()) {
     return;
@@ -459,12 +462,12 @@ void applyReplayInitialState(
   const auto & source = *loaded.initial_joint_state;
   for (std::size_t index = 0; index < robot.joint_names.size(); ++index) {
     const auto iterator =
-      std::find(source.names.begin(), source.names.end(), robot.joint_names[index]);
+        std::find(source.names.begin(), source.names.end(), robot.joint_names[index]);
     if (iterator == source.names.end()) {
       throw std::runtime_error("initial JointState is missing " + robot.joint_names[index]);
     }
     const std::size_t source_index =
-      static_cast<std::size_t>(std::distance(source.names.begin(), iterator));
+        static_cast<std::size_t>(std::distance(source.names.begin(), iterator));
     positions(static_cast<Eigen::Index>(index)) = source.positions.at(source_index);
     // Replay starts a fresh accepted-state feedback chain; recorded velocity is
     // provenance only.
@@ -482,13 +485,13 @@ mcc::RobotState robotState(const StateSnapshot & state)
 
 mcc::CapturedRobotState capturedState(const StateSnapshot & state)
 {
-  return mcc::CapturedRobotState{
-    robotState(state), state.sequence, state.monotonic_time_nanoseconds};
+  return mcc::CapturedRobotState{robotState(state), state.sequence,
+                                 state.monotonic_time_nanoseconds};
 }
 
-void addCartesianTargets(
-  const CartesianHandles & handles, const mcc::CartesianTrajectorySample & sample,
-  mcc::GroupedInverseKinematicsRequest & request)
+void addCartesianTargets(const CartesianHandles & handles,
+                         const mcc::CartesianTrajectorySample & sample,
+                         mcc::GroupedInverseKinematicsRequest & request)
 {
   const auto & left = sample.frames.at(0);
   const auto & right = sample.frames.at(1);
@@ -506,9 +509,9 @@ void addCartesianTargets(
   request.orientation_targets[1].handle = handles.right_orientation;
 }
 
-void initializeCartesianRequest(
-  const CartesianHandles & handles, const mcc::FrameName & reference_frame_name,
-  mcc::GroupedInverseKinematicsRequest & request)
+void initializeCartesianRequest(const CartesianHandles & handles,
+                                const mcc::FrameName & reference_frame_name,
+                                mcc::GroupedInverseKinematicsRequest & request)
 {
   request.reference_frame_name = reference_frame_name;
   request.position_targets.resize(2);
@@ -526,98 +529,92 @@ std::filesystem::path collisionMeshSearchRoot(const std::filesystem::path & urdf
   return package_root;
 }
 
-mcc::SelfCollisionModelDescription collisionModelDescription(
-  const std::filesystem::path & urdf_path)
+mcc::SelfCollisionModelDescription
+collisionModelDescription(const std::filesystem::path & urdf_path)
 {
   mcc::SelfCollisionModelDescription description;
-  description.link_pairs = {
-    {"left_arm_link4", "body_link4"},
-    {"right_arm_link4", "body_link4"},
-    {"left_arm_link7", "right_arm_link4"},
-    {"right_arm_link7", "left_arm_link4"}};
+  description.link_pairs = {{"left_arm_link4", "body_link4"},
+                            {"right_arm_link4", "body_link4"},
+                            {"left_arm_link7", "right_arm_link4"},
+                            {"right_arm_link7", "left_arm_link4"}};
   description.mesh_search_paths = {collisionMeshSearchRoot(urdf_path).string()};
   return description;
 }
 
-CartesianHandles addCartesianTasks(
-  mcc::KinematicsSolverBuilder & builder, mcc::SolverGroup group, const std::string & prefix,
-  const mcl::R1RobotConfig & robot)
+CartesianHandles addCartesianTasks(mcc::KinematicsSolverBuilder & builder, mcc::SolverGroup group,
+                                   const std::string & prefix, const mcl::R1RobotConfig & robot,
+                                   const mcl::planned_grouped_step_otg::SolverOptions & options)
 {
   CartesianHandles handles;
 
   mcc::TaskScaleGroupConfig scale;
-  scale.progress_weight = kCartesianProgressWeight;
+  scale.progress_weight = options.cartesian_progress_weight;
   scale.name = prefix + "-left-cartesian-progress";
-  requireOk(
-    builder.addTaskScaleGroup(group, scale, handles.left_scale),
-    "Failed to register " + scale.name);
+  requireOk(builder.addTaskScaleGroup(group, scale, handles.left_scale),
+            "Failed to register " + scale.name);
   scale.name = prefix + "-right-cartesian-progress";
-  requireOk(
-    builder.addTaskScaleGroup(group, scale, handles.right_scale),
-    "Failed to register " + scale.name);
+  requireOk(builder.addTaskScaleGroup(group, scale, handles.right_scale),
+            "Failed to register " + scale.name);
 
   mcc::GroupedScaledTaskConfig position;
-  position.enforcement.feasibility_tolerance = kMaximumAcceptedHardViolation;
+  position.enforcement.feasibility_tolerance = options.maximum_accepted_hard_violation;
   position.scale_group = handles.left_scale;
   position.name = prefix + "-left-position";
-  requireOk(
-    builder.addScaledPositionTask(
-      group, robot.left_end_effector_frame, position, handles.left_position),
-    "Failed to register " + position.name);
+  requireOk(builder.addScaledPositionTask(group, robot.left_end_effector_frame, position,
+                                          handles.left_position),
+            "Failed to register " + position.name);
   position.scale_group = handles.right_scale;
   position.name = prefix + "-right-position";
-  requireOk(
-    builder.addScaledPositionTask(
-      group, robot.right_end_effector_frame, position, handles.right_position),
-    "Failed to register " + position.name);
+  requireOk(builder.addScaledPositionTask(group, robot.right_end_effector_frame, position,
+                                          handles.right_position),
+            "Failed to register " + position.name);
 
   mcc::GroupedScaledTaskConfig orientation;
-  orientation.enforcement.feasibility_tolerance = kMaximumAcceptedHardViolation;
+  orientation.enforcement.feasibility_tolerance = options.maximum_accepted_hard_violation;
   orientation.scale_group = handles.left_scale;
   orientation.name = prefix + "-left-orientation";
-  requireOk(
-    builder.addScaledOrientationTask(
-      group, robot.left_end_effector_frame, orientation, handles.left_orientation),
-    "Failed to register " + orientation.name);
+  requireOk(builder.addScaledOrientationTask(group, robot.left_end_effector_frame, orientation,
+                                             handles.left_orientation),
+            "Failed to register " + orientation.name);
   orientation.scale_group = handles.right_scale;
   orientation.name = prefix + "-right-orientation";
-  requireOk(
-    builder.addScaledOrientationTask(
-      group, robot.right_end_effector_frame, orientation, handles.right_orientation),
-    "Failed to register " + orientation.name);
+  requireOk(builder.addScaledOrientationTask(group, robot.right_end_effector_frame, orientation,
+                                             handles.right_orientation),
+            "Failed to register " + orientation.name);
   return handles;
 }
 
-void addPositionLimits(mcc::KinematicsSolverBuilder & builder, mcc::SolverGroup group)
+void addPositionLimits(mcc::KinematicsSolverBuilder & builder, mcc::SolverGroup group,
+                       const mcl::planned_grouped_step_otg::SolverOptions & options)
 {
   mcc::JointPositionLimitConfig position;
-  position.margin = kJointPositionLimitMarginRad;
+  position.margin = options.joint_position_margin_rad;
   position.braking_velocity_envelope_enabled = group == mcc::SolverGroup::Red;
-  position.enforcement = mcc::HardEnforcement{kMaximumAcceptedHardViolation};
+  position.enforcement = mcc::HardEnforcement{options.maximum_accepted_hard_violation};
   mcc::GroupedJointPositionLimitHandle position_handle;
-  requireOk(
-    builder.addJointPositionLimits(group, position, position_handle),
-    "Failed to register grouped joint-position limits");
+  requireOk(builder.addJointPositionLimits(group, position, position_handle),
+            "Failed to register grouped joint-position limits");
 }
 
-void addVelocityLimits(mcc::KinematicsSolverBuilder & builder, mcc::SolverGroup group)
+void addVelocityLimits(mcc::KinematicsSolverBuilder & builder, mcc::SolverGroup group,
+                       const mcl::planned_grouped_step_otg::SolverOptions & options)
 {
   mcc::JointVelocityLimitConfig velocity;
-  velocity.enforcement = mcc::HardEnforcement{kMaximumAcceptedHardViolation};
+  velocity.enforcement = mcc::HardEnforcement{options.maximum_accepted_hard_violation};
   mcc::GroupedJointVelocityLimitHandle velocity_handle;
-  requireOk(
-    builder.addJointVelocityLimits(group, velocity, velocity_handle),
-    "Failed to register grouped joint-velocity limits");
+  requireOk(builder.addJointVelocityLimits(group, velocity, velocity_handle),
+            "Failed to register grouped joint-velocity limits");
 }
 
-void addRedAccelerationLimits(mcc::KinematicsSolverBuilder & builder)
+void addRedAccelerationLimits(mcc::KinematicsSolverBuilder & builder,
+                              const mcl::planned_grouped_step_otg::SolverOptions & options)
 {
   mcc::JointAccelerationLimitConfig acceleration;
-  acceleration.enforcement = mcc::HardEnforcement{kMaximumAcceptedHardViolation};
+  acceleration.enforcement = mcc::HardEnforcement{options.maximum_accepted_hard_violation};
   mcc::GroupedJointAccelerationLimitHandle acceleration_handle;
   requireOk(
-    builder.addJointAccelerationLimits(mcc::SolverGroup::Red, acceleration, acceleration_handle),
-    "Failed to register Red joint-acceleration limits");
+      builder.addJointAccelerationLimits(mcc::SolverGroup::Red, acceleration, acceleration_handle),
+      "Failed to register Red joint-acceleration limits");
 }
 
 std::string statusDetail(const mcc::Status & status)
@@ -625,8 +622,8 @@ std::string statusDetail(const mcc::Status & status)
   return status.message.empty() ? "solver returned a rejected result" : status.message;
 }
 
-const mcc::RequirementDiagnostic * maximumViolatedHardRequirement(
-  const mcc::OptimizationDiagnostics & diagnostics)
+const mcc::RequirementDiagnostic *
+maximumViolatedHardRequirement(const mcc::OptimizationDiagnostics & diagnostics)
 {
   if (diagnostics.maximum_hard_violation <= 0.0) {
     return nullptr;
@@ -640,7 +637,7 @@ const mcc::RequirementDiagnostic * maximumViolatedHardRequirement(
       continue;
     }
     const double distance =
-      std::abs(requirement.maximum_violation - diagnostics.maximum_hard_violation);
+        std::abs(requirement.maximum_violation - diagnostics.maximum_hard_violation);
     if (distance < smallest_distance) {
       smallest_distance = distance;
       result = &requirement;
@@ -649,8 +646,8 @@ const mcc::RequirementDiagnostic * maximumViolatedHardRequirement(
   return result;
 }
 
-std::string rejectedAttemptDetail(
-  const mcc::Status & status, const mcc::GroupedInverseKinematicsDiagnostics & diagnostics)
+std::string rejectedAttemptDetail(const mcc::Status & status,
+                                  const mcc::GroupedInverseKinematicsDiagnostics & diagnostics)
 {
   const auto & kinematics = diagnostics.kinematics;
   const auto & optimization = kinematics.optimization;
@@ -707,13 +704,13 @@ std::string rejectedAttemptDetail(
 
 TaskScaleSnapshot taskScaleSnapshot(const mcc::TaskScaleDiagnostic & diagnostic)
 {
-  return TaskScaleSnapshot{
-    diagnostic.active, diagnostic.scale, diagnostic.degraded, diagnostic.stuck};
+  return TaskScaleSnapshot{diagnostic.active, diagnostic.scale, diagnostic.degraded,
+                           diagnostic.stuck};
 }
 
-void fillRedDiagnostics(
-  const CartesianHandles & handles, const mcc::GroupedInverseKinematicsDiagnostics & diagnostics,
-  RedOutputSnapshot & output)
+void fillRedDiagnostics(const CartesianHandles & handles,
+                        const mcc::GroupedInverseKinematicsDiagnostics & diagnostics,
+                        RedOutputSnapshot & output)
 {
   for (const auto & error : diagnostics.kinematics.position_errors) {
     if (error.handle.value == handles.left_position.value) {
@@ -751,14 +748,10 @@ const char * taskScaleClassification(const TaskScaleSnapshot & scale)
 const char * plannerStateName(mcc::PlanningState state)
 {
   switch (state) {
-    case mcc::PlanningState::Idle:
-      return "idle";
-    case mcc::PlanningState::Planning:
-      return "planning";
-    case mcc::PlanningState::Finished:
-      return "finished";
-    case mcc::PlanningState::Error:
-      return "error";
+  case mcc::PlanningState::Idle: return "idle";
+  case mcc::PlanningState::Planning: return "planning";
+  case mcc::PlanningState::Finished: return "finished";
+  case mcc::PlanningState::Error: return "error";
   }
   return "unknown";
 }
@@ -772,14 +765,15 @@ std::string taskScaleStatus(const RedOutputSnapshot & output)
   return status.str();
 }
 
-void fillSelfCollisionDebug(
-  const StateSnapshot & input_state, const mcc::SelfCollisionDiagnostics & diagnostics,
-  mcl::SelfCollisionDebug & output)
+void fillSelfCollisionDebug(const StateSnapshot & input_state,
+                            const mcc::SelfCollisionDiagnostics & diagnostics,
+                            const mcl::planned_grouped_step_otg::SolverOptions & options,
+                            mcl::SelfCollisionDebug & output)
 {
   output.label = "Yellow self-collision";
   output.input_state_sequence = input_state.sequence;
-  output.minimum_distance_m = kMinimumCollisionDistanceM;
-  output.influence_distance_m = kCollisionInfluenceDistanceM;
+  output.minimum_distance_m = options.minimum_collision_distance_m;
+  output.influence_distance_m = options.collision_influence_distance_m;
   output.minimum_distance_before_m = diagnostics.minimum_distance_before_m;
   output.minimum_distance_after_m = diagnostics.minimum_distance_after_m;
   output.margin_shortfall_m = diagnostics.margin_shortfall_m;
@@ -805,22 +799,25 @@ int run(int argc, char ** argv, std::string & normal_exit_detail)
   affinity_domain.validate(kProgramId, "red", kRedCpuAffinity);
   affinity_domain.validate(kProgramId, "yellow", kYellowCpuAffinity);
   const auto ui_affinity_binding =
-    affinity_domain.bindCurrentThread(kProgramId, "ui", kUiCpuAffinity);
+      affinity_domain.bindCurrentThread(kProgramId, "ui", kUiCpuAffinity);
   const auto & robot = mcl::r1RobotConfig();
   std::optional<replay::LoadedReplay> loaded_replay;
+  std::optional<replay::ReplaySource> replay_source;
   if (planned_options.replay.has_value()) {
     auto & replay_options = *planned_options.replay;
     if (!replay_options.output_dir_explicit) {
       const std::string run_id = replay_options.run_id.value_or(
-        mcl::make_run_id(mcl::sha256_file(replay_options.input_path)));
+          mcl::make_run_id(mcl::sha256_file(replay_options.input_path)));
       const std::filesystem::path output_root = replay_options.output_root.value_or(
-        std::filesystem::path{"runs/mcl_planned_grouped_step_otg"});
+          std::filesystem::path{"runs/mcl_planned_grouped_step_otg"});
       replay_options.output_dir = output_root / run_id;
     }
     loaded_replay = replay::loadReplay(replay_options);
     if (loaded_replay->timeline.timeline.empty()) {
       throw std::runtime_error("replay timeline is empty");
     }
+    replay_source.emplace(*loaded_replay, replay_options.execution_mode,
+                          replay_options.playback_rate, planned_options.start_paused);
     replay::createOutputDirectory(replay_options.output_dir);
   }
   const auto & joint_names = robot.joint_names;
@@ -843,8 +840,8 @@ int run(int argc, char ** argv, std::string & normal_exit_detail)
   initial_state.accelerations.setZero(initial_positions.size());
   initial_state.jerks.setZero(initial_positions.size());
   if (loaded_replay.has_value()) {
-    applyReplayInitialState(
-      *loaded_replay, robot, initial_state.positions, initial_state.velocities);
+    applyReplayInitialState(*loaded_replay, robot, initial_state.positions,
+                            initial_state.velocities);
   }
 
   mcc::RobotModelDescription model_description;
@@ -853,14 +850,13 @@ int run(int argc, char ** argv, std::string & normal_exit_detail)
   model_description.joint_names = joint_names;
   {
     std::shared_ptr<const mcc::RobotModel> urdf_model;
-    requireOk(
-      mcc::RobotModel::load(model_description, urdf_model),
-      "Failed to load robot model limits from URDF");
+    requireOk(mcc::RobotModel::load(model_description, urdf_model),
+              "Failed to load robot model limits from URDF");
     model_description.joint_limits = urdf_model->jointLimits();
   }
   for (std::size_t index = 0; index < model_description.joint_limits.size(); ++index) {
     model_description.joint_limits[index].acceleration =
-      kRedMaximumJointAccelerationsRadPerS2.at(index);
+        kRedMaximumJointAccelerationsRadPerS2.at(index);
   }
   std::shared_ptr<const mcc::RobotModel> model;
   requireOk(mcc::RobotModel::load(model_description, model), "Failed to load robot model");
@@ -876,26 +872,24 @@ int run(int argc, char ** argv, std::string & normal_exit_detail)
   joint_otg_limits.max_jerk.reserve(joint_names.size());
   const auto & runtime_joint_limits = model->jointLimits();
   for (std::size_t index = 0U; index < joint_names.size(); ++index) {
-    if (joint_names[index] !=
-        mcl::planned_grouped_step_otg::kR1StreamJointNames[index]) {
+    if (joint_names[index] != mcl::planned_grouped_step_otg::kR1StreamJointNames[index]) {
       throw std::runtime_error("runtime R1 joint order does not match stream profile at index " +
                                std::to_string(index));
     }
     joint_otg_limits.position_lower.push_back(runtime_joint_limits[index].lower);
     joint_otg_limits.position_upper.push_back(runtime_joint_limits[index].upper);
     joint_otg_limits.max_velocity.push_back(
-      mcl::planned_grouped_step_otg::kR1StreamMaxVelocityRadPerS[index]);
+        mcl::planned_grouped_step_otg::kR1StreamMaxVelocityRadPerS[index]);
     joint_otg_limits.max_acceleration.push_back(
-      mcl::planned_grouped_step_otg::kR1StreamMaxAccelerationRadPerS2[index]);
+        mcl::planned_grouped_step_otg::kR1StreamMaxAccelerationRadPerS2[index]);
     joint_otg_limits.max_jerk.push_back(
-      mcl::planned_grouped_step_otg::kR1StreamMaxJerkRadPerS3[index]);
+        mcl::planned_grouped_step_otg::kR1StreamMaxJerkRadPerS3[index]);
   }
 
   std::shared_ptr<const mcc::SelfCollisionModel> collision_model;
-  requireOk(
-    mcc::SelfCollisionModel::load(
-      model, collisionModelDescription(options.urdf_path), collision_model),
-    "Failed to load PSI R1 self-collision model");
+  requireOk(mcc::SelfCollisionModel::load(model, collisionModelDescription(options.urdf_path),
+                                          collision_model),
+            "Failed to load PSI R1 self-collision model");
 
   mcc::GroupedKinematicsSolverConfig solver_config;
   solver_config.profile = mcc::GroupedSolverProfile::RedYellow;
@@ -907,16 +901,17 @@ int run(int argc, char ** argv, std::string & normal_exit_detail)
   solver_config.yellow.servo_period = 1.0 / options.yellow_rate_hz;
   solver_config.yellow.maximum_iterations = 1;
   solver_config.yellow.soft_solve_time_budget_ms = 1000.0 / options.yellow_rate_hz;
-  solver_config.yellow_to_red.enforcement = mcc::squaredL2Penalty(kYellowToRedCouplingWeight, 1);
+  solver_config.yellow_to_red.enforcement =
+      mcc::squaredL2Penalty(options.solver.yellow_to_red_coupling_weight, 1);
   for (auto * config : {&solver_config.red, &solver_config.yellow}) {
     config->joint_limit_policy = mcc::KinematicsJointLimitPolicy::ExplicitRequirements;
     config->qp.backend = mcc::QpBackend::ProxQp;
-    config->qp.regularization = 1.0e-10;
-    config->position_tolerance_m = 1.0e-4;
-    config->orientation_tolerance_rad = 1.0e-4;
+    config->qp.regularization = options.solver.regularization;
+    config->position_tolerance_m = options.solver.position_tolerance_m;
+    config->orientation_tolerance_rad = options.solver.orientation_tolerance_rad;
     config->minimum_position_improvement_m = 1.0e-8;
     config->minimum_orientation_improvement_rad = 1.0e-8;
-    config->maximum_accepted_hard_violation = kMaximumAcceptedHardViolation;
+    config->maximum_accepted_hard_violation = options.solver.maximum_accepted_hard_violation;
   }
   // A target step changes the scaled-equality columns, so Red starts each 1 ms
   // QP from a neutral guess. Keep ordinary convergence well inside the app's
@@ -924,45 +919,43 @@ int run(int argc, char ** argv, std::string & normal_exit_detail)
   // infeasibility certificate: acceleration-derived velocity boxes are only
   // O(1e-2) rad/s at 1 kHz and are otherwise falsely classified.
   // Contradictory canonical boxes are still rejected by the adapter precheck.
-  solver_config.red.qp.proxqp.absolute_tolerance = kRedProxQpAbsoluteTolerance;
+  solver_config.red.qp.proxqp.absolute_tolerance = options.solver.red_proxqp_absolute_tolerance;
   solver_config.red.qp.proxqp.primal_infeasibility_tolerance =
-    kRedProxQpPrimalInfeasibilityTolerance;
+      options.solver.red_proxqp_primal_infeasibility_tolerance;
   solver_config.red.qp.proxqp.warm_start_enabled = false;
 
   mcc::KinematicsSolverBuilder builder;
-  requireOk(
-    builder.configure(model, active_joint_names, solver_config),
-    "Failed to configure grouped IK builder");
+  requireOk(builder.configure(model, active_joint_names, solver_config),
+            "Failed to configure grouped IK builder");
   GroupedHandles handles;
-  handles.red = addCartesianTasks(builder, mcc::SolverGroup::Red, "red", robot);
+  handles.red = addCartesianTasks(builder, mcc::SolverGroup::Red, "red", robot, options.solver);
   mcc::PostureTaskConfig yellow_posture;
   yellow_posture.name = "yellow-initial-posture";
-  yellow_posture.enforcement = mcc::squaredL2Penalty(kYellowPostureWeight, 1);
+  yellow_posture.enforcement = mcc::squaredL2Penalty(options.solver.yellow_posture_weight, 1);
   yellow_posture.reference_positions = initial_state.positions;
   yellow_posture.role = mcc::PostureTaskRole::Convergence;
   yellow_posture.joint_weight_multipliers =
-    Eigen::VectorXd::Constant(initial_positions.size(), kDefaultPostureJointWeightMultiplier);
-  yellow_posture.joint_weight_multipliers(
-    static_cast<Eigen::Index>(robot.left_arm_joint_indices[3])) = kArmJoint4PostureWeightMultiplier;
+      Eigen::VectorXd::Constant(initial_positions.size(), kDefaultPostureJointWeightMultiplier);
   yellow_posture.joint_weight_multipliers(static_cast<Eigen::Index>(
-    robot.right_arm_joint_indices[3])) = kArmJoint4PostureWeightMultiplier;
+      robot.left_arm_joint_indices[3])) = kArmJoint4PostureWeightMultiplier;
+  yellow_posture.joint_weight_multipliers(static_cast<Eigen::Index>(
+      robot.right_arm_joint_indices[3])) = kArmJoint4PostureWeightMultiplier;
   // requireOk(
   //   builder.addPostureTask(mcc::SolverGroup::Yellow, yellow_posture,
   //   handles.yellow_posture), "Failed to register Yellow initial-posture
   //   task");
   mcc::SelfCollisionAvoidanceConfig collision_config;
-  collision_config.minimum_distance_m = kMinimumCollisionDistanceM;
-  collision_config.influence_distance_m = kCollisionInfluenceDistanceM;
-  collision_config.damping_gain_per_s = kCollisionDampingGainPerS;
-  collision_config.weight = kCollisionWeight;
-  requireOk(
-    builder.addSelfCollisionAvoidance(
-      mcc::SolverGroup::Yellow, collision_model, collision_config, handles.yellow_collision),
-    "Failed to register Yellow self-collision avoidance");
-  addPositionLimits(builder, mcc::SolverGroup::Red);
-  addVelocityLimits(builder, mcc::SolverGroup::Red);
-  addRedAccelerationLimits(builder);
-  addPositionLimits(builder, mcc::SolverGroup::Yellow);
+  collision_config.minimum_distance_m = options.solver.minimum_collision_distance_m;
+  collision_config.influence_distance_m = options.solver.collision_influence_distance_m;
+  collision_config.damping_gain_per_s = options.solver.collision_damping_gain_per_s;
+  collision_config.weight = options.solver.collision_weight;
+  requireOk(builder.addSelfCollisionAvoidance(mcc::SolverGroup::Yellow, collision_model,
+                                              collision_config, handles.yellow_collision),
+            "Failed to register Yellow self-collision avoidance");
+  addPositionLimits(builder, mcc::SolverGroup::Red, options.solver);
+  addVelocityLimits(builder, mcc::SolverGroup::Red, options.solver);
+  addRedAccelerationLimits(builder, options.solver);
+  addPositionLimits(builder, mcc::SolverGroup::Yellow, options.solver);
 
   mcc::GroupedKinematicsSolver solver;
   requireOk(builder.finalize(solver), "Failed to finalize grouped IK solver");
@@ -973,10 +966,9 @@ int run(int argc, char ** argv, std::string & normal_exit_detail)
   initial_fk_request.reference_frame_name = robot.base_frame;
   mcc::ForwardKinematicsSolution initial_fk;
   mcc::ForwardKinematicsDiagnostics initial_fk_diagnostics;
-  requireOk(
-    solver.computeForwardKinematics(
-      mcc::SolverGroup::Red, initial_fk_request, initial_fk, initial_fk_diagnostics),
-    "Initial FK failed");
+  requireOk(solver.computeForwardKinematics(mcc::SolverGroup::Red, initial_fk_request, initial_fk,
+                                            initial_fk_diagnostics),
+            "Initial FK failed");
 
   TargetSnapshot warmup_target;
   warmup_target.revision = 0;
@@ -985,7 +977,7 @@ int run(int argc, char ** argv, std::string & normal_exit_detail)
   TargetSnapshot initial_target = warmup_target;
   initial_target.revision = 1;
   if (loaded_replay.has_value()) {
-    const auto & first = loaded_replay->timeline.timeline.at(0);
+    const auto & first = replay_source->sourceFrame();
     initial_target.left = first.value.left.pose * robot.left_tcp_offset.inverse();
     initial_target.right = first.value.right.pose * robot.right_tcp_offset.inverse();
   }
@@ -1025,17 +1017,18 @@ int run(int argc, char ** argv, std::string & normal_exit_detail)
     yellow.reference_frame_name = robot.base_frame;
     yellow.captured_state = capturedState(initial_state);
     auto status =
-      solver.solveInverseKinematics(mcc::SolverGroup::Yellow, yellow, solution, diagnostics);
+        solver.solveInverseKinematics(mcc::SolverGroup::Yellow, yellow, solution, diagnostics);
     if (!operationSucceeded(status) || !diagnostics.attempt_accepted) {
-      throw std::runtime_error(
-        "Yellow warm-up failed: " + rejectedAttemptDetail(status, diagnostics));
+      throw std::runtime_error("Yellow warm-up failed: " +
+                               rejectedAttemptDetail(status, diagnostics));
     }
     requireOk(
-      solver.getSelfCollisionDiagnostics(handles.yellow_collision, initial_collision_diagnostics),
-      "Failed to query Yellow self-collision diagnostics after warm-up");
-    fillSelfCollisionDebug(initial_state, initial_collision_diagnostics, initial_collision_debug);
+        solver.getSelfCollisionDiagnostics(handles.yellow_collision, initial_collision_diagnostics),
+        "Failed to query Yellow self-collision diagnostics after warm-up");
+    fillSelfCollisionDebug(initial_state, initial_collision_diagnostics, options.solver,
+                           initial_collision_debug);
     initial_yellow_solver_debug =
-      mcl::makeSolverDebug("Yellow", diagnostics, solution.kinematics_solution.disposition);
+        mcl::makeSolverDebug("Yellow", diagnostics, solution.kinematics_solution.disposition);
 
     mcc::GroupedInverseKinematicsRequest red;
     initializeCartesianRequest(handles.red, robot.base_frame, red);
@@ -1050,7 +1043,7 @@ int run(int argc, char ** argv, std::string & normal_exit_detail)
     initial_output.converged = diagnostics.kinematics.converged;
     fillRedDiagnostics(handles.red, diagnostics, initial_output);
     initial_output.solver_debug =
-      mcl::makeSolverDebug("Red", diagnostics, solution.kinematics_solution.disposition);
+        mcl::makeSolverDebug("Red", diagnostics, solution.kinematics_solution.disposition);
   }
   requireOk(solver.beginRun(2), "Failed to begin timed grouped run");
 
@@ -1061,7 +1054,7 @@ int run(int argc, char ** argv, std::string & normal_exit_detail)
 
   const auto initial_red_affinity = affinity_domain.describe(kProgramId, "red", kRedCpuAffinity);
   const auto initial_yellow_affinity =
-    affinity_domain.describe(kProgramId, "yellow", kYellowCpuAffinity);
+      affinity_domain.describe(kProgramId, "yellow", kYellowCpuAffinity);
 
   mcl::LatestValueMailbox<TargetSnapshot> target_to_red(initial_target);
   mcl::LatestValueMailbox<StateSnapshot> state_to_yellow(initial_state);
@@ -1079,16 +1072,22 @@ int run(int argc, char ** argv, std::string & normal_exit_detail)
   yellow_solver_to_ui.publish(initial_yellow_solver_debug);
 
   const auto presentation = mcl::makeArmPresentation(robot, mcl::foxgloveIkVisualizationChannels());
-  mcl::TuiConsole tui(
-    options.tui, options.ui_rate_hz, kTitle, presentation,
-    {{mcl::ArmSide::Left, initial_target.left}, {mcl::ArmSide::Right, initial_target.right}}, true,
-    options.tui_enabled,
-    planned_options.source_mode == SourceMode::Replay ? mcl::TuiControlMode::Replay
-                                                      : mcl::TuiControlMode::Teleop);
+  mcl::TerminalFrontend terminal(
+      {planned_options.source_mode == SourceMode::Teleop ||
+           (planned_options.replay.has_value() && planned_options.replay->terminal_input_enabled),
+       options.tui_enabled});
+  mcl::KeyboardTargetSource input(
+      terminal,
+      planned_options.source_mode == SourceMode::Replay ? mcl::KeyboardSourceMode::Replay
+                                                        : mcl::KeyboardSourceMode::Teleop,
+      options.tui,
+      {{mcl::ArmSide::Left, initial_target.left}, {mcl::ArmSide::Right, initial_target.right}},
+      true);
+  mcl::TuiRenderer tui(options.tui_enabled);
   if (planned_options.source_mode == SourceMode::Replay) {
-    tui.setMotionInputEnabled(false, "Replay motion editing is disabled");
+    input.setMotionInputEnabled(false, "Replay motion editing is disabled");
     if (planned_options.start_paused) {
-      tui.setPaused(true, "Replay timeline paused; press space to start");
+      input.setPaused(true, "Replay timeline paused; press space to start");
     }
   }
   auto visualization_sink = mcl::createPreviewSink(options.visualization, kProgramId);
@@ -1105,8 +1104,6 @@ int run(int argc, char ** argv, std::string & normal_exit_detail)
   std::size_t replay_accepted_solve_count = 0;
   std::size_t replay_rejected_solve_count = 0;
   std::atomic<std::uint64_t> replay_last_consumed_revision{0};
-  std::atomic<std::size_t> replay_consumed_frame_count{0};
-  std::atomic<std::size_t> replay_dropped_frame_count{0};
   std::atomic<std::size_t> replay_settled_cycle_count{0U};
   std::atomic_bool replay_settled{false};
   replay_trace << "attempt,source_revision,original_logical_timestamp_ns,"
@@ -1130,11 +1127,11 @@ int run(int argc, char ** argv, std::string & normal_exit_detail)
                   "skipped_release_count,replay_settled_cycles\n";
 
   visualization_sink->open();
-  mcl::installInteractiveSignalHandlers();
+  mcl::installRuntimeSignalHandlers();
 
   workers.yellow = std::thread([&]() {
     const auto affinity_binding =
-      affinity_domain.bindCurrentThread(kProgramId, "yellow", kYellowCpuAffinity);
+        affinity_domain.bindCurrentThread(kProgramId, "yellow", kYellowCpuAffinity);
     yellow_affinity_to_ui.publish(affinity_binding);
     StateSnapshot state = initial_state;
     mcc::GroupedInverseKinematicsRequest request;
@@ -1145,36 +1142,36 @@ int run(int argc, char ** argv, std::string & normal_exit_detail)
     mcl::SelfCollisionDebug collision_debug = initial_collision_debug;
     mcl::SolverDebug solver_debug = initial_yellow_solver_debug;
     mcl::runPeriodicWorker(
-      {mcl::WorkerGroup::Yellow, options.yellow_rate_hz, options.deadline_policy}, stop_controller,
-      fault, yellow_worker_diagnostics, [&](double, std::int64_t) {
-        state_to_yellow.readLatest(state);
-        request.captured_state = capturedState(state);
-        const auto status =
-          solver.solveInverseKinematics(mcc::SolverGroup::Yellow, request, solution, diagnostics);
-        yellow_solve_time_percentiles.record(diagnostics.kinematics.solve_time_ms);
-        const bool accepted = operationSucceeded(status) && diagnostics.attempt_accepted;
-        if (accepted) {
-          requireOk(
-            solver.getSelfCollisionDiagnostics(handles.yellow_collision, collision_diagnostics),
-            "Failed to query accepted Yellow self-collision diagnostics");
-          fillSelfCollisionDebug(state, collision_diagnostics, collision_debug);
-          collision_to_ui.publish(collision_debug);
-        }
-        mcl::updateSolverDebug(
-          solver_debug, diagnostics,
-          accepted ? mcc::ResultDisposition::Accepted : mcc::ResultDisposition::Rejected);
-        yellow_solver_to_ui.publish(solver_debug);
-        return mcl::WorkerIterationResult{
-          accepted ? mcl::WorkerIterationOutcome::Accepted
-                   : mcl::WorkerIterationOutcome::FatalRejected,
-          diagnostics.attempt_revision, diagnostics.kinematics.solve_time_ms,
-          accepted ? std::string{} : rejectedAttemptDetail(status, diagnostics)};
-      });
+        {mcl::WorkerGroup::Yellow, options.yellow_rate_hz, options.deadline_policy},
+        stop_controller, fault, yellow_worker_diagnostics, [&](double, std::int64_t) {
+          state_to_yellow.readLatest(state);
+          request.captured_state = capturedState(state);
+          const auto status = solver.solveInverseKinematics(mcc::SolverGroup::Yellow, request,
+                                                            solution, diagnostics);
+          yellow_solve_time_percentiles.record(diagnostics.kinematics.solve_time_ms);
+          const bool accepted = operationSucceeded(status) && diagnostics.attempt_accepted;
+          if (accepted) {
+            requireOk(
+                solver.getSelfCollisionDiagnostics(handles.yellow_collision, collision_diagnostics),
+                "Failed to query accepted Yellow self-collision diagnostics");
+            fillSelfCollisionDebug(state, collision_diagnostics, options.solver, collision_debug);
+            collision_to_ui.publish(collision_debug);
+          }
+          mcl::updateSolverDebug(solver_debug, diagnostics,
+                                 accepted ? mcc::ResultDisposition::Accepted
+                                          : mcc::ResultDisposition::Rejected);
+          yellow_solver_to_ui.publish(solver_debug);
+          return mcl::WorkerIterationResult{
+              accepted ? mcl::WorkerIterationOutcome::Accepted
+                       : mcl::WorkerIterationOutcome::FatalRejected,
+              diagnostics.attempt_revision, diagnostics.kinematics.solve_time_ms,
+              accepted ? std::string{} : rejectedAttemptDetail(status, diagnostics)};
+        });
   });
 
   workers.red = std::thread([&]() {
     const auto affinity_binding =
-      affinity_domain.bindCurrentThread(kProgramId, "red", kRedCpuAffinity);
+        affinity_domain.bindCurrentThread(kProgramId, "red", kRedCpuAffinity);
     red_affinity_to_ui.publish(affinity_binding);
     // Keep the accepted raw-IK reference independent from the jerk-limited
     // execution state. Red advances from ik_state, while JointPlanner and
@@ -1200,7 +1197,7 @@ int run(int argc, char ** argv, std::string & normal_exit_detail)
     joint_planner_config.synchronization = mcc::TrajectorySynchronization::Phase;
     mcc::JointPlanner joint_planner(joint_planner_config);
     mcl::planned_grouped_step_otg::JointTargetBuilder joint_target_builder(
-      planned_options.joint_target_mode, 1.0 / options.red_rate_hz, joint_names.size());
+        planned_options.joint_target_mode, 1.0 / options.red_rate_hz, joint_names.size());
     mcl::planned_grouped_step_otg::ReplaySettlingCounter replay_settling;
 
     const auto makeReplayRow = [&](std::uint64_t attempt_revision) {
@@ -1208,9 +1205,9 @@ int run(int argc, char ** argv, std::string & normal_exit_detail)
       if (!loaded_replay.has_value()) {
         return row;
       }
-      const std::size_t source_index = std::min<std::size_t>(
-        target.revision > 0U ? target.revision - 1U : 0U,
-        loaded_replay->timeline.timeline.size() - 1U);
+      const std::size_t source_index =
+          std::min<std::size_t>(target.revision > 0U ? target.revision - 1U : 0U,
+                                loaded_replay->timeline.timeline.size() - 1U);
       const auto & source = loaded_replay->timeline.timeline.at(source_index);
       row[0] = std::to_string(attempt_revision);
       row[1] = std::to_string(source.sequence);
@@ -1223,8 +1220,8 @@ int run(int argc, char ** argv, std::string & normal_exit_detail)
       row[8] = replay::optionalTimestamp(source.value.right.time.header_stamp_ns);
       row[9] = replay::optionalTimestamp(source.value.right.time.log_time_ns);
       row[10] = replay::optionalTimestamp(source.value.right.time.publish_time_ns);
-      row[14] = mcl::planned_grouped_step_otg::jointTargetModeName(
-        planned_options.joint_target_mode);
+      row[14] =
+          mcl::planned_grouped_step_otg::jointTargetModeName(planned_options.joint_target_mode);
       return row;
     };
     const auto recordFailure = [&](const std::string & layer, const std::string & detail) {
@@ -1252,326 +1249,323 @@ int run(int argc, char ** argv, std::string & normal_exit_detail)
     };
 
     mcl::runPeriodicWorker(
-      {mcl::WorkerGroup::Red, options.red_rate_hz, options.deadline_policy}, stop_controller, fault,
-      red_worker_diagnostics, [&](double, std::int64_t sample_time_ns) {
-        if (target_to_red.readLatest(target) && loaded_replay.has_value()) {
-          const std::uint64_t previous_revision =
-            replay_last_consumed_revision.exchange(target.revision);
-          ++replay_consumed_frame_count;
-          if (previous_revision > 0U && target.revision > previous_revision + 1U) {
-            replay_dropped_frame_count +=
-              static_cast<std::size_t>(target.revision - previous_revision - 1U);
+        {mcl::WorkerGroup::Red, options.red_rate_hz, options.deadline_policy}, stop_controller,
+        fault, red_worker_diagnostics, [&](double, std::int64_t sample_time_ns) {
+          if (target_to_red.readLatest(target) && loaded_replay.has_value()) {
+            replay_last_consumed_revision.store(target.revision);
           }
-        }
-        if (rejected_target_revision.has_value() && target.revision == *rejected_target_revision) {
-          return mcl::WorkerIterationResult{
-            mcl::WorkerIterationOutcome::Idle, diagnostics.attempt_revision, 0.0, {}};
-        }
-        rejected_target_revision.reset();
-        if (target.revision != planned_goal_revision) {
-          auto retarget_request = makeRetargetRequest(
-            target, accepted_planner_sample, robot, planned_options.planning,
-            options.red_rate_hz);
-          attempt.retarget_clamp =
-            mcl::planned_grouped_step_otg::clampRetargetCurrentState(retarget_request);
-          attempt.retarget_clamp_target_revision = target.revision;
-          const auto planning_status = planner.replan(retarget_request, planning_diagnostics);
-          if (!planning_status.ok()) {
+          if (rejected_target_revision.has_value() &&
+              target.revision == *rejected_target_revision) {
+            return mcl::WorkerIterationResult{
+                mcl::WorkerIterationOutcome::Idle, diagnostics.attempt_revision, 0.0, {}};
+          }
+          rejected_target_revision.reset();
+          if (target.revision != planned_goal_revision) {
+            auto retarget_request =
+                makeRetargetRequest(target, accepted_planner_sample, robot,
+                                    planned_options.planning, options.red_rate_hz);
+            attempt.retarget_clamp =
+                mcl::planned_grouped_step_otg::clampRetargetCurrentState(retarget_request);
+            attempt.retarget_clamp_target_revision = target.revision;
+            const auto planning_status = planner.replan(retarget_request, planning_diagnostics);
+            if (!planning_status.ok()) {
+              attempt.state = planned_options.source_mode == SourceMode::Teleop &&
+                                      planning_status.code == mcc::StatusCode::Infeasible
+                                  ? RedAttemptState::RecoverableRejected
+                                  : RedAttemptState::FatalRejected;
+              attempt.target = target;
+              attempt.detail = "Cartesian replan failed: " + planning_status.message;
+              recordFailure("cartesian-replan", attempt.detail);
+              red_attempt_to_ui.publish(attempt);
+              if (attempt.state == RedAttemptState::RecoverableRejected) {
+                rejected_target_revision = target.revision;
+              }
+              return mcl::WorkerIterationResult{
+                  attempt.state == RedAttemptState::RecoverableRejected
+                      ? mcl::WorkerIterationOutcome::RecoverableRejected
+                      : mcl::WorkerIterationOutcome::FatalRejected,
+                  target.revision, planning_diagnostics.calculation_time_ms, attempt.detail};
+            }
+            planned_goal_revision = target.revision;
+            staged_planner_sample.reset();
+          }
+          if (!staged_planner_sample.has_value()) {
+            mcc::CartesianTrajectorySample next_sample;
+            const auto planning_status = planner.step(next_sample, planning_diagnostics);
+            if (!planning_status.ok()) {
+              attempt.state = RedAttemptState::FatalRejected;
+              attempt.target = target;
+              attempt.detail = "Cartesian planner step failed: " + planning_status.message;
+              recordFailure("cartesian-step", attempt.detail);
+              red_attempt_to_ui.publish(attempt);
+              return mcl::WorkerIterationResult{
+                  mcl::WorkerIterationOutcome::FatalRejected, target.revision,
+                  planning_diagnostics.calculation_time_ms, attempt.detail};
+            }
+            staged_planner_sample = std::move(next_sample);
+          }
+          TargetSnapshot reference;
+          reference.revision = target.revision;
+          reference.left = staged_planner_sample->frames.at(0).pose;
+          reference.right = staged_planner_sample->frames.at(1).pose;
+          const mcc::CartesianTrajectorySample staged_for_attempt = *staged_planner_sample;
+          attempt.attempted_reference = reference;
+          request.captured_state = capturedState(ik_state);
+          addCartesianTargets(handles.red, staged_for_attempt, request);
+          const auto ik_status =
+              solver.solveInverseKinematics(mcc::SolverGroup::Red, request, solution, diagnostics);
+          red_solve_time_percentiles.record(diagnostics.kinematics.solve_time_ms);
+          const bool ik_accepted = operationSucceeded(ik_status) && diagnostics.attempt_accepted;
+          if (!ik_accepted) {
             attempt.state = planned_options.source_mode == SourceMode::Teleop &&
-                                planning_status.code == mcc::StatusCode::Infeasible
-                              ? RedAttemptState::RecoverableRejected
-                              : RedAttemptState::FatalRejected;
+                                    ik_status.code == mcc::StatusCode::Infeasible
+                                ? RedAttemptState::RecoverableRejected
+                                : RedAttemptState::FatalRejected;
             attempt.target = target;
-            attempt.detail = "Cartesian replan failed: " + planning_status.message;
-            recordFailure("cartesian-replan", attempt.detail);
+            mcl::updateSolverDebug(attempt.solver_debug, diagnostics,
+                                   mcc::ResultDisposition::Rejected);
+            attempt.detail = rejectedAttemptDetail(ik_status, diagnostics);
             red_attempt_to_ui.publish(attempt);
             if (attempt.state == RedAttemptState::RecoverableRejected) {
               rejected_target_revision = target.revision;
             }
-            return mcl::WorkerIterationResult{
-              attempt.state == RedAttemptState::RecoverableRejected
-                ? mcl::WorkerIterationOutcome::RecoverableRejected
-                : mcl::WorkerIterationOutcome::FatalRejected,
-              target.revision, planning_diagnostics.calculation_time_ms, attempt.detail};
+            recordFailure("red-ik", attempt.detail);
+            return mcl::WorkerIterationResult{attempt.state == RedAttemptState::RecoverableRejected
+                                                  ? mcl::WorkerIterationOutcome::RecoverableRejected
+                                                  : mcl::WorkerIterationOutcome::FatalRejected,
+                                              diagnostics.attempt_revision,
+                                              diagnostics.kinematics.solve_time_ms, attempt.detail};
           }
-          planned_goal_revision = target.revision;
-          staged_planner_sample.reset();
-        }
-        if (!staged_planner_sample.has_value()) {
-          mcc::CartesianTrajectorySample next_sample;
-          const auto planning_status = planner.step(next_sample, planning_diagnostics);
-          if (!planning_status.ok()) {
+
+          const auto mapped_raw_ik = mcl::planned_grouped_step_otg::mapActiveIkToFull(
+              toStdVector(ik_state.positions), active_joint_full_indices,
+              toStdVector(solution.kinematics_solution.joint_positions),
+              toStdVector(solution.kinematics_solution.joint_velocities));
+          const auto raw_target =
+              joint_target_builder.preview(mapped_raw_ik.positions, mapped_raw_ik.velocities);
+          mcl::planned_grouped_step_otg::ProjectionDiagnostics projection;
+          mcl::planned_grouped_step_otg::JointTarget projected_target;
+          try {
+            projected_target = mcl::planned_grouped_step_otg::projectConfiguredLimits(
+                raw_target, joint_otg_limits, projection);
+          } catch (const std::exception & error) {
             attempt.state = RedAttemptState::FatalRejected;
             attempt.target = target;
-            attempt.detail = "Cartesian planner step failed: " + planning_status.message;
-            recordFailure("cartesian-step", attempt.detail);
+            attempt.detail = std::string{"joint target projection failed: "} + error.what();
+            recordFailure("joint-target-projection", attempt.detail);
+            red_attempt_to_ui.publish(attempt);
+            return mcl::WorkerIterationResult{mcl::WorkerIterationOutcome::FatalRejected,
+                                              diagnostics.attempt_revision,
+                                              diagnostics.kinematics.solve_time_ms, attempt.detail};
+          }
+
+          mcc::JointTrajectoryRequest joint_request;
+          joint_request.joint_names = joint_names;
+          joint_request.current.positions = toStdVector(otg_state.positions);
+          joint_request.current.velocities = toStdVector(otg_state.velocities);
+          joint_request.current.accelerations = toStdVector(otg_state.accelerations);
+          joint_request.target.positions = projected_target.positions;
+          joint_request.target.velocities = projected_target.velocities;
+          joint_request.target.accelerations = projected_target.accelerations;
+          joint_request.limits.position_lower = joint_otg_limits.position_lower;
+          joint_request.limits.position_upper = joint_otg_limits.position_upper;
+          joint_request.limits.max_velocity = joint_otg_limits.max_velocity;
+          joint_request.limits.max_acceleration = joint_otg_limits.max_acceleration;
+          joint_request.limits.max_jerk = joint_otg_limits.max_jerk;
+          joint_request.sample_period = 1.0 / options.red_rate_hz;
+
+          mcc::PlanningDiagnostics joint_plan_diagnostics;
+          auto joint_status = joint_planner.plan(joint_request, joint_plan_diagnostics);
+          if (!joint_status.ok()) {
+            attempt.state = RedAttemptState::FatalRejected;
+            attempt.target = target;
+            attempt.detail = "JointPlanner plan failed: " + joint_status.message;
+            recordFailure("joint-plan", attempt.detail);
             red_attempt_to_ui.publish(attempt);
             return mcl::WorkerIterationResult{
-              mcl::WorkerIterationOutcome::FatalRejected, target.revision,
-              planning_diagnostics.calculation_time_ms, attempt.detail};
+                mcl::WorkerIterationOutcome::FatalRejected, diagnostics.attempt_revision,
+                diagnostics.kinematics.solve_time_ms + joint_plan_diagnostics.calculation_time_ms,
+                attempt.detail};
           }
-          staged_planner_sample = std::move(next_sample);
-        }
-        TargetSnapshot reference;
-        reference.revision = target.revision;
-        reference.left = staged_planner_sample->frames.at(0).pose;
-        reference.right = staged_planner_sample->frames.at(1).pose;
-        const mcc::CartesianTrajectorySample staged_for_attempt = *staged_planner_sample;
-        attempt.attempted_reference = reference;
-        request.captured_state = capturedState(ik_state);
-        addCartesianTargets(handles.red, staged_for_attempt, request);
-        const auto ik_status =
-          solver.solveInverseKinematics(mcc::SolverGroup::Red, request, solution, diagnostics);
-        red_solve_time_percentiles.record(diagnostics.kinematics.solve_time_ms);
-        const bool ik_accepted = operationSucceeded(ik_status) && diagnostics.attempt_accepted;
-        if (!ik_accepted) {
-          attempt.state = planned_options.source_mode == SourceMode::Teleop &&
-                              ik_status.code == mcc::StatusCode::Infeasible
-                            ? RedAttemptState::RecoverableRejected
-                            : RedAttemptState::FatalRejected;
-          attempt.target = target;
-          mcl::updateSolverDebug(
-            attempt.solver_debug, diagnostics, mcc::ResultDisposition::Rejected);
-          attempt.detail = rejectedAttemptDetail(ik_status, diagnostics);
-          red_attempt_to_ui.publish(attempt);
-          if (attempt.state == RedAttemptState::RecoverableRejected) {
-            rejected_target_revision = target.revision;
+          mcc::JointTrajectorySample joint_sample;
+          mcc::PlanningDiagnostics joint_step_diagnostics;
+          joint_status = joint_planner.step(joint_sample, joint_step_diagnostics);
+          if (!joint_status.ok()) {
+            attempt.state = RedAttemptState::FatalRejected;
+            attempt.target = target;
+            attempt.detail = "JointPlanner step failed: " + joint_status.message;
+            recordFailure("joint-step", attempt.detail);
+            red_attempt_to_ui.publish(attempt);
+            return mcl::WorkerIterationResult{
+                mcl::WorkerIterationOutcome::FatalRejected, diagnostics.attempt_revision,
+                diagnostics.kinematics.solve_time_ms + joint_plan_diagnostics.calculation_time_ms +
+                    joint_step_diagnostics.calculation_time_ms,
+                attempt.detail};
           }
-          recordFailure("red-ik", attempt.detail);
-          return mcl::WorkerIterationResult{
-            attempt.state == RedAttemptState::RecoverableRejected
-              ? mcl::WorkerIterationOutcome::RecoverableRejected
-              : mcl::WorkerIterationOutcome::FatalRejected,
-            diagnostics.attempt_revision, diagnostics.kinematics.solve_time_ms, attempt.detail};
-        }
 
-        const auto mapped_raw_ik = mcl::planned_grouped_step_otg::mapActiveIkToFull(
-          toStdVector(ik_state.positions), active_joint_full_indices,
-          toStdVector(solution.kinematics_solution.joint_positions),
-          toStdVector(solution.kinematics_solution.joint_velocities));
-        const auto raw_target = joint_target_builder.preview(
-          mapped_raw_ik.positions, mapped_raw_ik.velocities);
-        mcl::planned_grouped_step_otg::ProjectionDiagnostics projection;
-        mcl::planned_grouped_step_otg::JointTarget projected_target;
-        try {
-          projected_target = mcl::planned_grouped_step_otg::projectConfiguredLimits(
-            raw_target, joint_otg_limits, projection);
-        } catch (const std::exception & error) {
-          attempt.state = RedAttemptState::FatalRejected;
+          StateSnapshot candidate_ik_state = ik_state;
+          candidate_ik_state.positions = toEigen(mapped_raw_ik.positions);
+          candidate_ik_state.velocities = toEigen(mapped_raw_ik.velocities);
+          candidate_ik_state.accelerations.setZero();
+          candidate_ik_state.jerks.setZero();
+          ++candidate_ik_state.sequence;
+          candidate_ik_state.monotonic_time_nanoseconds = sample_time_ns;
+
+          StateSnapshot candidate_otg_state = otg_state;
+          candidate_otg_state.positions = toEigen(joint_sample.positions);
+          candidate_otg_state.velocities = toEigen(joint_sample.velocities);
+          candidate_otg_state.accelerations = toEigen(joint_sample.accelerations);
+          candidate_otg_state.jerks = toEigen(joint_sample.jerks);
+          ++candidate_otg_state.sequence;
+          candidate_otg_state.monotonic_time_nanoseconds = sample_time_ns;
+          mcc::ForwardKinematicsRequest executed_fk_request;
+          executed_fk_request.state = robotState(candidate_otg_state);
+          executed_fk_request.frame_names = {robot.left_end_effector_frame,
+                                             robot.right_end_effector_frame};
+          executed_fk_request.reference_frame_name = robot.base_frame;
+          mcc::ForwardKinematicsSolution executed_fk;
+          mcc::ForwardKinematicsDiagnostics executed_fk_diagnostics;
+          const auto fk_status = solver.computeForwardKinematics(
+              mcc::SolverGroup::Red, executed_fk_request, executed_fk, executed_fk_diagnostics);
+          if (!fk_status.ok()) {
+            attempt.state = RedAttemptState::FatalRejected;
+            attempt.target = target;
+            attempt.detail = "OTG execution-state FK failed: " + fk_status.message;
+            recordFailure("otg-fk", attempt.detail);
+            red_attempt_to_ui.publish(attempt);
+            return mcl::WorkerIterationResult{
+                mcl::WorkerIterationOutcome::FatalRejected, diagnostics.attempt_revision,
+                diagnostics.kinematics.solve_time_ms + joint_plan_diagnostics.calculation_time_ms +
+                    joint_step_diagnostics.calculation_time_ms,
+                attempt.detail};
+          }
+
+          const auto raw_left_pose =
+              requirePose(solution.kinematics_solution.solved_poses, robot.left_end_effector_frame)
+                  .pose;
+          const auto raw_right_pose =
+              requirePose(solution.kinematics_solution.solved_poses, robot.right_end_effector_frame)
+                  .pose;
+          const auto executed_left_pose =
+              requirePose(executed_fk.poses, robot.left_end_effector_frame).pose;
+          const auto executed_right_pose =
+              requirePose(executed_fk.poses, robot.right_end_effector_frame).pose;
+
+          ik_state = std::move(candidate_ik_state);
+          otg_state = std::move(candidate_otg_state);
+          joint_target_builder.commit(mapped_raw_ik.positions, raw_target);
+          state_to_yellow.publish(otg_state);
+          accepted_planner_sample = *staged_planner_sample;
+          staged_planner_sample.reset();
+
+          output.revision = diagnostics.value_revision;
+          output.accepted_target = reference;
+          output.source_goal = target;
+          output.accepted_planner_sample = accepted_planner_sample;
+          output.planner_state = planning_diagnostics.state;
+          output.cartesian_plan_diagnostics = planning_diagnostics;
+          output.state = otg_state;
+          output.raw_ik_positions = ik_state.positions;
+          output.raw_ik_velocities = ik_state.velocities;
+          output.raw_joint_target = raw_target;
+          output.projected_joint_target = projected_target;
+          output.projection = projection;
+          output.projection_event_count += projection.events.size();
+          output.projection_cycle_count += projection.projected() ? 1U : 0U;
+          output.future_o1_startup = raw_target.future_o1_startup;
+          output.joint_plan_diagnostics = joint_plan_diagnostics;
+          output.joint_step_diagnostics = joint_step_diagnostics;
+          output.raw_left_pose = raw_left_pose;
+          output.raw_right_pose = raw_right_pose;
+          output.left_pose = executed_left_pose;
+          output.right_pose = executed_right_pose;
+          output.solve_time_ms = diagnostics.kinematics.solve_time_ms;
+          output.iterations = diagnostics.kinematics.iterations;
+          output.converged = diagnostics.kinematics.converged;
+          fillRedDiagnostics(handles.red, diagnostics, output);
+          std::tie(output.left_position_error_m, output.left_orientation_error_rad) =
+              poseError(reference.left, executed_left_pose);
+          std::tie(output.right_position_error_m, output.right_orientation_error_rad) =
+              poseError(reference.right, executed_right_pose);
+          mcl::updateSolverDebug(output.solver_debug, diagnostics,
+                                 solution.kinematics_solution.disposition);
+          output_to_ui.publish(output);
+
+          attempt.state = RedAttemptState::Accepted;
           attempt.target = target;
-          attempt.detail = std::string{"joint target projection failed: "} + error.what();
-          recordFailure("joint-target-projection", attempt.detail);
+          attempt.solver_debug = output.solver_debug;
+          attempt.detail.clear();
           red_attempt_to_ui.publish(attempt);
-          return mcl::WorkerIterationResult{
-            mcl::WorkerIterationOutcome::FatalRejected, diagnostics.attempt_revision,
-            diagnostics.kinematics.solve_time_ms, attempt.detail};
-        }
 
-        mcc::JointTrajectoryRequest joint_request;
-        joint_request.joint_names = joint_names;
-        joint_request.current.positions = toStdVector(otg_state.positions);
-        joint_request.current.velocities = toStdVector(otg_state.velocities);
-        joint_request.current.accelerations = toStdVector(otg_state.accelerations);
-        joint_request.target.positions = projected_target.positions;
-        joint_request.target.velocities = projected_target.velocities;
-        joint_request.target.accelerations = projected_target.accelerations;
-        joint_request.limits.position_lower = joint_otg_limits.position_lower;
-        joint_request.limits.position_upper = joint_otg_limits.position_upper;
-        joint_request.limits.max_velocity = joint_otg_limits.max_velocity;
-        joint_request.limits.max_acceleration = joint_otg_limits.max_acceleration;
-        joint_request.limits.max_jerk = joint_otg_limits.max_jerk;
-        joint_request.sample_period = 1.0 / options.red_rate_hz;
+          if (loaded_replay.has_value()) {
+            ++replay_accepted_solve_count;
+            const std::uint64_t final_revision =
+                loaded_replay->timeline.timeline.at(loaded_replay->timeline.timeline.size() - 1U)
+                    .sequence +
+                1U;
+            const bool settled = replay_settling.update(
+                target.revision == final_revision &&
+                    replay_last_consumed_revision.load() >= final_revision,
+                planning_diagnostics.state == mcc::PlanningState::Finished,
+                output.left_position_error_m, output.left_orientation_error_rad,
+                output.right_position_error_m, output.right_orientation_error_rad,
+                maximumAbsolute(otg_state.velocities), maximumAbsolute(otg_state.accelerations));
+            replay_settled_cycle_count.store(replay_settling.consecutiveCycles());
+            replay_settled.store(settled);
 
-        mcc::PlanningDiagnostics joint_plan_diagnostics;
-        auto joint_status = joint_planner.plan(joint_request, joint_plan_diagnostics);
-        if (!joint_status.ok()) {
-          attempt.state = RedAttemptState::FatalRejected;
-          attempt.target = target;
-          attempt.detail = "JointPlanner plan failed: " + joint_status.message;
-          recordFailure("joint-plan", attempt.detail);
-          red_attempt_to_ui.publish(attempt);
-          return mcl::WorkerIterationResult{
-            mcl::WorkerIterationOutcome::FatalRejected, diagnostics.attempt_revision,
-            diagnostics.kinematics.solve_time_ms + joint_plan_diagnostics.calculation_time_ms,
-            attempt.detail};
-        }
-        mcc::JointTrajectorySample joint_sample;
-        mcc::PlanningDiagnostics joint_step_diagnostics;
-        joint_status = joint_planner.step(joint_sample, joint_step_diagnostics);
-        if (!joint_status.ok()) {
-          attempt.state = RedAttemptState::FatalRejected;
-          attempt.target = target;
-          attempt.detail = "JointPlanner step failed: " + joint_status.message;
-          recordFailure("joint-step", attempt.detail);
-          red_attempt_to_ui.publish(attempt);
-          return mcl::WorkerIterationResult{
-            mcl::WorkerIterationOutcome::FatalRejected, diagnostics.attempt_revision,
-            diagnostics.kinematics.solve_time_ms + joint_plan_diagnostics.calculation_time_ms +
-              joint_step_diagnostics.calculation_time_ms,
-            attempt.detail};
-        }
+            auto row = makeReplayRow(diagnostics.attempt_revision);
+            row[11] = "true";
+            row[12] = "";
+            row[13] = "ok";
+            row[15] = std::to_string(diagnostics.kinematics.solve_time_ms);
+            row[16] = std::to_string(diagnostics.kinematics.optimization.maximum_hard_violation);
+            row[17] = traceEigenVector(target.left.translation());
+            row[18] = traceEigenVector(reference.left.translation());
+            row[19] = traceEigenVector(staged_for_attempt.frames.at(0).twist);
+            row[20] = traceEigenVector(staged_for_attempt.frames.at(0).acceleration);
+            row[21] = tracePose(raw_left_pose);
+            row[22] = tracePose(raw_right_pose);
+            row[23] = tracePose(executed_left_pose);
+            row[24] = tracePose(executed_right_pose);
+            row[25] = traceEigenVector(output.raw_ik_positions);
+            row[26] = traceEigenVector(output.raw_ik_velocities);
+            row[27] = traceStdVector(raw_target.positions);
+            row[28] = traceStdVector(raw_target.velocities);
+            row[29] = traceStdVector(raw_target.accelerations);
+            row[30] = traceStdVector(projected_target.positions);
+            row[31] = traceStdVector(projected_target.velocities);
+            row[32] = traceStdVector(projected_target.accelerations);
+            row[33] = traceEigenVector(otg_state.positions);
+            row[34] = traceEigenVector(otg_state.velocities);
+            row[35] = traceEigenVector(otg_state.accelerations);
+            row[36] = traceEigenVector(otg_state.jerks);
+            row[37] = raw_target.future_o1_startup ? "true" : "false";
+            row[38] = plannerStateName(joint_step_diagnostics.state);
+            row[39] = std::to_string(joint_plan_diagnostics.duration);
+            row[40] = std::to_string(joint_plan_diagnostics.calculation_time_ms);
+            row[41] = std::to_string(joint_step_diagnostics.calculation_time_ms);
+            row[42] = traceProjectionEvents(projection, joint_names);
+            row[43] = std::to_string(output.projection_event_count);
+            row[44] = std::to_string(output.projection_cycle_count);
+            const auto worker_stats = red_worker_diagnostics.snapshot();
+            row[45] = std::to_string(worker_stats.deadline_miss_count);
+            row[46] = std::to_string(worker_stats.skipped_release_count);
+            row[47] = std::to_string(replay_settling.consecutiveCycles());
+            std::lock_guard<std::mutex> lock(replay_trace_mutex);
+            appendCsvRow(replay_trace, row);
+          }
 
-        StateSnapshot candidate_ik_state = ik_state;
-        candidate_ik_state.positions = toEigen(mapped_raw_ik.positions);
-        candidate_ik_state.velocities = toEigen(mapped_raw_ik.velocities);
-        candidate_ik_state.accelerations.setZero();
-        candidate_ik_state.jerks.setZero();
-        ++candidate_ik_state.sequence;
-        candidate_ik_state.monotonic_time_nanoseconds = sample_time_ns;
-
-        StateSnapshot candidate_otg_state = otg_state;
-        candidate_otg_state.positions = toEigen(joint_sample.positions);
-        candidate_otg_state.velocities = toEigen(joint_sample.velocities);
-        candidate_otg_state.accelerations = toEigen(joint_sample.accelerations);
-        candidate_otg_state.jerks = toEigen(joint_sample.jerks);
-        ++candidate_otg_state.sequence;
-        candidate_otg_state.monotonic_time_nanoseconds = sample_time_ns;
-        mcc::ForwardKinematicsRequest executed_fk_request;
-        executed_fk_request.state = robotState(candidate_otg_state);
-        executed_fk_request.frame_names = {
-          robot.left_end_effector_frame, robot.right_end_effector_frame};
-        executed_fk_request.reference_frame_name = robot.base_frame;
-        mcc::ForwardKinematicsSolution executed_fk;
-        mcc::ForwardKinematicsDiagnostics executed_fk_diagnostics;
-        const auto fk_status = solver.computeForwardKinematics(
-          mcc::SolverGroup::Red, executed_fk_request, executed_fk, executed_fk_diagnostics);
-        if (!fk_status.ok()) {
-          attempt.state = RedAttemptState::FatalRejected;
-          attempt.target = target;
-          attempt.detail = "OTG execution-state FK failed: " + fk_status.message;
-          recordFailure("otg-fk", attempt.detail);
-          red_attempt_to_ui.publish(attempt);
-          return mcl::WorkerIterationResult{
-            mcl::WorkerIterationOutcome::FatalRejected, diagnostics.attempt_revision,
-            diagnostics.kinematics.solve_time_ms + joint_plan_diagnostics.calculation_time_ms +
-              joint_step_diagnostics.calculation_time_ms,
-            attempt.detail};
-        }
-
-        const auto raw_left_pose =
-          requirePose(solution.kinematics_solution.solved_poses, robot.left_end_effector_frame).pose;
-        const auto raw_right_pose =
-          requirePose(solution.kinematics_solution.solved_poses, robot.right_end_effector_frame).pose;
-        const auto executed_left_pose =
-          requirePose(executed_fk.poses, robot.left_end_effector_frame).pose;
-        const auto executed_right_pose =
-          requirePose(executed_fk.poses, robot.right_end_effector_frame).pose;
-
-        ik_state = std::move(candidate_ik_state);
-        otg_state = std::move(candidate_otg_state);
-        joint_target_builder.commit(mapped_raw_ik.positions, raw_target);
-        state_to_yellow.publish(otg_state);
-        accepted_planner_sample = *staged_planner_sample;
-        staged_planner_sample.reset();
-
-        output.revision = diagnostics.value_revision;
-        output.accepted_target = reference;
-        output.source_goal = target;
-        output.accepted_planner_sample = accepted_planner_sample;
-        output.planner_state = planning_diagnostics.state;
-        output.state = otg_state;
-        output.raw_ik_positions = ik_state.positions;
-        output.raw_ik_velocities = ik_state.velocities;
-        output.raw_joint_target = raw_target;
-        output.projected_joint_target = projected_target;
-        output.projection = projection;
-        output.projection_event_count += projection.events.size();
-        output.projection_cycle_count += projection.projected() ? 1U : 0U;
-        output.future_o1_startup = raw_target.future_o1_startup;
-        output.joint_plan_diagnostics = joint_plan_diagnostics;
-        output.joint_step_diagnostics = joint_step_diagnostics;
-        output.raw_left_pose = raw_left_pose;
-        output.raw_right_pose = raw_right_pose;
-        output.left_pose = executed_left_pose;
-        output.right_pose = executed_right_pose;
-        output.solve_time_ms = diagnostics.kinematics.solve_time_ms;
-        output.iterations = diagnostics.kinematics.iterations;
-        output.converged = diagnostics.kinematics.converged;
-        fillRedDiagnostics(handles.red, diagnostics, output);
-        std::tie(output.left_position_error_m, output.left_orientation_error_rad) =
-          poseError(reference.left, executed_left_pose);
-        std::tie(output.right_position_error_m, output.right_orientation_error_rad) =
-          poseError(reference.right, executed_right_pose);
-        mcl::updateSolverDebug(
-          output.solver_debug, diagnostics, solution.kinematics_solution.disposition);
-        output_to_ui.publish(output);
-
-        attempt.state = RedAttemptState::Accepted;
-        attempt.target = target;
-        attempt.solver_debug = output.solver_debug;
-        attempt.detail.clear();
-        red_attempt_to_ui.publish(attempt);
-
-        if (loaded_replay.has_value()) {
-          ++replay_accepted_solve_count;
-          const std::uint64_t final_revision =
-            loaded_replay->timeline.timeline
-              .at(loaded_replay->timeline.timeline.size() - 1U)
-              .sequence +
-            1U;
-          const bool settled = replay_settling.update(
-            target.revision == final_revision &&
-              replay_last_consumed_revision.load() >= final_revision,
-            planning_diagnostics.state == mcc::PlanningState::Finished,
-            output.left_position_error_m, output.left_orientation_error_rad,
-            output.right_position_error_m, output.right_orientation_error_rad,
-            maximumAbsolute(otg_state.velocities), maximumAbsolute(otg_state.accelerations));
-          replay_settled_cycle_count.store(replay_settling.consecutiveCycles());
-          replay_settled.store(settled);
-
-          auto row = makeReplayRow(diagnostics.attempt_revision);
-          row[11] = "true";
-          row[12] = "";
-          row[13] = "ok";
-          row[15] = std::to_string(diagnostics.kinematics.solve_time_ms);
-          row[16] =
-            std::to_string(diagnostics.kinematics.optimization.maximum_hard_violation);
-          row[17] = traceEigenVector(target.left.translation());
-          row[18] = traceEigenVector(reference.left.translation());
-          row[19] = traceEigenVector(staged_for_attempt.frames.at(0).twist);
-          row[20] = traceEigenVector(staged_for_attempt.frames.at(0).acceleration);
-          row[21] = tracePose(raw_left_pose);
-          row[22] = tracePose(raw_right_pose);
-          row[23] = tracePose(executed_left_pose);
-          row[24] = tracePose(executed_right_pose);
-          row[25] = traceEigenVector(output.raw_ik_positions);
-          row[26] = traceEigenVector(output.raw_ik_velocities);
-          row[27] = traceStdVector(raw_target.positions);
-          row[28] = traceStdVector(raw_target.velocities);
-          row[29] = traceStdVector(raw_target.accelerations);
-          row[30] = traceStdVector(projected_target.positions);
-          row[31] = traceStdVector(projected_target.velocities);
-          row[32] = traceStdVector(projected_target.accelerations);
-          row[33] = traceEigenVector(otg_state.positions);
-          row[34] = traceEigenVector(otg_state.velocities);
-          row[35] = traceEigenVector(otg_state.accelerations);
-          row[36] = traceEigenVector(otg_state.jerks);
-          row[37] = raw_target.future_o1_startup ? "true" : "false";
-          row[38] = plannerStateName(joint_step_diagnostics.state);
-          row[39] = std::to_string(joint_plan_diagnostics.duration);
-          row[40] = std::to_string(joint_plan_diagnostics.calculation_time_ms);
-          row[41] = std::to_string(joint_step_diagnostics.calculation_time_ms);
-          row[42] = traceProjectionEvents(projection, joint_names);
-          row[43] = std::to_string(output.projection_event_count);
-          row[44] = std::to_string(output.projection_cycle_count);
-          const auto worker_stats = red_worker_diagnostics.snapshot();
-          row[45] = std::to_string(worker_stats.deadline_miss_count);
-          row[46] = std::to_string(worker_stats.skipped_release_count);
-          row[47] = std::to_string(replay_settling.consecutiveCycles());
-          std::lock_guard<std::mutex> lock(replay_trace_mutex);
-          appendCsvRow(replay_trace, row);
-        }
-
-        const double total_solver_time_ms =
-          diagnostics.kinematics.solve_time_ms + joint_plan_diagnostics.calculation_time_ms +
-          joint_step_diagnostics.calculation_time_ms;
-        return mcl::WorkerIterationResult{
-          mcl::WorkerIterationOutcome::Accepted, diagnostics.attempt_revision,
-          total_solver_time_ms, {}};
-      });
+          const double total_solver_time_ms = diagnostics.kinematics.solve_time_ms +
+                                              joint_plan_diagnostics.calculation_time_ms +
+                                              joint_step_diagnostics.calculation_time_ms;
+          return mcl::WorkerIterationResult{mcl::WorkerIterationOutcome::Accepted,
+                                            diagnostics.attempt_revision,
+                                            total_solver_time_ms,
+                                            {}};
+        });
   });
 
-  mcl::InteractiveScheduler ui_scheduler({options.ui_rate_hz, options.duration_s});
+  mcl::SingleRateScheduler ui_scheduler({options.ui_rate_hz, options.duration_s});
   TargetSnapshot published_target = initial_target;
   TargetSnapshot last_command_target = initial_target;
   RedOutputSnapshot latest_output = initial_output;
@@ -1585,26 +1579,33 @@ int run(int argc, char ** argv, std::string & normal_exit_detail)
   std::optional<mcl::GroupedWorkerFault> held_fault;
   std::uint64_t handled_rejected_target_revision = 0;
   std::size_t publish_count = 0;
-  std::size_t replay_source_index = 0;
-  std::int64_t replay_timeline_time_ns = 0;
-  auto replay_clock_origin = std::chrono::steady_clock::now();
-  bool replay_clock_was_paused = planned_options.start_paused;
   bool replay_completed = false;
   mcl::IkDebugFrame frame;
   frame.joint_names = joint_names;
   frame.positions = robot.default_positions;
   frame.velocities.assign(joint_names.size(), 0.0);
-  frame.forward_kinematics = {
-    {mcl::ArmSide::Left, initial_output.left_pose},
-    {mcl::ArmSide::Right, initial_output.right_pose}};
+  frame.forward_kinematics = {{mcl::ArmSide::Left, initial_output.left_pose},
+                              {mcl::ArmSide::Right, initial_output.right_pose}};
   frame.selected_side = mcl::parseArmSide(options.tui.side);
   frame.solvers = {initial_output.solver_debug, initial_yellow_solver_debug};
   frame.solvers[0].ik_solve_time_percentiles = red_solve_time_percentiles.snapshot();
   frame.solvers[1].ik_solve_time_percentiles = yellow_solve_time_percentiles.snapshot();
-  frame.cpu_affinities = {
-    mcl::makeCpuAffinityDebug(ui_affinity_binding), mcl::makeCpuAffinityDebug(latest_red_affinity),
-    mcl::makeCpuAffinityDebug(latest_yellow_affinity)};
+  frame.cpu_affinities = {mcl::makeCpuAffinityDebug(ui_affinity_binding),
+                          mcl::makeCpuAffinityDebug(latest_red_affinity),
+                          mcl::makeCpuAffinityDebug(latest_yellow_affinity)};
   frame.self_collisions = {initial_collision_debug};
+  mcl::PlannedGroupedStepOtgTuiDebug tui_debug;
+  tui_debug.source_mode =
+      planned_options.source_mode == SourceMode::Replay ? "mcap replay" : "keyboard teleop";
+  tui_debug.target_mode =
+      mcl::planned_grouped_step_otg::jointTargetModeName(planned_options.joint_target_mode);
+  tui_debug.feedback_topology = "split IK reference / OTG execution";
+  tui_debug.cartesian_limits = {planned_options.planning.max_linear_velocity_mps,
+                                planned_options.planning.max_linear_acceleration_mps2,
+                                planned_options.planning.max_linear_jerk_mps3,
+                                planned_options.planning.max_angular_velocity_rps,
+                                planned_options.planning.max_angular_acceleration_rps2,
+                                planned_options.planning.max_angular_jerk_rps3};
 
   while (true) {
     const auto schedule = ui_scheduler.next();
@@ -1620,31 +1621,28 @@ int run(int argc, char ** argv, std::string & normal_exit_detail)
     if (red_attempt_to_ui.readLatest(latest_red_attempt)) {
       if (latest_red_attempt.state == RedAttemptState::RecoverableRejected) {
         last_recoverable_rejection = latest_red_attempt;
-        rejected_target = mcl::RejectedTargetDebug{
-          latest_red_attempt.target.revision, armTargets(latest_red_attempt.target),
-          latest_red_attempt.detail};
-        if (
-          latest_red_attempt.target.revision == published_target.revision &&
-          latest_red_attempt.target.revision != handled_rejected_target_revision) {
+        rejected_target = mcl::RejectedTargetDebug{latest_red_attempt.target.revision,
+                                                   armTargets(latest_red_attempt.target),
+                                                   latest_red_attempt.detail};
+        if (latest_red_attempt.target.revision == published_target.revision &&
+            latest_red_attempt.target.revision != handled_rejected_target_revision) {
           handled_rejected_target_revision = latest_red_attempt.target.revision;
-          tui.setTargetPose(
-            mcl::ArmSide::Left, latest_output.accepted_target.left,
-            "Restoring last accepted Red target");
-          tui.setTargetPose(
-            mcl::ArmSide::Right, latest_output.accepted_target.right,
-            "Red target rejected; edit from the last accepted "
-            "target to retry");
+          input.setTargetPose(mcl::ArmSide::Left, latest_output.accepted_target.left,
+                              "Restoring last accepted Red target");
+          input.setTargetPose(mcl::ArmSide::Right, latest_output.accepted_target.right,
+                              "Red target rejected; edit from the last accepted "
+                              "target to retry");
           last_command_target = latest_output.accepted_target;
         }
-      } else if (
-        latest_red_attempt.state == RedAttemptState::Accepted && rejected_target.has_value() &&
-        latest_red_attempt.target.revision > rejected_target->revision) {
+      } else if (latest_red_attempt.state == RedAttemptState::Accepted &&
+                 rejected_target.has_value() &&
+                 latest_red_attempt.target.revision > rejected_target->revision) {
         rejected_target.reset();
-        tui.setStatus("Red accepted the new target; grouped IK resumed");
+        input.setStatus("Red accepted the new target; grouped IK resumed");
       } else if (latest_red_attempt.state == RedAttemptState::FatalRejected) {
-        rejected_target = mcl::RejectedTargetDebug{
-          latest_red_attempt.target.revision, armTargets(latest_red_attempt.target),
-          latest_red_attempt.detail};
+        rejected_target = mcl::RejectedTargetDebug{latest_red_attempt.target.revision,
+                                                   armTargets(latest_red_attempt.target),
+                                                   latest_red_attempt.detail};
       }
     }
 
@@ -1652,98 +1650,66 @@ int run(int argc, char ** argv, std::string & normal_exit_detail)
       if (const auto recorded_fault = fault.snapshot()) {
         held_fault = *recorded_fault;
         workers.join();
-        tui.setMotionInputEnabled(
-          false, std::string{"FAULT HOLD: "} + mcl::workerGroupName(recorded_fault->group) + " " +
-                   mcl::workerFailureName(recorded_fault->failure));
+        input.setMotionInputEnabled(false, std::string{"FAULT HOLD: "} +
+                                               mcl::workerGroupName(recorded_fault->group) + " " +
+                                               mcl::workerFailureName(recorded_fault->failure));
       }
     }
 
-    tui.poll();
+    const auto input_update = input.poll(schedule->dt);
+    for (const auto & event : input_update.navigation) {
+      tui.handleNavigation(event);
+    }
     if (!held_fault.has_value()) {
-      if (const auto reset_side = tui.consumeResetRequest()) {
-        tui.setTargetPose(
-          *reset_side,
-          *reset_side == mcl::ArmSide::Left ? latest_output.left_pose : latest_output.right_pose,
-          std::string{"Reset "} + mcl::armSideName(*reset_side) + " target from latest Red output");
+      if (const auto reset_side = input.consumeResetRequest()) {
+        input.setTargetPose(*reset_side,
+                            *reset_side == mcl::ArmSide::Left ? latest_output.left_pose
+                                                              : latest_output.right_pose,
+                            std::string{"Reset "} + mcl::armSideName(*reset_side) +
+                                " target from latest Red output");
       }
     }
-    const auto & command = tui.command();
-    if (command.stop_requested) {
+    if (input.stopRequested()) {
       break;
     }
 
     if (planned_options.source_mode == SourceMode::Replay && !held_fault.has_value()) {
-      const bool single_step = tui.consumeSingleStepRequest();
-      std::size_t next_index = replay_source_index;
-      if (single_step) {
-        if (next_index + 1U < loaded_replay->timeline.timeline.size()) {
-          ++next_index;
-          replay_timeline_time_ns =
-            loaded_replay->timeline.timeline.at(next_index).projected_time_ns;
-        }
-        if (planned_options.replay->execution_mode == mcl::data::ExecutionMode::Realtime) {
-          replay_clock_was_paused = true;
-        }
-      } else if (planned_options.replay->execution_mode == mcl::data::ExecutionMode::Batch) {
-        if (
-          !command.paused && next_index + 1U < loaded_replay->timeline.timeline.size() &&
-          replay_last_consumed_revision.load() >= published_target.revision) {
-          ++next_index;
-        }
-      } else if (command.paused) {
-        if (!replay_clock_was_paused) {
-          const auto elapsed = std::chrono::steady_clock::now() - replay_clock_origin;
-          replay_timeline_time_ns = static_cast<std::int64_t>(std::llround(
-            std::chrono::duration<double>(elapsed).count() * 1.0e9 *
-            planned_options.replay->playback_rate));
-        }
-        replay_clock_was_paused = true;
-      } else {
-        if (replay_clock_was_paused) {
-          const auto replay_elapsed = std::chrono::duration<double>(
-            static_cast<double>(replay_timeline_time_ns) /
-            (1.0e9 * planned_options.replay->playback_rate));
-          replay_clock_origin =
-            std::chrono::steady_clock::now() -
-            std::chrono::duration_cast<std::chrono::steady_clock::duration>(replay_elapsed);
-          replay_clock_was_paused = false;
-        }
-        const auto elapsed = std::chrono::steady_clock::now() - replay_clock_origin;
-        replay_timeline_time_ns = static_cast<std::int64_t>(std::llround(
-          std::chrono::duration<double>(elapsed).count() * 1.0e9 *
-          planned_options.replay->playback_rate));
-        while (next_index + 1U < loaded_replay->timeline.timeline.size() &&
-               loaded_replay->timeline.timeline.at(next_index + 1U).projected_time_ns <=
-                 replay_timeline_time_ns) {
-          ++next_index;
-        }
+      for (const auto control : input.consumeSourceControls()) {
+        replay_source->applyControl(control);
       }
-      if (next_index > replay_source_index) {
-        replay_source_index = next_index;
-        const auto & source = loaded_replay->timeline.timeline.at(replay_source_index);
+      const bool worker_consumed_current =
+          replay_last_consumed_revision.load() >= published_target.revision;
+      const bool may_advance =
+          planned_options.replay->execution_mode == mcl::data::ExecutionMode::Realtime ||
+          worker_consumed_current;
+      const auto advance = may_advance ? replay_source->advance(static_cast<std::int64_t>(
+                                             std::llround(1.0e9 / options.ui_rate_hz)))
+                                       : replay::ReplayAdvance{};
+      replay_source->waitForCurrentFrame();
+      input.setPaused(replay_source->paused(), replay_source->status().detail);
+      if (advance.frame_changed) {
+        const auto & source = replay_source->sourceFrame();
         published_target.revision = source.sequence + 1U;
         published_target.left = source.value.left.pose * robot.left_tcp_offset.inverse();
         published_target.right = source.value.right.pose * robot.right_tcp_offset.inverse();
         last_command_target = published_target;
         target_to_red.publish(published_target);
-        tui.setTargetPose(mcl::ArmSide::Left, published_target.left, "Replay goal advanced");
-        tui.setTargetPose(mcl::ArmSide::Right, published_target.right, "Replay goal advanced");
+        input.setTargetPose(mcl::ArmSide::Left, published_target.left, "Replay goal advanced");
+        input.setTargetPose(mcl::ArmSide::Right, published_target.right, "Replay goal advanced");
       }
     }
 
     if (schedule->update_due) {
-      if (
-        planned_options.source_mode == SourceMode::Teleop && !held_fault.has_value() &&
-        !command.paused && !sameTargetPoses(last_command_target, command.targets)) {
-        published_target = targetSnapshot(command.targets, published_target.revision + 1);
+      if (planned_options.source_mode == SourceMode::Teleop && !held_fault.has_value() &&
+          !input.paused() && !sameTargetPoses(last_command_target, input.targets())) {
+        published_target = targetSnapshot(input.targets(), published_target.revision + 1);
         last_command_target = published_target;
         target_to_red.publish(published_target);
       }
 
       frame.targets = armTargets(latest_output.accepted_target);
-      frame.forward_kinematics = {
-        {mcl::ArmSide::Left, latest_output.left_pose},
-        {mcl::ArmSide::Right, latest_output.right_pose}};
+      frame.forward_kinematics = {{mcl::ArmSide::Left, latest_output.left_pose},
+                                  {mcl::ArmSide::Right, latest_output.right_pose}};
       frame.positions = toStdVector(latest_output.state.positions);
       frame.velocities = toStdVector(latest_output.state.velocities);
       const auto red_stats = red_worker_diagnostics.snapshot();
@@ -1751,29 +1717,28 @@ int run(int argc, char ** argv, std::string & normal_exit_detail)
       frame.solvers = {latest_red_attempt.solver_debug, latest_yellow_solver_debug};
       frame.solvers[0].ik_solve_time_percentiles = red_solve_time_percentiles.snapshot();
       frame.solvers[1].ik_solve_time_percentiles = yellow_solve_time_percentiles.snapshot();
-      frame.cpu_affinities = {
-        mcl::makeCpuAffinityDebug(ui_affinity_binding),
-        mcl::makeCpuAffinityDebug(latest_red_affinity),
-        mcl::makeCpuAffinityDebug(latest_yellow_affinity)};
+      frame.cpu_affinities = {mcl::makeCpuAffinityDebug(ui_affinity_binding),
+                              mcl::makeCpuAffinityDebug(latest_red_affinity),
+                              mcl::makeCpuAffinityDebug(latest_yellow_affinity)};
       frame.workers = {
-        {"Red", options.red_rate_hz, red_stats.iteration_count, red_stats.deadline_miss_count,
-         red_stats.consecutive_deadline_misses, red_stats.skipped_release_count,
-         red_stats.maximum_release_lateness_ms, red_stats.maximum_execution_ms,
-         red_stats.maximum_release_to_finish_ms, red_stats.maximum_overrun_ms,
-         red_stats.maximum_solver_ms, red_stats.recoverable_rejection_count,
-         red_stats.maximum_non_solver_execution_ms, red_stats.latest_release_lateness_ms,
-         red_stats.latest_execution_ms, red_stats.latest_release_to_finish_ms,
-         red_stats.latest_overrun_ms, red_stats.latest_solver_ms,
-         red_stats.latest_non_solver_execution_ms},
-        {"Yellow", options.yellow_rate_hz, yellow_stats.iteration_count,
-         yellow_stats.deadline_miss_count, yellow_stats.consecutive_deadline_misses,
-         yellow_stats.skipped_release_count, yellow_stats.maximum_release_lateness_ms,
-         yellow_stats.maximum_execution_ms, yellow_stats.maximum_release_to_finish_ms,
-         yellow_stats.maximum_overrun_ms, yellow_stats.maximum_solver_ms,
-         yellow_stats.recoverable_rejection_count, yellow_stats.maximum_non_solver_execution_ms,
-         yellow_stats.latest_release_lateness_ms, yellow_stats.latest_execution_ms,
-         yellow_stats.latest_release_to_finish_ms, yellow_stats.latest_overrun_ms,
-         yellow_stats.latest_solver_ms, yellow_stats.latest_non_solver_execution_ms}};
+          {"Red", options.red_rate_hz, red_stats.iteration_count, red_stats.deadline_miss_count,
+           red_stats.consecutive_deadline_misses, red_stats.skipped_release_count,
+           red_stats.maximum_release_lateness_ms, red_stats.maximum_execution_ms,
+           red_stats.maximum_release_to_finish_ms, red_stats.maximum_overrun_ms,
+           red_stats.maximum_solver_ms, red_stats.recoverable_rejection_count,
+           red_stats.maximum_non_solver_execution_ms, red_stats.latest_release_lateness_ms,
+           red_stats.latest_execution_ms, red_stats.latest_release_to_finish_ms,
+           red_stats.latest_overrun_ms, red_stats.latest_solver_ms,
+           red_stats.latest_non_solver_execution_ms},
+          {"Yellow", options.yellow_rate_hz, yellow_stats.iteration_count,
+           yellow_stats.deadline_miss_count, yellow_stats.consecutive_deadline_misses,
+           yellow_stats.skipped_release_count, yellow_stats.maximum_release_lateness_ms,
+           yellow_stats.maximum_execution_ms, yellow_stats.maximum_release_to_finish_ms,
+           yellow_stats.maximum_overrun_ms, yellow_stats.maximum_solver_ms,
+           yellow_stats.recoverable_rejection_count, yellow_stats.maximum_non_solver_execution_ms,
+           yellow_stats.latest_release_lateness_ms, yellow_stats.latest_execution_ms,
+           yellow_stats.latest_release_to_finish_ms, yellow_stats.latest_overrun_ms,
+           yellow_stats.latest_solver_ms, yellow_stats.latest_non_solver_execution_ms}};
       const std::string clamp_detail = retargetClampDetail(latest_red_attempt);
       if (held_fault.has_value()) {
         frame.runtime_state = mcl::IkRuntimeState::FaultHold;
@@ -1793,47 +1758,45 @@ int run(int argc, char ** argv, std::string & normal_exit_detail)
                           " skipped R=" + std::to_string(red_stats.skipped_release_count) +
                           " Y=" + std::to_string(yellow_stats.skipped_release_count);
         frame.status =
-          "Grouped IK running | skipped_releases R=" +
-          std::to_string(red_stats.skipped_release_count) +
-          " Y=" + std::to_string(yellow_stats.skipped_release_count) +
-          " recoverable_rejections R=" + std::to_string(red_stats.recoverable_rejection_count);
+            "Grouped IK running | skipped_releases R=" +
+            std::to_string(red_stats.skipped_release_count) +
+            " Y=" + std::to_string(yellow_stats.skipped_release_count) +
+            " recoverable_rejections R=" + std::to_string(red_stats.recoverable_rejection_count);
       }
       if (!clamp_detail.empty()) {
         frame.ik_status +=
-          " retarget_clamped=" +
-          std::to_string(latest_red_attempt.retarget_clamp.clamped_component_count);
+            " retarget_clamped=" +
+            std::to_string(latest_red_attempt.retarget_clamp.clamped_component_count);
         frame.status += " | " + clamp_detail;
       }
       const double raw_otg_position_delta =
-        (latest_output.raw_ik_positions - latest_output.state.positions).cwiseAbs().maxCoeff();
+          (latest_output.raw_ik_positions - latest_output.state.positions).cwiseAbs().maxCoeff();
       const double raw_otg_velocity_delta =
-        (latest_output.raw_ik_velocities - latest_output.state.velocities).cwiseAbs().maxCoeff();
+          (latest_output.raw_ik_velocities - latest_output.state.velocities).cwiseAbs().maxCoeff();
       frame.ik_status +=
-        " joint_otg=" + std::string{mcl::planned_grouped_step_otg::jointTargetModeName(
-                           planned_options.joint_target_mode)} +
-        " feedback=split-ik-reference/otg-execution" +
-        " state=" + plannerStateName(latest_output.joint_step_diagnostics.state) +
-        " plan_ms=" +
-        std::to_string(latest_output.joint_plan_diagnostics.calculation_time_ms) +
-        " step_ms=" +
-        std::to_string(latest_output.joint_step_diagnostics.calculation_time_ms) +
-        " projection_events=" + std::to_string(latest_output.projection_event_count);
+          " joint_otg=" +
+          std::string{mcl::planned_grouped_step_otg::jointTargetModeName(
+              planned_options.joint_target_mode)} +
+          " feedback=split-ik-reference/otg-execution" +
+          " state=" + plannerStateName(latest_output.joint_step_diagnostics.state) +
+          " plan_ms=" + std::to_string(latest_output.joint_plan_diagnostics.calculation_time_ms) +
+          " step_ms=" + std::to_string(latest_output.joint_step_diagnostics.calculation_time_ms) +
+          " projection_events=" + std::to_string(latest_output.projection_event_count);
       frame.status +=
-        " | JointPlanner Phase per-tick plan+first-step duration_s=" +
-        std::to_string(latest_output.joint_plan_diagnostics.duration) +
-        " startup=" + (latest_output.future_o1_startup ? std::string{"true"} : "false") +
-        " max_abs_v=" + std::to_string(maximumAbsolute(latest_output.state.velocities)) +
-        " max_abs_a=" + std::to_string(maximumAbsolute(latest_output.state.accelerations)) +
-        " raw_otg_max_dq=" + std::to_string(raw_otg_position_delta) +
-        " raw_otg_max_dv=" + std::to_string(raw_otg_velocity_delta);
+          " | JointPlanner Phase per-tick plan+first-step duration_s=" +
+          std::to_string(latest_output.joint_plan_diagnostics.duration) +
+          " startup=" + (latest_output.future_o1_startup ? std::string{"true"} : "false") +
+          " max_abs_v=" + std::to_string(maximumAbsolute(latest_output.state.velocities)) +
+          " max_abs_a=" + std::to_string(maximumAbsolute(latest_output.state.accelerations)) +
+          " raw_otg_max_dq=" + std::to_string(raw_otg_position_delta) +
+          " raw_otg_max_dv=" + std::to_string(raw_otg_velocity_delta);
       frame.iterations = latest_red_attempt.solver_debug.ik_iterations;
       frame.converged = latest_red_attempt.solver_debug.converged;
       frame.solve_time_ms = latest_red_attempt.solver_debug.ik_solve_time_ms;
-      frame.target_errors = {
-        {mcl::ArmSide::Left, latest_output.left_position_error_m,
-         latest_output.left_orientation_error_rad},
-        {mcl::ArmSide::Right, latest_output.right_position_error_m,
-         latest_output.right_orientation_error_rad}};
+      frame.target_errors = {{mcl::ArmSide::Left, latest_output.left_position_error_m,
+                              latest_output.left_orientation_error_rad},
+                             {mcl::ArmSide::Right, latest_output.right_position_error_m,
+                              latest_output.right_orientation_error_rad}};
       mcl::CartesianPlannerDebug planner_debug;
       planner_debug.state = plannerStateName(latest_output.planner_state);
       planner_debug.sample_time_s = latest_output.accepted_planner_sample.time_from_start;
@@ -1841,59 +1804,138 @@ int run(int argc, char ** argv, std::string & normal_exit_detail)
         const bool left = side == mcl::ArmSide::Left;
         const auto & planner_frame = latest_output.accepted_planner_sample.frames.at(index);
         const auto & source_goal =
-          left ? latest_output.source_goal.left : latest_output.source_goal.right;
+            left ? latest_output.source_goal.left : latest_output.source_goal.right;
         const auto & reference =
-          left ? latest_output.accepted_target.left : latest_output.accepted_target.right;
+            left ? latest_output.accepted_target.left : latest_output.accepted_target.right;
         const auto & fk = left ? latest_output.left_pose : latest_output.right_pose;
         return mcl::PlannedArmDebug{
-          side,
-          source_goal,
-          reference,
-          fk,
-          planner_frame.twist,
-          planner_frame.acceleration,
-          (reference.translation() - fk.translation()).norm(),
-          Eigen::AngleAxisd(reference.linear() * fk.linear().transpose()).angle()};
+            side,
+            source_goal,
+            reference,
+            fk,
+            planner_frame.twist,
+            planner_frame.acceleration,
+            (reference.translation() - fk.translation()).norm(),
+            Eigen::AngleAxisd(reference.linear() * fk.linear().transpose()).angle()};
       };
-      planner_debug.arms = {
-        makePlannerArm(mcl::ArmSide::Left, 0U), makePlannerArm(mcl::ArmSide::Right, 1U)};
+      planner_debug.arms = {makePlannerArm(mcl::ArmSide::Left, 0U),
+                            makePlannerArm(mcl::ArmSide::Right, 1U)};
       frame.cartesian_planner = std::move(planner_debug);
       frame.self_collisions = {latest_collision_debug};
       frame.rejected_target = rejected_target;
-      frame.paused = command.paused;
-      frame.selected_side = command.selected_side;
+      frame.paused = input.paused();
+      frame.selected_side = input.selectedSide();
+
+      tui_debug.left_task_scale = latest_output.left_scale.scale;
+      tui_debug.right_task_scale = latest_output.right_scale.scale;
+      tui_debug.cartesian_plan = {plannerStateName(latest_output.planner_state),
+                                  latest_output.cartesian_plan_diagnostics.duration,
+                                  latest_output.accepted_planner_sample.time_from_start,
+                                  latest_output.cartesian_plan_diagnostics.sample_count,
+                                  latest_output.cartesian_plan_diagnostics.calculation_time_ms};
+      tui_debug.joint_plan = {plannerStateName(latest_output.joint_plan_diagnostics.state),
+                              latest_output.joint_plan_diagnostics.duration,
+                              1.0 / options.red_rate_hz,
+                              latest_output.joint_plan_diagnostics.sample_count,
+                              latest_output.joint_plan_diagnostics.calculation_time_ms};
+      tui_debug.joint_step = {plannerStateName(latest_output.joint_step_diagnostics.state),
+                              latest_output.joint_step_diagnostics.duration,
+                              1.0 / options.red_rate_hz,
+                              latest_output.joint_step_diagnostics.sample_count,
+                              latest_output.joint_step_diagnostics.calculation_time_ms};
+      tui_debug.startup = latest_output.future_o1_startup;
+      tui_debug.projection_event_count = latest_output.projection_event_count;
+      tui_debug.projection_cycle_count = latest_output.projection_cycle_count;
+      tui_debug.modified_joint_count = latest_output.projection.modified_joint_count;
+      tui_debug.raw_otg_max_position_delta = raw_otg_position_delta;
+      tui_debug.raw_otg_max_velocity_delta = raw_otg_velocity_delta;
+      tui_debug.maximum_absolute_velocity = maximumAbsolute(latest_output.state.velocities);
+      tui_debug.maximum_absolute_acceleration = maximumAbsolute(latest_output.state.accelerations);
+      tui_debug.maximum_absolute_jerk = maximumAbsolute(latest_output.state.jerks);
+      tui_debug.clamp_target_revision = latest_red_attempt.retarget_clamp_target_revision;
+      tui_debug.maximum_clamp_limit_ratio = latest_red_attempt.retarget_clamp.maximum_limit_ratio;
+
+      std::vector<std::string> projection_flags(joint_names.size(), "-");
+      tui_debug.projection_events.clear();
+      tui_debug.projection_events.reserve(latest_output.projection.events.size());
+      for (const auto & event : latest_output.projection.events) {
+        auto & flags = projection_flags.at(event.joint_index);
+        const std::string flag = projectionFlag(event.component);
+        if (flags == "-") {
+          flags = flag;
+        } else if (flags.find(flag) == std::string::npos) {
+          flags += flag;
+        }
+        tui_debug.projection_events.push_back(
+            {joint_names.at(event.joint_index),
+             mcl::planned_grouped_step_otg::projectionComponentName(event.component),
+             event.original_value, event.applied_value, event.limit});
+      }
+
+      tui_debug.joints.clear();
+      tui_debug.joints.reserve(joint_names.size());
+      for (std::size_t index = 0U; index < joint_names.size(); ++index) {
+        tui_debug.joints.push_back(
+            {joint_names[index], compactJointName(index),
+             latest_output.raw_ik_positions[static_cast<Eigen::Index>(index)],
+             latest_output.raw_ik_velocities[static_cast<Eigen::Index>(index)],
+             latest_output.projected_joint_target.positions.at(index),
+             latest_output.projected_joint_target.velocities.at(index),
+             latest_output.projected_joint_target.accelerations.at(index),
+             latest_output.state.positions[static_cast<Eigen::Index>(index)],
+             latest_output.state.velocities[static_cast<Eigen::Index>(index)],
+             latest_output.state.accelerations[static_cast<Eigen::Index>(index)],
+             latest_output.state.jerks[static_cast<Eigen::Index>(index)],
+             joint_otg_limits.position_lower.at(index), joint_otg_limits.position_upper.at(index),
+             joint_otg_limits.max_velocity.at(index), joint_otg_limits.max_acceleration.at(index),
+             joint_otg_limits.max_jerk.at(index), projection_flags[index]});
+      }
+
+      constexpr std::array<const char *, 3> kAxisNames{"x", "y", "z"};
+      tui_debug.clamp_events.clear();
+      tui_debug.clamp_events.reserve(latest_red_attempt.retarget_clamp.clamped_component_count);
+      for (std::size_t index = 0U;
+           index < latest_red_attempt.retarget_clamp.clamped_component_count; ++index) {
+        const auto & event = latest_red_attempt.retarget_clamp.events[index];
+        tui_debug.clamp_events.push_back({event.segment_index == 0U ? "left" : "right",
+                                          retargetClampComponentName(event.component),
+                                          kAxisNames.at(event.axis), event.original_value,
+                                          event.applied_value, event.limit});
+      }
 
       mcl::IkDebugFrame visualization_debug_frame = frame;
       visualization_debug_frame.targets = armTargets(latest_red_attempt.target);
       visualization_debug_frame.positions = toStdVector(latest_output.raw_ik_positions);
       visualization_debug_frame.velocities = toStdVector(latest_output.raw_ik_velocities);
       visualization_debug_frame.forward_kinematics = {
-        {mcl::ArmSide::Left, latest_output.raw_left_pose},
-        {mcl::ArmSide::Right, latest_output.raw_right_pose}};
-      auto visualization_frame = mcl::makeIkRenderBatch(
-        visualization_debug_frame, presentation, schedule->emit_time_ns);
+          {mcl::ArmSide::Left, latest_output.raw_left_pose},
+          {mcl::ArmSide::Right, latest_output.raw_right_pose}};
+      auto visualization_frame =
+          mcl::makeIkRenderBatch(visualization_debug_frame, presentation, schedule->emit_time_ns);
       mcl::planned_grouped_step_otg::appendPlanningRequestPoses(
-        visualization_frame, robot.base_frame, latest_red_attempt.attempted_reference.left,
-        latest_red_attempt.attempted_reference.right);
+          visualization_frame, robot.base_frame, latest_red_attempt.attempted_reference.left,
+          latest_red_attempt.attempted_reference.right);
       mcl::planned_grouped_step_otg::appendOtgExecution(
-        visualization_frame, joint_names, toStdVector(latest_output.state.positions),
-        toStdVector(latest_output.state.velocities), robot.base_frame,
-        latest_output.left_pose, latest_output.right_pose);
+          visualization_frame, joint_names, toStdVector(latest_output.state.positions),
+          toStdVector(latest_output.state.velocities), robot.base_frame, latest_output.left_pose,
+          latest_output.right_pose);
       visualization_sink->write(visualization_frame);
       ++publish_count;
-      tui.render(frame, publish_count, visualization_sink->status());
 
-      if (
-        planned_options.source_mode == SourceMode::Replay &&
-        replay_source_index + 1U == loaded_replay->timeline.timeline.size() &&
-        replay_settled.load()) {
-        replay_completed = true;
-        break;
+      if (planned_options.source_mode == SourceMode::Replay && replay_settled.load()) {
+        replay_source->markFrameProcessed();
+        if (replay_source->endOfStream()) {
+          replay_completed = true;
+          break;
+        }
       }
     }
-    if (
-      planned_options.replay.has_value() &&
-      planned_options.replay->execution_mode == mcl::data::ExecutionMode::Batch) {
+    if (schedule->draw_due) {
+      tui.render(mcl::makeAppTuiDocument(frame, tui_debug, presentation, publish_count,
+                                         visualization_sink->status(), kTitle, input.status()));
+    }
+    if (planned_options.replay.has_value() &&
+        planned_options.replay->execution_mode == mcl::data::ExecutionMode::Batch) {
       std::this_thread::sleep_for(std::chrono::microseconds(100));
     } else {
       ui_scheduler.sleep();
@@ -1914,49 +1956,68 @@ int run(int argc, char ** argv, std::string & normal_exit_detail)
     }
     replay::ReplayExecutionMetadata execution;
     execution.app = kProgramId;
-    execution.topology =
-      "planned-red-yellow-grouped-servo-step+split-reference-joint-otg";
+    execution.topology = "planned-red-yellow-grouped-servo-step+split-reference-joint-otg";
     execution.solver = "motion_control_core+CartesianPlanner+JointPlanner";
     execution.backend = "proxqp+ruckig";
     execution.red_rate_hz = options.red_rate_hz;
     execution.yellow_rate_hz = options.yellow_rate_hz;
-    execution.consumed_frame_count = replay_consumed_frame_count.load();
-    execution.dropped_frame_count = replay_dropped_frame_count.load();
+    execution.consumed_frame_count = replay_source->consumedFrameCount();
+    execution.dropped_frame_count = replay_source->droppedFrameCount();
     execution.accepted_count = replay_accepted_solve_count;
     execution.rejected_count = replay_rejected_solve_count;
-    execution.deadline_miss_count = red_stats.deadline_miss_count;
-    auto manifest = replay::makeReplayManifest(
-      *planned_options.replay, *loaded_replay, execution, mcl::sha256_file(trace_path));
+    execution.deadline_miss_count =
+        red_stats.deadline_miss_count + replay_source->deadlineMissCount();
+    execution.resolved_config = {
+        {"regularization", std::to_string(options.solver.regularization)},
+        {"maximum_hard_violation", std::to_string(options.solver.maximum_accepted_hard_violation)},
+        {"cartesian_progress_weight", std::to_string(options.solver.cartesian_progress_weight)},
+        {"red_proxqp_absolute_tolerance",
+         std::to_string(options.solver.red_proxqp_absolute_tolerance)},
+        {"red_proxqp_primal_infeasibility_tolerance",
+         std::to_string(options.solver.red_proxqp_primal_infeasibility_tolerance)},
+        {"yellow_to_red_coupling_weight",
+         std::to_string(options.solver.yellow_to_red_coupling_weight)},
+        {"minimum_collision_distance_m",
+         std::to_string(options.solver.minimum_collision_distance_m)},
+        {"collision_influence_distance_m",
+         std::to_string(options.solver.collision_influence_distance_m)},
+        {"collision_weight", std::to_string(options.solver.collision_weight)},
+        {"max_linear_velocity_mps",
+         std::to_string(planned_options.planning.max_linear_velocity_mps)},
+        {"max_angular_velocity_rps",
+         std::to_string(planned_options.planning.max_angular_velocity_rps)},
+        {"joint_target_mode",
+         mcl::planned_grouped_step_otg::jointTargetModeName(planned_options.joint_target_mode)},
+    };
+    auto manifest = replay::makeReplayManifest(*planned_options.replay, *loaded_replay, execution,
+                                               mcl::sha256_file(trace_path));
     auto & joint_otg = manifest["joint_otg"];
-    joint_otg["target_mode"] = mcl::planned_grouped_step_otg::jointTargetModeName(
-      planned_options.joint_target_mode);
+    joint_otg["target_mode"] =
+        mcl::planned_grouped_step_otg::jointTargetModeName(planned_options.joint_target_mode);
     joint_otg["sample_period_s"] = 1.0 / options.red_rate_hz;
     joint_otg["synchronization"] = "Phase";
     joint_otg["execution_semantics"] =
-      "per Red tick JointPlanner::plan plus first JointPlanner::step sample; not persistent "
-      "Ruckig.update equivalence";
+        "per Red tick JointPlanner::plan plus first JointPlanner::step sample; "
+        "not persistent "
+        "Ruckig.update equivalence";
     joint_otg["feedback_topology"] = "split-ik-reference-and-otg-execution";
     joint_otg["red_ik_feedback_source"] = "previous accepted raw IK P/V";
     joint_otg["joint_planner_feedback_source"] = "previous accepted OTG P/V/A";
     joint_otg["yellow_feedback_source"] = "previous accepted OTG P/V";
     joint_otg["future_o1_startup"] = "first two accepted live samples use latest P and zero V";
     joint_otg["future_o1_velocity_deadband_rad_per_s"] =
-      mcl::planned_grouped_step_otg::kFutureO1VelocityDeadbandRadPerS;
-    joint_otg["profile_source_revision"] =
-      mcl::planned_grouped_step_otg::kR1StreamProfileRevision;
+        mcl::planned_grouped_step_otg::kFutureO1VelocityDeadbandRadPerS;
+    joint_otg["profile_source_revision"] = mcl::planned_grouped_step_otg::kR1StreamProfileRevision;
     joint_otg["profile_source_path"] =
-      "products/synrobot/modules/control/motion_control/config/robots/psi_r1.yaml";
-    joint_otg["profile_source_sha256"] =
-      mcl::planned_grouped_step_otg::kR1StreamProfileSha256;
+        "products/synrobot/modules/control/motion_control/config/robots/"
+        "psi_r1.yaml";
+    joint_otg["profile_source_sha256"] = mcl::planned_grouped_step_otg::kR1StreamProfileSha256;
     joint_otg["profile_overrides"]["max_jerk_rad_per_s3"] = 3200.0;
     joint_otg["profile_overrides"]["reason"] = "OTG Lab fixed jerk override";
     joint_otg["position_limits_source"] = "runtime-loaded R1 URDF model";
-    joint_otg["projection_event_count"] =
-      Json::UInt64(latest_output.projection_event_count);
-    joint_otg["projection_cycle_count"] =
-      Json::UInt64(latest_output.projection_cycle_count);
-    joint_otg["replay_settled_cycles"] =
-      Json::UInt64(replay_settled_cycle_count.load());
+    joint_otg["projection_event_count"] = Json::UInt64(latest_output.projection_event_count);
+    joint_otg["projection_cycle_count"] = Json::UInt64(latest_output.projection_cycle_count);
+    joint_otg["replay_settled_cycles"] = Json::UInt64(replay_settled_cycle_count.load());
     joint_otg["replay_required_settled_cycles"] = 20;
     joint_otg["replay_completion_thresholds"]["fk_position_m"] = 1.0e-4;
     joint_otg["replay_completion_thresholds"]["fk_orientation_rad"] = 1.0e-4;
@@ -1965,23 +2026,23 @@ int run(int argc, char ** argv, std::string & normal_exit_detail)
     joint_otg["deadline_miss_count"] = Json::UInt64(red_stats.deadline_miss_count);
     joint_otg["skipped_release_count"] = Json::UInt64(red_stats.skipped_release_count);
     joint_otg["failure_layer"] =
-      recorded_fault.has_value() ? failureLayer(*recorded_fault) : std::string{};
+        recorded_fault.has_value() ? failureLayer(*recorded_fault) : std::string{};
     for (std::size_t index = 0U; index < joint_names.size(); ++index) {
       joint_otg["joint_names"].append(joint_names[index]);
       joint_otg["position_lower"].append(joint_otg_limits.position_lower[index]);
       joint_otg["position_upper"].append(joint_otg_limits.position_upper[index]);
       joint_otg["max_velocity_rad_per_s"].append(
-        mcl::planned_grouped_step_otg::kR1StreamMaxVelocityRadPerS[index]);
+          mcl::planned_grouped_step_otg::kR1StreamMaxVelocityRadPerS[index]);
       joint_otg["max_acceleration_rad_per_s2"].append(
-        mcl::planned_grouped_step_otg::kR1StreamMaxAccelerationRadPerS2[index]);
+          mcl::planned_grouped_step_otg::kR1StreamMaxAccelerationRadPerS2[index]);
       joint_otg["max_jerk_rad_per_s3"].append(
-        mcl::planned_grouped_step_otg::kR1StreamMaxJerkRadPerS3[index]);
+          mcl::planned_grouped_step_otg::kR1StreamMaxJerkRadPerS3[index]);
     }
     replay::writeTextFile(planned_options.replay->output_dir / "manifest.json", jsonText(manifest));
     const auto status = replay::makeReplayStatus(
-      *loaded_replay, execution,
-      recorded_fault.has_value() ? "failed" : (replay_completed ? "succeeded" : "stopped"),
-      recorded_fault.has_value() ? faultSummary(*recorded_fault) : std::string{});
+        *loaded_replay, execution,
+        recorded_fault.has_value() ? "failed" : (replay_completed ? "succeeded" : "stopped"),
+        recorded_fault.has_value() ? faultSummary(*recorded_fault) : std::string{});
     replay::writeTextFile(planned_options.replay->output_dir / "status.json", jsonText(status));
   }
 
@@ -2002,7 +2063,7 @@ int run(int argc, char ** argv, std::string & normal_exit_detail)
   return EXIT_SUCCESS;
 }
 
-}  // namespace
+} // namespace
 
 int main(int argc, char ** argv)
 {

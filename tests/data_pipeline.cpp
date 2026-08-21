@@ -6,6 +6,7 @@
 #include "adapters/data/source/csv_source.hpp"
 #include "adapters/data/source/mcap_source.hpp"
 #include "adapters/data/temporal/replay_clock.hpp"
+#include "components/replay/replay_source.hpp"
 
 #include <mcap/writer.hpp>
 
@@ -27,6 +28,7 @@
 #include <vector>
 
 namespace data = motion_control_lab::data;
+namespace replay = motion_control_lab::replay;
 
 namespace
 {
@@ -347,6 +349,46 @@ void testMcapCsvAndDecoders(const TemporaryDirectory & temporary)
     require(csv_poses.samples[index].pose.matrix().isApprox(mcap_poses[index].pose.matrix()),
       "MCAP/CSV pose differs");
   }
+
+  data::TypedStream<data::StampedPose> mcap_stream;
+  mcap_stream.logical_name = "/target";
+  mcap_stream.samples = mcap_poses;
+  data::TypedStream<data::StampedPose> csv_stream;
+  csv_stream.logical_name = "pose";
+  csv_stream.samples = csv_poses.samples;
+  data::DualArmProjectionConfig projection;
+  projection.timestamp_source = data::TimestampSource::HeaderStamp;
+  projection.pairing_policy = data::PairingPolicy::Exact;
+  projection.timestamp_projection.policy = data::TimestampPolicy::FixedPeriod;
+  projection.timestamp_projection.period_ns = 10'000'000;
+  replay::LoadedReplay mcap_loaded;
+  replay::LoadedReplay csv_loaded;
+  mcap_loaded.timeline = data::makeDualArmTimeline(mcap_stream, mcap_stream, projection);
+  csv_loaded.timeline = data::makeDualArmTimeline(csv_stream, csv_stream, projection);
+  replay::ReplaySource mcap_replay(mcap_loaded, data::ExecutionMode::Batch, 1.0);
+  replay::ReplaySource csv_replay(csv_loaded, data::ExecutionMode::Batch, 1.0);
+  for (std::size_t index = 0; index < mcap_poses.size(); ++index) {
+    require(mcap_replay.frame().revision == csv_replay.frame().revision,
+      "MCAP/CSV MotionTargetFrame revision differs");
+    require(mcap_replay.frame().logical_time_ns == csv_replay.frame().logical_time_ns,
+      "MCAP/CSV MotionTargetFrame logical timestamp differs");
+    require(mcap_replay.frame().targets.size() == csv_replay.frame().targets.size(),
+      "MCAP/CSV MotionTargetFrame target count differs");
+    for (std::size_t target = 0; target < mcap_replay.frame().targets.size(); ++target) {
+      require(
+        mcap_replay.frame().targets[target].target_pose.matrix().isApprox(
+          csv_replay.frame().targets[target].target_pose.matrix()),
+        "MCAP/CSV MotionTargetFrame pose differs");
+    }
+    mcap_replay.markFrameProcessed();
+    csv_replay.markFrameProcessed();
+    if (index + 1U < mcap_poses.size()) {
+      require(mcap_replay.advance(10'000'000).frame_changed, "MCAP replay did not advance");
+      require(csv_replay.advance(10'000'000).frame_changed, "CSV replay did not advance");
+    }
+  }
+  require(mcap_replay.endOfStream() && csv_replay.endOfStream(),
+    "MCAP/CSV replay EOS differs");
 }
 
 data::StampedPose sample(std::optional<std::int64_t> stamp, const std::string & frame = "base")

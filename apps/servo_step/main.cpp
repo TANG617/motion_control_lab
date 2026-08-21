@@ -18,20 +18,22 @@
 
 #include "adapters/replay/replay_support.hpp"
 #include "app_options.hpp"
-#include "console/tui_console.hpp"
-#include "cpu_affinity.hpp"
-#include "ik_app_utils.hpp"
+#include "components/app_helpers/app_helpers.hpp"
+#include "components/robot/r1/r1_robot_config.hpp"
+#include "components/replay/replay_source.hpp"
+#include "components/scheduler/rolling_percentiles.hpp"
+#include "components/scheduler/single_rate_scheduler.hpp"
+#include "components/teleop/keyboard/keyboard_target_source.hpp"
+#include "components/tui/tui_renderer.hpp"
+#include "components/visualization/preview_projection.hpp"
+#include "components/visualization/preview_transport.hpp"
+#include "contracts/presentation/ik_app_snapshot.hpp"
+#include "diagnostics_projection.hpp"
 #include "motion_control_lab/run_artifacts.hpp"
 #include "motion_control_lab/sha256.hpp"
 #include "placo/kinematics/kinematics_solver.h"
 #include "placo/model/robot_wrapper.h"
-#include "r1_interactive_config.hpp"
-#include "r1_robot_config.hpp"
-#include "runtime/interactive_scheduler.hpp"
-#include "runtime/interactive_types.hpp"
-#include "runtime/rolling_percentiles.hpp"
-#include "sinks/ik_render_batch.hpp"
-#include "sinks/preview_sink_factory.hpp"
+#include "components/tui/standard_ik_tui.hpp"
 
 namespace
 {
@@ -39,6 +41,15 @@ namespace
 namespace mcc = motion_control::core;
 namespace mcl = motion_control_lab;
 namespace replay = motion_control_lab::replay;
+
+mcc::RobotState makeRobotState(
+  const std::vector<double> & positions, const std::vector<double> & velocities)
+{
+  mcc::RobotState state;
+  state.joint_positions = mcl::toEigen(positions);
+  state.joint_velocities = mcl::toEigen(velocities);
+  return state;
+}
 
 using mcl::servo_step::AppOptions;
 using mcl::servo_step::MccBackend;
@@ -50,10 +61,6 @@ using mcl::servo_step::printTopLevelUsage;
 
 constexpr const char * kProgramId = "mcl_servo_step";
 constexpr const char * kTitle = "Dual-arm IK — ServoStep";
-constexpr double kPositionToleranceM = 1.0e-4;
-constexpr double kOrientationToleranceRad = 1.0e-4;
-constexpr double kJointPositionMargin = 1.0e-3;
-constexpr double kNumericalRegularization = 1.0e-4;
 constexpr std::array<unsigned int, 1> kMainCpuAffinity{31};
 
 struct ServoSolveResult
@@ -114,7 +121,7 @@ class MccServoSolver
 public:
   MccServoSolver(
     const std::string & urdf_path, double rate_hz, const mcl::R1RobotConfig & robot,
-    MccBackend backend,
+    MccBackend backend, const mcl::servo_step::AlgorithmOptions & algorithm,
     const std::vector<double> & initial_positions = {},
     const std::vector<double> & initial_velocities = {})
   : robot_(robot),
@@ -134,11 +141,11 @@ public:
     solver_config.servo_period = 1.0 / rate_hz;
     solver_config.joint_limit_policy = mcc::KinematicsJointLimitPolicy::ExplicitRequirements;
     solver_config.qp.backend = mccQpBackend(backend_);
-    solver_config.qp.regularization = kNumericalRegularization;
+    solver_config.qp.regularization = algorithm.regularization;
     solver_config.maximum_iterations = 1;
     solver_config.soft_solve_time_budget_ms = 100.0;
-    solver_config.position_tolerance_m = kPositionToleranceM;
-    solver_config.orientation_tolerance_rad = kOrientationToleranceRad;
+    solver_config.position_tolerance_m = algorithm.position_tolerance_m;
+    solver_config.orientation_tolerance_rad = algorithm.orientation_tolerance_rad;
     solver_config.minimum_position_improvement_m = 1.0e-8;
     solver_config.minimum_orientation_improvement_rad = 1.0e-8;
 
@@ -170,7 +177,7 @@ public:
       robot.right_end_effector_frame, right_orientation_config, right_orientation_task_));
 
     mcc::JointPositionLimitConfig joint_limit_config;
-    joint_limit_config.margin = kJointPositionMargin;
+    joint_limit_config.margin = algorithm.joint_position_margin_rad;
     joint_limit_config.enforcement = mcc::HardEnforcement{};
     mcc::JointPositionLimitHandle joint_limits;
     throwIfError(builder.addJointPositionLimits(joint_limit_config, joint_limits));
@@ -189,7 +196,7 @@ public:
   mcl::Pose currentPose(mcl::ArmSide side)
   {
     mcc::ForwardKinematicsRequest request;
-    request.state = mcl::makeRobotState(positions_, velocities_);
+    request.state = makeRobotState(positions_, velocities_);
     request.frame_names = {mcl::frameForSide(robot_, side)};
     request.reference_frame_name = robot_.base_frame;
     mcc::ForwardKinematicsSolution solution;
@@ -204,7 +211,7 @@ public:
     const auto & right_target = targets.at(1);
     mcc::InverseKinematicsRequest request;
     request.reference_frame_name = robot_.base_frame;
-    request.state = mcl::makeRobotState(positions_, velocities_);
+    request.state = makeRobotState(positions_, velocities_);
     request.position_targets.push_back(
       {left_position_task_, left_target.target_pose.translation(), true});
     request.orientation_targets.push_back(
@@ -277,9 +284,11 @@ class PlacoServoSolver
 public:
   PlacoServoSolver(
     const std::string & urdf_path, double rate_hz, const mcl::R1RobotConfig & robot,
+    const mcl::servo_step::AlgorithmOptions & algorithm,
     const std::vector<double> & initial_positions = {},
     const std::vector<double> & initial_velocities = {})
   : robot_config_(robot),
+    algorithm_(algorithm),
     positions_(initial_positions.empty() ? robot.default_positions : initial_positions),
     velocities_(
       initial_velocities.empty() ? std::vector<double>(positions_.size(), 0.0)
@@ -300,7 +309,7 @@ public:
     solver_.mask_fbase(true);
     solver_.problem.rewrite_equalities = false;
     solver_.dt = 1.0 / rate_hz;
-    solver_.problem.regularization = kNumericalRegularization;
+    solver_.problem.regularization = algorithm_.regularization;
     solver_.enable_joint_limits(true);
     solver_.enable_velocity_limits(true);
 
@@ -308,7 +317,8 @@ public:
       const auto & joint_name = robot.joint_names[index];
       const auto limits = robot_.get_joint_limits(joint_name);
       robot_.set_joint_limits(
-        joint_name, limits.first + kJointPositionMargin, limits.second - kJointPositionMargin);
+        joint_name, limits.first + algorithm_.joint_position_margin_rad,
+        limits.second - algorithm_.joint_position_margin_rad);
       robot_.set_joint(joint_name, positions_[index]);
       robot_.set_joint_velocity(joint_name, velocities_[index]);
     }
@@ -367,10 +377,10 @@ public:
     right_error.position_m = (right_target.translation() - right_fk.translation()).norm();
     right_error.orientation_rad = orientationError(right_target, right_fk);
 
-    const bool converged = left_error.position_m <= kPositionToleranceM &&
-                           right_error.position_m <= kPositionToleranceM &&
-                           left_error.orientation_rad <= kOrientationToleranceRad &&
-                           right_error.orientation_rad <= kOrientationToleranceRad;
+    const bool converged = left_error.position_m <= algorithm_.position_tolerance_m &&
+                           right_error.position_m <= algorithm_.position_tolerance_m &&
+                           left_error.orientation_rad <= algorithm_.orientation_tolerance_rad &&
+                           right_error.orientation_rad <= algorithm_.orientation_tolerance_rad;
     const double solve_time_ms =
       std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - started).count();
 
@@ -396,6 +406,7 @@ public:
   }
 
 private:
+  mcl::servo_step::AlgorithmOptions algorithm_;
   const mcl::R1RobotConfig & robot_config_;
   std::vector<double> positions_;
   std::vector<double> velocities_;
@@ -421,14 +432,16 @@ int runInteractive(
   const auto presentation = mcl::makeArmPresentation(robot, mcl::foxgloveIkVisualizationChannels());
   const auto initial_left_fk = solver.currentPose(mcl::ArmSide::Left);
   const auto initial_right_fk = solver.currentPose(mcl::ArmSide::Right);
-  mcl::TuiConsole tui(
-    options.tui, options.rate_hz, std::string{kTitle} + " [" + solver_title + "]", presentation,
-    {{mcl::ArmSide::Left, initial_left_fk}, {mcl::ArmSide::Right, initial_right_fk}}, true,
-    options.tui_enabled);
+  const std::string title = std::string{kTitle} + " [" + solver_title + "]";
+  mcl::TerminalFrontend terminal({true, options.tui_enabled});
+  mcl::KeyboardTargetSource input(
+    terminal, mcl::KeyboardSourceMode::Teleop, options.tui,
+    {{mcl::ArmSide::Left, initial_left_fk}, {mcl::ArmSide::Right, initial_right_fk}}, true);
+  mcl::TuiRenderer tui(options.tui_enabled);
   auto visualization_sink = mcl::createPreviewSink(options.visualization, kProgramId);
 
-  mcl::installInteractiveSignalHandlers();
-  mcl::InteractiveScheduler scheduler({options.rate_hz, options.duration_s});
+  mcl::installRuntimeSignalHandlers();
+  mcl::SingleRateScheduler scheduler({options.rate_hz, options.duration_s});
   mcl::RollingPercentiles solve_time_percentiles;
   mcl::SolverRunCounters run_counters;
   std::size_t publish_count = 0;
@@ -436,7 +449,7 @@ int runInteractive(
 
   mcl::IkDebugFrame latest_frame;
   latest_frame.run_id = run_id;
-  latest_frame.targets = tui.command().targets;
+  latest_frame.targets = input.targets();
   latest_frame.forward_kinematics = {
     {mcl::ArmSide::Left, initial_left_fk}, {mcl::ArmSide::Right, initial_right_fk}};
   latest_frame.joint_names = robot.joint_names;
@@ -447,27 +460,29 @@ int runInteractive(
 
   visualization_sink->open();
   while (const auto schedule = scheduler.next()) {
-    tui.poll();
-    if (const auto reset_side = tui.consumeResetRequest()) {
-      tui.setTargetPose(
+    const auto input_update = input.poll(schedule->dt);
+    for (const auto & event : input_update.navigation) {
+      tui.handleNavigation(event);
+    }
+    if (const auto reset_side = input.consumeResetRequest()) {
+      input.setTargetPose(
         *reset_side, solver.currentPose(*reset_side),
         std::string{"Reset "} + mcl::armSideName(*reset_side) + " target from current FK");
     }
 
-    const auto & command = tui.command();
-    if (command.stop_requested) {
+    if (input.stopRequested()) {
       break;
     }
 
-    if (schedule->update_due && !command.paused) {
+    if (schedule->update_due && !input.paused()) {
       ++run_counters.attempts;
-      auto result = solver.solve(command.targets);
+      auto result = solver.solve(input.targets());
       ++run_counters.accepted;
       solve_time_percentiles.record(result.solve_time_ms);
       result.solver_debug.ik_solve_time_percentiles = solve_time_percentiles.snapshot();
       result.solver_debug.run_counters = run_counters;
 
-      latest_frame.targets = command.targets;
+      latest_frame.targets = input.targets();
       latest_frame.forward_kinematics = std::move(result.forward_kinematics);
       latest_frame.positions = std::move(result.positions);
       latest_frame.velocities = std::move(result.velocities);
@@ -478,17 +493,19 @@ int runInteractive(
       latest_frame.solvers = {std::move(result.solver_debug)};
       latest_frame.target_errors = std::move(result.target_errors);
       latest_frame.status = "IK accepted [" + solver_id + "]";
-      latest_frame.paused = command.paused;
-      latest_frame.selected_side = command.selected_side;
+      latest_frame.paused = input.paused();
+      latest_frame.selected_side = input.selectedSide();
       visualization_sink->write(mcl::makeIkRenderBatch(
         latest_frame, presentation, schedule->emit_time_ns));
       ++publish_count;
     }
 
     if (schedule->draw_due) {
-      latest_frame.paused = tui.command().paused;
-      latest_frame.selected_side = tui.command().selected_side;
-      tui.render(latest_frame, publish_count, visualization_sink->status());
+      latest_frame.paused = input.paused();
+      latest_frame.selected_side = input.selectedSide();
+      tui.render(mcl::makeStandardIkTuiDocument(
+        latest_frame, presentation, publish_count, visualization_sink->status(), title,
+        input.status()));
     }
     scheduler.sleep();
   }
@@ -562,23 +579,28 @@ int runReplayWithSolver(
   replay::createOutputDirectory(options.replay.output_dir);
 
   const auto & robot = mcl::r1RobotConfig();
-  const auto & first = loaded.timeline.timeline.at(0);
+  replay::ReplaySource replay_source(
+    loaded, options.replay.execution_mode, options.replay.playback_rate);
+  const auto & first = replay_source.sourceFrame();
   std::vector<mcl::ArmTarget> targets{
     {mcl::ArmSide::Left, first.value.left.pose * robot.left_tcp_offset.inverse()},
     {mcl::ArmSide::Right, first.value.right.pose * robot.right_tcp_offset.inverse()}};
   const auto presentation = mcl::makeArmPresentation(robot, mcl::foxgloveIkVisualizationChannels());
-  mcl::TuiConsole tui(
-    {}, options.rate_hz, std::string{kTitle} + " Replay [" + solver_title + "]", presentation,
-    targets, true, options.replay.ui_mode == "tui", mcl::TuiControlMode::Replay);
-  tui.setMotionInputEnabled(false, "Replay motion editing is disabled");
+  const bool tui_enabled = options.replay.ui_mode == "tui";
+  const std::string title = std::string{kTitle} + " Replay [" + solver_title + "]";
+  mcl::TerminalFrontend terminal({options.replay.terminal_input_enabled, tui_enabled});
+  mcl::KeyRouter key_router;
+  mcl::KeyboardTeleop keyboard(mcl::KeyboardSourceMode::Replay);
+  mcl::TuiRenderer tui(tui_enabled);
 
   mcl::PreviewSinkOptions sink_options;
+  sink_options.enabled = options.replay.visualization_enabled;
   sink_options.host = options.replay.visualization_host;
   sink_options.port = options.replay.visualization_port;
   sink_options.mcap_path = options.replay.visualization_mcap_path;
   auto visualization_sink = mcl::createPreviewSink(sink_options, kProgramId);
   visualization_sink->open();
-  mcl::installInteractiveSignalHandlers();
+  mcl::installRuntimeSignalHandlers();
 
   replay::ReplayExecutionMetadata execution;
   execution.app = kProgramId;
@@ -589,6 +611,12 @@ int runReplayWithSolver(
                         : "eiquadprog";
   execution.rate_hz = options.rate_hz;
   execution.consumed_frame_count = 1U;
+  execution.resolved_config = {
+    {"regularization", std::to_string(options.algorithm.regularization)},
+    {"position_tolerance_m", std::to_string(options.algorithm.position_tolerance_m)},
+    {"orientation_tolerance_rad", std::to_string(options.algorithm.orientation_tolerance_rad)},
+    {"joint_position_margin_rad", std::to_string(options.algorithm.joint_position_margin_rad)},
+  };
 
   std::ostringstream trace;
   trace << "attempt,source_revision,original_logical_timestamp_ns,source_time_"
@@ -600,63 +628,42 @@ int runReplayWithSolver(
            "solve_time_ms,maximum_hard_violation,positions,velocities\n";
   const std::int64_t solver_period_ns =
     static_cast<std::int64_t>(std::llround(1.0e9 / options.rate_hz));
-  const auto run_start = std::chrono::steady_clock::now();
-  std::int64_t solver_time_ns = 0;
-  std::int64_t timeline_time_ns = 0;
-  std::size_t source_index = 0;
   std::size_t attempt = 0;
   std::size_t publish_count = 0;
   std::string replay_state{"running"};
 
   try {
     while (true) {
-      if (options.replay.execution_mode == mcl::data::ExecutionMode::Realtime) {
-        const auto deadline = run_start + std::chrono::nanoseconds(solver_time_ns);
-        std::this_thread::sleep_until(deadline);
-        if (std::chrono::steady_clock::now() > deadline) {
-          ++execution.deadline_miss_count;
+      for (const auto & event : terminal.poll()) {
+        if (key_router.route(event) == mcl::KeyRoute::Navigation) {
+          tui.handleNavigation(event);
+        } else {
+          const auto action = keyboard.handle(event);
+          if (action.source_control.has_value()) {
+            replay_source.applyControl(*action.source_control);
+          }
         }
       }
-      tui.poll();
-      if (tui.command().stop_requested) {
+      if (replay_source.stopped()) {
         replay_state = "stopped";
         break;
       }
 
-      const bool single_step = tui.consumeSingleStepRequest();
-      if (!tui.command().paused || single_step) {
-        if (single_step) {
-          if (source_index + 1U < loaded.timeline.timeline.size()) {
-            timeline_time_ns = loaded.timeline.timeline.at(source_index + 1U).projected_time_ns;
-          }
-        } else {
-          timeline_time_ns +=
-            attempt == 0U
-              ? 0
-              : static_cast<std::int64_t>(std::llround(
-                  static_cast<double>(solver_period_ns) * options.replay.playback_rate));
-        }
-        std::size_t next_index = source_index;
-        while (next_index + 1U < loaded.timeline.timeline.size() &&
-               loaded.timeline.timeline.at(next_index + 1U).projected_time_ns <= timeline_time_ns) {
-          ++next_index;
-        }
-        if (next_index > source_index) {
-          execution.dropped_frame_count += next_index - source_index - 1U;
-          execution.consumed_frame_count += 1U;
-          source_index = next_index;
-          const auto & source = loaded.timeline.timeline.at(source_index);
-          targets[0].target_pose = source.value.left.pose * robot.left_tcp_offset.inverse();
-          targets[1].target_pose = source.value.right.pose * robot.right_tcp_offset.inverse();
-          tui.setTargetPose(mcl::ArmSide::Left, targets[0].target_pose, "Replay goal advanced");
-          tui.setTargetPose(mcl::ArmSide::Right, targets[1].target_pose, "Replay goal advanced");
-        }
+      if (attempt != 0U) {
+        replay_source.advance(solver_period_ns);
       }
+      replay_source.waitForCurrentFrame();
+      execution.deadline_miss_count = replay_source.deadlineMissCount();
+      execution.dropped_frame_count = replay_source.droppedFrameCount();
+      execution.consumed_frame_count = replay_source.consumedFrameCount();
+      const auto & replay_frame = replay_source.frame();
+      targets[0].target_pose = replay_frame.targets[0].target_pose * robot.left_tcp_offset.inverse();
+      targets[1].target_pose = replay_frame.targets[1].target_pose * robot.right_tcp_offset.inverse();
 
       const auto result = solver.solve(targets);
       ++attempt;
       ++execution.accepted_count;
-      const auto & source = loaded.timeline.timeline.at(source_index);
+      const auto & source = replay_source.sourceFrame();
       trace << attempt << ',' << source.sequence << ',' << source.original_logical_time_ns << ','
             << source.source_time_from_start_ns << ',' << source.projected_time_ns << ','
             << replay::optionalTimestamp(source.value.left.time.header_stamp_ns) << ','
@@ -683,23 +690,25 @@ int runReplayWithSolver(
       frame.ik_status = "replay accepted";
       frame.status = "Replay source revision=" + std::to_string(source.sequence) +
                      " dropped=" + std::to_string(execution.dropped_frame_count);
-      frame.paused = tui.command().paused;
+      frame.paused = replay_source.paused();
       visualization_sink->write(mcl::makeIkRenderBatch(
         frame, presentation,
         std::chrono::duration_cast<std::chrono::nanoseconds>(
           std::chrono::system_clock::now().time_since_epoch())
           .count()));
-      tui.render(frame, publish_count, visualization_sink->status());
+      tui.render(mcl::makeStandardIkTuiDocument(
+        frame, presentation, publish_count, visualization_sink->status(), title,
+        replay_source.status().detail));
       ++publish_count;
 
-      if (source_index + 1U == loaded.timeline.timeline.size() && !tui.command().paused) {
+      replay_source.markFrameProcessed();
+      if (replay_source.endOfStream()) {
         replay_state = "succeeded";
         break;
       }
-      solver_time_ns += solver_period_ns;
     }
   } catch (const std::exception & error) {
-    const auto & source = loaded.timeline.timeline.at(source_index);
+    const auto & source = replay_source.sourceFrame();
     trace << attempt + 1U << ',' << source.sequence << ',' << source.original_logical_time_ns << ','
           << source.source_time_from_start_ns << ',' << source.projected_time_ns << ','
           << replay::optionalTimestamp(source.value.left.time.header_stamp_ns) << ','
@@ -737,9 +746,10 @@ int runReplayWithSolver(
   return EXIT_SUCCESS;
 }
 
-int runReplay(int argc, char ** argv)
+int runReplay(int argc, char ** argv, int process_argc, char ** process_argv)
 {
   auto options = parseReplayAppOptions(argc, argv);
+  options.replay.original_argv.assign(process_argv, process_argv + process_argc);
   const auto loaded = replay::loadReplay(options.replay);
   const auto & robot = mcl::r1RobotConfig();
   const auto [initial_positions, initial_velocities] = replayInitialState(loaded, robot);
@@ -747,11 +757,12 @@ int runReplay(int argc, char ** argv)
     const std::string solver_title = mccSolverTitle(options.backend);
     MccServoSolver solver(
       options.replay.urdf_path.string(), options.rate_hz, robot, options.backend,
+      options.algorithm,
       initial_positions, initial_velocities);
     return runReplayWithSolver(std::move(options), "mcc", solver_title, solver, loaded);
   }
   PlacoServoSolver solver(
-    options.replay.urdf_path.string(), options.rate_hz, robot, initial_positions,
+    options.replay.urdf_path.string(), options.rate_hz, robot, options.algorithm, initial_positions,
     initial_velocities);
   return runReplayWithSolver(std::move(options), "placo", "PlaCo/eiquadprog", solver, loaded);
 }
@@ -763,11 +774,12 @@ int runTeleop(int argc, char ** argv)
   if (app_options.solver == SolverKind::Mcc) {
     MccServoSolver solver(
       app_options.interactive.urdf_path, app_options.interactive.rate_hz, robot,
-      app_options.backend);
+      app_options.backend, app_options.algorithm);
     return runInteractive(app_options, "mcc", mccSolverTitle(app_options.backend), solver);
   }
   PlacoServoSolver solver(
-    app_options.interactive.urdf_path, app_options.interactive.rate_hz, robot);
+    app_options.interactive.urdf_path, app_options.interactive.rate_hz, robot,
+    app_options.algorithm);
   return runInteractive(app_options, "placo", "PlaCo/eiquadprog", solver);
 }
 
@@ -782,7 +794,7 @@ int run(int argc, char ** argv)
     return runTeleop(argc - 1, argv + 1);
   }
   if (mode == "replay") {
-    return runReplay(argc - 1, argv + 1);
+    return runReplay(argc - 1, argv + 1, argc, argv);
   }
   throw std::runtime_error("expected subcommand 'teleop' or 'replay'");
 }

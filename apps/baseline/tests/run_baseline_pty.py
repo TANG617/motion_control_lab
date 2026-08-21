@@ -93,11 +93,10 @@ def main() -> int:
             local_flags & termios.ECHO
         )
         markers = (
-            b"PlaCo production-static baseline",
+            b"PlaCo Production-Static Baseline",
             b"source=42ed3ce3a19",
-            b"position(x2)=scaled/9",
-            b"frame_position",
-            b"attempts/accepted/rejecte",
+            b"Cartesian",
+            b"IK status",
         )
         missing = [marker for marker in markers if marker not in output]
         if return_code != 0 or not terminal_restored or missing:

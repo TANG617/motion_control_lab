@@ -12,27 +12,46 @@
   backend、regularization、joint-limit policy、约束注册和结果解释。
 - task 的定义、构造和配置必须由具体 app 持有，包括 task 类型、目标、权重、gain、
   enforcement、mask、优先级和 task handle 的使用。
-- app 专属的运行流程、状态更新、诊断数据解释和可视化内容组装也必须留在具体 app 中。
+- app 专属的运行流程、状态更新、诊断数据解释和可视化内容组装也必须留在具体 app 中；
+  solver-neutral `IkDebugFrame` 的标准 TUI 页面格式可以由共享 component 统一生成。
 - 两个或多个 app 出现相同的 solver、task 或业务流程代码时，允许并鼓励保留重复；不要
   为消除重复把这些内容提取到 `apps/common/`，也不要通过 mode、flag、callback 或配置对象
   在 common 中隐藏 app 差异。
 - 一个 app 的改动不应要求理解或同步修改另一个 app 的 solver/task 配置。
 
-## `apps/common/` 白名单
+## 共享 component 白名单
 
-`apps/common/` 只承载所有 app 共同依赖的先验和无业务语义的初始化代码：
+旧 `apps/common/` 已删除。共享实现只能进入职责窄且可独立测试的 `contracts/`、
+`components/` 或 `adapters/` target：
 
-- 通用 TUI 的初始化、输入绑定和显示配置；
-- R1 机器人不随 app 改变的模型信息和参数，例如 joint names、默认姿态、base frame、
-  end-effector frames 和模型加载所需描述；
-- 调度器的通用配置解析和初始化；
-- 不包含 solver/task 决策的通用展示或机械性数据转换工具。
+- input/presentation/runtime typed contracts；
+- terminal session、归一化 `KeyEvent` 与 key routing；
+- `KeyEvent -> TeleopIntent/SourceControl` 和 Cartesian target 积分；
+- 只消费 `TuiDocument` 的 renderer，以及 solver-neutral `IkDebugFrame -> TuiDocument`
+  标准页面构造；
+- single/grouped scheduler、mailbox、deadline 与 stop/join；
+- MCAP/CSV typed pipeline、唯一 `ReplaySource` 状态机；
+- solver-neutral IK preview projection、WebSocket/MCAP/Null transport adapter；
+- artifact/hash、固定 R1 joint/frame/TCP/default pose 和无业务语义机械转换；
+- typed `RuntimeServices`/RAII 与 `mcl_add_app(...)` build scaffolding。
 
-任何代码只要知道具体 solver、solve mode、task、约束或 app 名称，就不属于 common。
-`apps/common/` 是白名单边界，不因代码在多个 app 中重复而自动扩大。
+任何代码只要知道具体 solver、solve mode、task、约束、planner/OTG 实现、fault policy 或 app
+名称，就必须留在具体 app。共享 TUI 只格式化 presentation contract 已提供的 solver-neutral
+快照；不得用 mode enum、virtual callback、`std::function` 或大配置对象重建新的聚合 runtime。
 
-当前或历史上已经位于 common 的代码不构成继续共享的先例。修改相关代码时，应按上述
-边界把 solver/task 和 app 专属流程放回对应的 app 目录。
+## App 目录和启动合同
+
+- `apps/<a>` 不得 include 或 link `apps/<b>`；app-local executable 与测试可以共享留在同目录的
+  `mcl_<app>_support` target。
+- 每个 app 保留 `app_options.*`，共享组件只接收 typed config；禁止全局 CLI parser、全局
+  option registry 或统一 `mcl` executable。
+- 按实际 source 能力提供 `scripts/run_keyboard.sh`、`run_mcap_replay.sh`、
+  `run_csv_replay.sh` 或 JSON request script。脚本最后必须原样转发 `"$@"`。
+- 参数优先级是 compiled defaults、script preset/environment、trailing explicit arguments。
+- 产生实验 artifact 的 app 记录 resolved config、原始 argv、launcher 标识和 input hash/
+  provenance。
+- production-static baseline 只允许输入、输出和 presentation/transport 选择；算法 profile、
+  solver、task、rate 和数值配置保持冻结并拒绝 override。
 
 ## 调试期错误处理
 

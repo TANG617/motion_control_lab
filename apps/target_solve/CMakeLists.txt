@@ -1,7 +1,18 @@
-add_executable(mcl_target_solve main.cpp app_options.cpp)
-set_target_properties(
-  mcl_target_solve
-  PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}"
+mcl_add_app(
+  TARGET mcl_target_solve
+  SOURCES main.cpp app_options.cpp diagnostics_projection.cpp
+  LIBRARIES
+    motion_control_lab::cpu_affinity
+    motion_control_lab::app_helpers
+    motion_control_lab::r1_robot_config
+    motion_control_core::motion_control_core
+    motion_control_lab::scheduler
+    motion_control_lab::keyboard_input
+    motion_control_lab::standard_ik_tui
+    motion_control_lab::tui
+    motion_control_lab::preview_transport
+    motion_control_lab::preview_projection
+    libplaco
 )
 if(APPLE)
   set_property(
@@ -18,22 +29,6 @@ else()
     PRIVATE "LINKER:--disable-new-dtags"
   )
 endif()
-target_link_libraries(
-  mcl_target_solve
-  PRIVATE
-    motion_control_lab::cpu_affinity
-    motion_control_lab::app_common
-    motion_control_core::motion_control_core
-    motion_control_lab::interactive_runtime
-    motion_control_lab::preview_transport
-    motion_control_lab::ik_preview
-    libplaco
-)
-install(
-  TARGETS mcl_target_solve
-  RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
-)
-
 if(BUILD_TESTING)
   add_executable(
     test_target_solve_app_options
@@ -43,7 +38,8 @@ if(BUILD_TESTING)
   target_link_libraries(
     test_target_solve_app_options
     PRIVATE
-      motion_control_lab::interactive_runtime
+      motion_control_lab::input_contract
+      motion_control_lab::tui
       motion_control_lab::r1_robot_config
   )
   add_test(
@@ -51,11 +47,4 @@ if(BUILD_TESTING)
     COMMAND test_target_solve_app_options
   )
 
-  add_test(
-    NAME apps.mcl_target_solve_help
-    COMMAND
-      "${CMAKE_COMMAND}"
-      "-DAPP=$<TARGET_FILE:mcl_target_solve>"
-      -P "${PROJECT_SOURCE_DIR}/tests/check_app_help.cmake"
-  )
 endif()

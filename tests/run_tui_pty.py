@@ -30,9 +30,10 @@ def main() -> int:
         raise RuntimeError(f"unknown argument: {sys.argv[2]}")
 
     master_fd, slave_fd = pty.openpty()
-    fcntl.ioctl(slave_fd, termios.TIOCSWINSZ, struct.pack("HHHH", 45, 180, 0, 0))
+    fcntl.ioctl(slave_fd, termios.TIOCSWINSZ, struct.pack("HHHH", 74, 155, 0, 0))
     environment = os.environ.copy()
     environment["TERM"] = "xterm-256color"
+    environment.pop("NO_COLOR", None)
     environment.setdefault("LC_ALL", "C.UTF-8")
     command = [sys.argv[1]]
     if expect_exception:
@@ -90,40 +91,30 @@ def main() -> int:
             elif fault_hold and action_index == 2 and ready_elapsed >= 0.72:
                 os.write(master_fd, b"x")
                 action_index += 1
-            elif not expect_exception and not fault_hold and action_index == 0 and ready_elapsed >= 0.12:
-                os.write(master_fd, b"2")
-                action_index += 1
-            elif not expect_exception and not fault_hold and action_index == 1 and ready_elapsed >= 0.32:
-                fcntl.ioctl(
-                    master_fd,
-                    termios.TIOCSWINSZ,
-                    struct.pack("HHHH", 24, 100, 0, 0),
+            elif not expect_exception and not fault_hold and not replay_controls:
+                actions = (
+                    b"1", b"2", b"3", b"4", b"5", b"6", b"7",
+                    b"\x1bOP", b"\x1bOQ", b"\x1bOR", b"\x1bOS",
+                    b"\x1b[15~", b"\x1b[17~", b"\x1b[18~",
+                    b"\t", b"\x1b[Z", b"?", b"?", b"3", b"5", b"\x1b[6~",
+                    b"\x1b[6~", b"w\x1b[C\x1b[Adm0.020\rq 1x",
                 )
-                os.write(master_fd, b"3")
-                action_index += 1
-            elif not expect_exception and not fault_hold and action_index == 2 and ready_elapsed >= 0.52:
-                fcntl.ioctl(
-                    master_fd,
-                    termios.TIOCSWINSZ,
-                    struct.pack("HHHH", 18, 60, 0, 0),
-                )
-                os.write(master_fd, b"4")
-                action_index += 1
-            elif not expect_exception and not fault_hold and action_index == 3 and ready_elapsed >= 0.72:
-                os.write(master_fd, b"\x1b[6~")
-                action_index += 1
-            elif not expect_exception and not fault_hold and action_index == 4 and ready_elapsed >= 0.92:
-                os.write(master_fd, b"\x1b[6~")
-                action_index += 1
-            elif not expect_exception and not fault_hold and action_index == 5 and ready_elapsed >= 1.12:
-                os.write(master_fd, b"5")
-                action_index += 1
-            elif not expect_exception and not fault_hold and action_index == 6 and ready_elapsed >= 1.32:
-                # Move left +x, select right, double the step, move right -y,
-                # enter a manual 0.020 m step, move right +z, pause, return to
-                # Overview, and exit.
-                os.write(master_fd, b"w\x1b[C\x1b[Adm0.020\rq 1x")
-                action_index += 1
+                action_time = 0.12 + 0.10 * action_index
+                if action_index < len(actions) and ready_elapsed >= action_time:
+                    if action_index == 18:
+                        fcntl.ioctl(
+                            master_fd,
+                            termios.TIOCSWINSZ,
+                            struct.pack("HHHH", 24, 100, 0, 0),
+                        )
+                    elif action_index == 19:
+                        fcntl.ioctl(
+                            master_fd,
+                            termios.TIOCSWINSZ,
+                            struct.pack("HHHH", 18, 60, 0, 0),
+                        )
+                    os.write(master_fd, actions[action_index])
+                    action_index += 1
             readable, _, _ = select.select([master_fd], [], [], 0.05)
             if readable:
                 try:
@@ -210,30 +201,61 @@ def main() -> int:
                     + f" (exit={return_code})\n"
                 )
                 return 1
+            red_markers = [
+                marker
+                for marker in (
+                    b"TARGET REJECTED",
+                    b"FAULT HOLD",
+                    b"rejected target revision",
+                )
+                if b"\x1b[31m\x1b[49m" + marker not in output
+            ]
+            if red_markers:
+                sys.stderr.buffer.write(output)
+                sys.stderr.write(
+                    "fault states were not rendered in red: "
+                    + ", ".join(marker.decode() for marker in red_markers)
+                    + "\n"
+                )
+                return 1
             return 0
 
         expected_markers = (
-            b"Cartesian",
+            b"Overview",
+            b"Cartesian Planning",
+            b"Joint Planning",
+            b"Solver and Quadratic Programming",
+            b"Joint State",
+            b"Runtime",
+            b"Events",
+            b"overview-bottom-marker",
+            b"cartesian-bottom-marker",
+            b"joint-plan-bottom-marker",
+            b"solver-bottom-marker",
+            b"joints-bottom-marker",
+            b"runtime-bottom-marker",
+            b"events-bottom-marker",
+            b"Keyboard help",
             b"maximum hard violation",
-            b"All joint state",
+            b"Executed joint state",
             b"head_yaw",
-            b"J7",
-            b"CPU affinity",
+            b"left_arm_joint7",
+            b"Processor affinity",
             b"bound",
             b"disabled",
             b"4101",
-            b"requested CPUs",
-            b"effective CPUs",
-            b"IK solve-time percentiles",
-            b"P90 [ms]",
-            b"P95 [ms]",
-            b"P99 [ms]",
+            b"requested processors",
+            b"effective processors",
+            b"IK calculation percentiles",
+            b"90th percentile [ms]",
+            b"95th percentile [ms]",
+            b"99th percentile [ms]",
             b"0.160",
-            b"Periodic workers",
-            b"sched delay",
-            b"IK non-QP",
-            b"attempts/accepted/rejected",
-            b"Recent state changes",
+            b"Worker timing",
+            b"release lateness",
+            b"Non-Quadratic Programming",
+            b"Attempts Accepted Rejected",
+            b"Current state",
         )
         missing_markers = [marker for marker in expected_markers if marker not in output]
         if missing_markers:
@@ -243,6 +265,16 @@ def main() -> int:
                 + ", ".join(marker.decode() for marker in missing_markers)
                 + "\n"
             )
+            return 1
+
+        if "┌".encode() in output:
+            sys.stderr.buffer.write(output)
+            sys.stderr.write("compact tables rendered a nested square outer border\n")
+            return 1
+
+        if b"\x1b[36m\x1b[49m System " not in output:
+            sys.stderr.buffer.write(output)
+            sys.stderr.write("section title was not rendered in the accent color\n")
             return 1
 
         if return_code != 0:

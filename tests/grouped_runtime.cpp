@@ -1,5 +1,6 @@
-#include "runtime/grouped_worker.hpp"
-#include "runtime/latest_value_mailbox.hpp"
+#include "components/scheduler/grouped_worker.hpp"
+#include "components/scheduler/latest_value_mailbox.hpp"
+#include "components/scheduler/single_rate_scheduler.hpp"
 
 #include <array>
 #include <atomic>
@@ -295,6 +296,19 @@ bool testPeriodicWaitIsInterruptible()
   return stop_elapsed < std::chrono::milliseconds(200) && !fault.triggered();
 }
 
+bool testSingleRateTicksAndStopsAtDuration()
+{
+  mcl::installRuntimeSignalHandlers();
+  mcl::SingleRateScheduler scheduler({1000.0, 0.003});
+  std::size_t updates = 0;
+  while (const auto tick = scheduler.next()) {
+    if (tick->update_due) ++updates;
+    if (!(tick->dt > 0.0) || tick->sample_time_ns < 0 || tick->emit_time_ns == 0U) return false;
+    scheduler.sleep();
+  }
+  return updates >= 1U;
+}
+
 }  // namespace
 
 int main()
@@ -315,5 +329,6 @@ int main()
   check("deadline and cooperative stop", testDeadlineAndCooperativeStop());
   check("monitor policy", testMonitorPolicyContinuesAndSkipsExpiredReleases());
   check("interruptible wait", testPeriodicWaitIsInterruptible());
+  check("single-rate duration", testSingleRateTicksAndStopsAtDuration());
   return passed ? EXIT_SUCCESS : EXIT_FAILURE;
 }

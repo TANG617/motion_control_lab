@@ -43,6 +43,8 @@ def main() -> int:
                 str(output),
                 "--run-id",
                 "empty-library-ctest",
+                "--launcher",
+                "ctest-empty-library",
             ],
             check=False,
             capture_output=True,
@@ -57,6 +59,15 @@ def main() -> int:
             raise ValueError(f"unexpected run status: {manifest['status']}")
         if manifest.get("failure", {}).get("code") != "empty_motion_library":
             raise ValueError("empty motion library failure classification is missing")
+        if manifest.get("invocation", {}).get("launcher") != "ctest-empty-library":
+            raise ValueError("E03 launcher identity is missing")
+        if "--library-dir" not in manifest.get("invocation", {}).get("argv", []):
+            raise ValueError("E03 original argv is missing")
+        resolved = manifest.get("resolved_config", {})
+        if resolved.get("library_directory") != str(library.resolve()):
+            raise ValueError("E03 resolved library directory is missing")
+        if resolved.get("visualization_enabled") is not False:
+            raise ValueError("E03 resolved visualization mode is missing")
         inventory = json.loads((run_root / "inputs" / "inventory.json").read_text())
         if inventory["actions"]:
             raise ValueError("empty library inventory contains actions")

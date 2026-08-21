@@ -2,7 +2,7 @@
 
 #include "motion_control_core/planning/cartesian_planner.hpp"
 #include "motion_control_core/planning/joint_planner.hpp"
-#include "r1_robot_config.hpp"
+#include "components/robot/r1/r1_robot_config.hpp"
 
 #include <Eigen/Geometry>
 

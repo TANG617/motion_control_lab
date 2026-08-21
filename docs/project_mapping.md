@@ -20,13 +20,18 @@ planned。
 | Replay plan | `mcl_replay_plan`；预加载输入并输出 timeline trace/manifest，不运行 solver |
 | MCC interactive apps | `apps/single_arm_servo_step/`、`apps/servo_step/`、`apps/target_solve/` 各自拥有完整的普通 `KinematicsSolver` topology 和配置；`apps/grouped_servo_step/` 与 `apps/planned_grouped_servo_step/` 各自拥有完整 Red/Yellow topology |
 | Cartesian planning preview | `apps/cartesian_planning/` 读取版本化 JSON，调用 Core `CartesianPlanner`，输出 CSV/PNG 并循环发布 Foxglove；不加载 robot model 或调用 IK |
-| Interactive runtime | `mcl_interactive_runtime` 提供独立 TUI console/presentation、source-mode controls、wall-clock scheduler、SPSC latest mailbox、periodic worker/Fault 与 rolling percentiles，不依赖 Viz |
-| Preview transport | `mcl_preview_transport` 提供 Lab-owned CLI/config policy 与 WebSocket/MCAP/Null sink factory |
-| IK preview projection | `mcl_ik_preview` 将 Lab `IkDebugFrame` 的 target、FK 与 joint state 投影为通用 `RenderBatch`；app-specific extension 留在 app |
-| Replay support | `adapters/replay/` 提供 solver-agnostic timeline loader、ReplayClock、provenance 与 v2 artifact mechanics；solver loop 与失败语义仍由 app 拥有 |
+| Input contracts | `motion_control_lab::input_contract` 定义 `MotionTargetFrame`、`InputStatus`、`SourceControl`、`TeleopIntent` 与归一化 `KeyEvent` |
+| Terminal / teleop | `terminal_frontend`、`keyboard_teleop`、`cartesian_teleop` 分别负责 raw terminal、intent 解释和 target 积分；与 TUI rendering 正交 |
+| TUI | `motion_control_lab::standard_ik_tui` 组装 solver-neutral 标准页面，`motion_control_lab::tui` 只渲染/导航 `TuiDocument`；仅专属 planner/OTG 诊断由 app-local projection 扩展 |
+| Scheduler | `motion_control_lab::scheduler` 提供 single tick、grouped worker、deadline、mailbox 与 stop/join，不依赖 input、Viz、replay 或 solver |
+| Preview transport | `mcl_preview_transport` 提供 WebSocket/MCAP/Null sink；CLI/config policy 由 app-local options 持有 |
+| IK preview projection | `mcl_preview_projection` 将 solver-neutral `IkDebugFrame` 的 target、FK 与 joint state 投影为通用 `RenderBatch`；planning/OTG/collision extension 留在 app |
+| Replay support | `motion_control_lab::replay` 提供 solver-neutral typed loader、唯一 `ReplaySource`/ReplayClock、provenance 与 v2 artifact mechanics；solver loop 与失败语义仍由 app 拥有 |
+| Runtime scaffolding | header-only `motion_control_lab::app_scaffold` 提供 typed `RuntimeServices` 和 RAII 生命周期；不解析 CLI、不构造 solver、不拥有主循环 |
+| Build scaffolding | `cmake/MclApp.cmake` 的 `mcl_add_app(...)` 统一 executable output/install/help smoke/app script install |
 | IK visualization contract | `contracts/visualization/*.json` 是唯一来源；build-tree generator 与 `motion_control_lab::visualization_contracts` 暴露 topic/ChannelSpec，并由 C++ conformance 检查 collection 对齐 |
 | Solver A/B runner | planned；需要时由正式 Experiment 的 canonical timeline 单独设计，不预留交互 backend 接口 |
-| Interactive preview | 独立 app topology + 共享 interactive support；E02 的 Foxglove sink 是只观察 canonical replay 的可选输出，不替换 ReplayClock |
+| Interactive preview | 独立 app topology + 窄 component targets；E02 的 TUI/Foxglove 只是 canonical replay 的可选输出，不替换 ReplaySource/ReplayClock |
 | Solver source | `third_party/placo/` 直接参与主工程构建；`third_party/OpenSoT/` 只在 E04 开启时通过隔离的 external project 构建 |
 | Metric evaluator | E01/E04 执行器内的最小 metric evaluator；领域公共 evaluator planned |
 | Manifest contract | `contracts/manifests/run_manifest.v1.schema.json` |
@@ -66,9 +71,10 @@ MCC 交互预览采用另一条非证据主链：
 Single/Dual/Grouped app main.cpp
         |-- MCC builder + typed task topology
         |-- MCC request + solver state
-        |-- TUI input/render
-        |-- wall-clock scheduler
-        +-- Lab projection -> RenderBatch -> Viz RenderSink
+        |-- Input source -> MotionTargetFrame
+        |-- app-local snapshot -> TuiDocument -> shared renderer
+        |-- scheduler tick/workers
+        +-- solver-neutral/app-local projection -> RenderBatch -> Viz RenderSink
 ```
 
 Grouped 入口的计算数据流为：
@@ -95,8 +101,9 @@ app-local R1 link pair 的 Soft self-collision requirement（minimum/influence d
 额外为 Red 注册 PSI R1 acceleration limits，Yellow 仍仅 position。collision margin 是诊断，
 不构成硬安全授权。
 
-每个 app 显式拥有自己的 task topology、solver config、typed handles 和状态更新；相同配置也不
-跨 app 合并。它们只共享 R1 固定参数、终端/TUI 初始化、wall-clock 调度、frame 映射和 sink 创建。正式实验的 `dt`
+每个 app 显式拥有自己的 task topology、solver config、typed handles、状态更新和诊断投影；
+相同配置也不跨 app 合并。它们只共享固定 R1 参数、terminal/key router、renderer、wall-clock
+调度、机械 frame 映射和 transport 创建。正式实验的 `dt`
 必须来自 canonical 时间轴，不能复用交互 scheduler；未来若实现 PlaCo/MCC A/B，应从
 正式 Experiment 的真实需求重新设计，而不是让交互入口提前承担 backend-neutral 合同。
 

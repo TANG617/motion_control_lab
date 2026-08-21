@@ -39,8 +39,10 @@ void validatePositionAndVelocityLimits(
     const auto & joint_name = robot.joint_names[index];
     const auto position_limits = model.get_joint_limits(joint_name);
     require(
-      result.positions[index] >= position_limits.first + kJointPositionMargin - 1.0e-8 &&
-        result.positions[index] <= position_limits.second - kJointPositionMargin + 1.0e-8,
+      result.positions[index] >= position_limits.first +
+          mcl::servo_step::AlgorithmOptions{}.joint_position_margin_rad - 1.0e-8 &&
+        result.positions[index] <= position_limits.second -
+          mcl::servo_step::AlgorithmOptions{}.joint_position_margin_rad + 1.0e-8,
       joint_name + " violated its position limit margin");
     const int velocity_index = model.get_joint_v_offset(joint_name);
     require(velocity_index >= 0, joint_name + " has no velocity index");
@@ -111,9 +113,12 @@ int main(int argc, char ** argv)
     placo::model::RobotWrapper limit_model(
       urdf_path,
       placo::model::RobotWrapper::IGNORE_COLLISIONS | placo::model::RobotWrapper::IGNORE_GEOMETRY);
-    MccServoSolver mcc_proxqp_solver(urdf_path, rate_hz, robot, MccBackend::Proxqp);
-    MccServoSolver mcc_eiquadprog_solver(urdf_path, rate_hz, robot, MccBackend::Eiquadprog);
-    PlacoServoSolver placo_solver(urdf_path, rate_hz, robot);
+    const mcl::servo_step::AlgorithmOptions algorithm;
+    MccServoSolver mcc_proxqp_solver(
+      urdf_path, rate_hz, robot, MccBackend::Proxqp, algorithm);
+    MccServoSolver mcc_eiquadprog_solver(
+      urdf_path, rate_hz, robot, MccBackend::Eiquadprog, algorithm);
+    PlacoServoSolver placo_solver(urdf_path, rate_hz, robot, algorithm);
     require(
       mcc_proxqp_solver.currentPose(motion_control_lab::ArmSide::Left)
         .matrix()

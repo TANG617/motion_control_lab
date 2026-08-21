@@ -18,17 +18,19 @@
 #include <vector>
 
 #include "adapters/replay/replay_support.hpp"
-#include "console/tui_console.hpp"
-#include "cpu_affinity.hpp"
-#include "ik_app_utils.hpp"
+#include "components/app_helpers/app_helpers.hpp"
+#include "components/replay/replay_source.hpp"
+#include "components/robot/r1/r1_robot_config.hpp"
+#include "components/scheduler/rolling_percentiles.hpp"
+#include "components/scheduler/single_rate_scheduler.hpp"
+#include "components/teleop/keyboard/keyboard_target_source.hpp"
+#include "components/tui/tui_renderer.hpp"
+#include "components/visualization/preview_projection.hpp"
+#include "components/visualization/preview_transport.hpp"
+#include "contracts/presentation/ik_app_snapshot.hpp"
 #include "motion_control_lab/run_artifacts.hpp"
 #include "motion_control_lab/sha256.hpp"
-#include "r1_interactive_config.hpp"
-#include "r1_robot_config.hpp"
-#include "runtime/interactive_scheduler.hpp"
-#include "runtime/rolling_percentiles.hpp"
-#include "sinks/ik_render_batch.hpp"
-#include "sinks/preview_sink_factory.hpp"
+#include "components/tui/standard_ik_tui.hpp"
 
 namespace
 {
@@ -135,13 +137,15 @@ int runTeleopLoop(const baseline::TeleopOptions & options, Solver & solver)
       {mcl::ArmSide::Left, initial_left_tcp},
       {mcl::ArmSide::Right, initial_right_tcp},
   };
-  mcl::TuiConsole tui(options.tui, options.rate_hz,
-                      std::string{kTitle} + " [source " + sourceSummary() + "]", presentation,
-                      initial_targets, true, options.tui_enabled);
+  const std::string title = std::string{kTitle} + " [source " + sourceSummary() + "]";
+  mcl::TerminalFrontend terminal({true, options.tui_enabled});
+  mcl::KeyboardTargetSource input(
+      terminal, mcl::KeyboardSourceMode::Teleop, options.tui, initial_targets, true);
+  mcl::TuiRenderer tui(options.tui_enabled);
   auto visualization_sink = mcl::createPreviewSink(options.visualization, kProgramId);
 
-  mcl::installInteractiveSignalHandlers();
-  mcl::InteractiveScheduler scheduler({options.rate_hz, options.duration_s});
+  mcl::installRuntimeSignalHandlers();
+  mcl::SingleRateScheduler scheduler({options.rate_hz, options.duration_s});
   mcl::RollingPercentiles solve_time_percentiles;
   mcl::SolverRunCounters counters;
   std::size_t publish_count = 0;
@@ -159,27 +163,35 @@ int runTeleopLoop(const baseline::TeleopOptions & options, Solver & solver)
 
   visualization_sink->open();
   while (const auto schedule = scheduler.next()) {
-    tui.poll();
-    if (const auto reset_side = tui.consumeResetRequest()) {
-      tui.setTargetPose(*reset_side, solver.currentTcpPose(*reset_side),
+    const auto input_update = input.poll(schedule->dt);
+    bool navigation_changed = false;
+    for (const auto & event : input_update.navigation) {
+      navigation_changed = tui.handleNavigation(event) || navigation_changed;
+    }
+    if (navigation_changed) {
+      tui.render(mcl::makeStandardIkTuiDocument(
+          frame, presentation, publish_count, visualization_sink->status(), title,
+          input.status()));
+    }
+    if (const auto reset_side = input.consumeResetRequest()) {
+      input.setTargetPose(*reset_side, solver.currentTcpPose(*reset_side),
                         std::string{"Reset "} + mcl::armSideName(*reset_side) +
                             " target from current TCP");
     }
-    const auto & command = tui.command();
-    if (command.stop_requested) {
+    if (input.stopRequested()) {
       break;
     }
 
-    if (schedule->update_due && !command.paused) {
+    if (schedule->update_due && !input.paused()) {
       ++counters.attempts;
-      auto result = solver.solve(command.targets);
+      auto result = solver.solve(input.targets());
       ++counters.accepted;
       solve_time_percentiles.record(result.solve_time_ms);
       result.solver_debug.ik_solve_time_percentiles = solve_time_percentiles.snapshot();
       result.solver_debug.run_counters = counters;
       result.solver_debug.native_status = taskSummary();
 
-      frame.targets = command.targets;
+      frame.targets = input.targets();
       frame.forward_kinematics = result.tcp_forward_kinematics;
       frame.positions = result.positions;
       frame.velocities = result.velocities;
@@ -191,8 +203,8 @@ int runTeleopLoop(const baseline::TeleopOptions & options, Solver & solver)
       frame.solvers = {std::move(result.solver_debug)};
       frame.status = result.status_name + "; frame scale=" + std::to_string(result.frame_scale) +
                      "; source=" + sourceSummary();
-      frame.paused = command.paused;
-      frame.selected_side = command.selected_side;
+      frame.paused = input.paused();
+      frame.selected_side = input.selectedSide();
       auto visualization_debug_frame = frame;
       visualization_debug_frame.forward_kinematics = result.end_effector_forward_kinematics;
       visualization_debug_frame.target_errors = result.end_effector_target_errors;
@@ -203,9 +215,11 @@ int runTeleopLoop(const baseline::TeleopOptions & options, Solver & solver)
     }
 
     if (schedule->draw_due) {
-      frame.paused = tui.command().paused;
-      frame.selected_side = tui.command().selected_side;
-      tui.render(frame, publish_count, visualization_sink->status());
+      frame.paused = input.paused();
+      frame.selected_side = input.selectedSide();
+      tui.render(mcl::makeStandardIkTuiDocument(
+          frame, presentation, publish_count, visualization_sink->status(), title,
+          input.status()));
     }
     scheduler.sleep();
   }
@@ -241,26 +255,29 @@ int runReplayLoop(ReplayAppOptions options, baseline::BaselineSolver & solver,
   replay::writeTextFile(options.replay.output_dir / "baseline_config.json", config_text);
 
   const auto & robot = mcl::r1RobotConfig();
-  const auto & first = loaded.timeline.timeline.at(0);
+  replay::ReplaySource replay_source(
+      loaded, options.replay.execution_mode, options.replay.playback_rate);
+  const auto & first = replay_source.sourceFrame();
   std::vector<mcl::ArmTarget> targets{
       {mcl::ArmSide::Left, first.value.left.pose},
       {mcl::ArmSide::Right, first.value.right.pose},
   };
   const auto presentation = mcl::makeArmPresentation(robot, mcl::foxgloveIkVisualizationChannels());
-  mcl::TuiConsole tui(baseline::TeleopOptions{}.tui,
-                      baseline::productionStaticConfig().control_rate_hz,
-                      std::string{kTitle} + " Replay [source " + sourceSummary() + "]",
-                      presentation, targets, true, options.replay.ui_mode == "tui",
-                      mcl::TuiControlMode::Replay);
-  tui.setMotionInputEnabled(false, "Replay motion editing is disabled");
+  const bool tui_enabled = options.replay.ui_mode == "tui";
+  const std::string title = std::string{kTitle} + " Replay [source " + sourceSummary() + "]";
+  mcl::TerminalFrontend terminal({options.replay.terminal_input_enabled, tui_enabled});
+  mcl::KeyRouter key_router;
+  mcl::KeyboardTeleop keyboard(mcl::KeyboardSourceMode::Replay);
+  mcl::TuiRenderer tui(tui_enabled);
 
   mcl::PreviewSinkOptions sink_options;
+  sink_options.enabled = options.replay.visualization_enabled;
   sink_options.host = options.replay.visualization_host;
   sink_options.port = options.replay.visualization_port;
   sink_options.mcap_path = options.replay.visualization_mcap_path;
   auto visualization_sink = mcl::createPreviewSink(sink_options, kProgramId);
   visualization_sink->open();
-  mcl::installInteractiveSignalHandlers();
+  mcl::installRuntimeSignalHandlers();
 
   replay::ReplayExecutionMetadata execution;
   execution.app = kProgramId;
@@ -269,6 +286,11 @@ int runReplayLoop(ReplayAppOptions options, baseline::BaselineSolver & solver,
   execution.backend = "eiquadprog";
   execution.rate_hz = baseline::productionStaticConfig().control_rate_hz;
   execution.consumed_frame_count = 1U;
+  execution.resolved_config = {
+    {"profile", "production-static"},
+    {"baseline_config_sha256", config_sha256},
+    {"source_revision", baseline::productionStaticConfig().source_revision},
+  };
 
   std::ostringstream trace;
   trace << "attempt,source_sequence,original_logical_timestamp_ns,source_time_"
@@ -289,61 +311,40 @@ int runReplayLoop(ReplayAppOptions options, baseline::BaselineSolver & solver,
            "left_tcp_fk,right_tcp_fk,positions,velocities\n";
 
   const std::int64_t solver_period_ns = baseline::kTargetPeriodNs;
-  const auto run_start = std::chrono::steady_clock::now();
-  std::int64_t solver_time_ns = 0;
-  std::int64_t timeline_time_ns = 0;
-  std::size_t source_index = 0;
   std::size_t attempt = 0;
   std::size_t publish_count = 0;
   std::string replay_state{"running"};
 
   try {
     while (true) {
-      if (options.replay.execution_mode == mcl::data::ExecutionMode::Realtime) {
-        const auto deadline = run_start + std::chrono::nanoseconds(solver_time_ns);
-        std::this_thread::sleep_until(deadline);
-        if (std::chrono::steady_clock::now() > deadline) {
-          ++execution.deadline_miss_count;
+      for (const auto & event : terminal.poll()) {
+        if (key_router.route(event) == mcl::KeyRoute::Navigation) {
+          tui.handleNavigation(event);
+        } else {
+          const auto action = keyboard.handle(event);
+          if (action.source_control.has_value()) {
+            replay_source.applyControl(*action.source_control);
+          }
         }
       }
-      tui.poll();
-      if (tui.command().stop_requested) {
+      if (replay_source.stopped()) {
         replay_state = "stopped";
         break;
       }
 
-      const bool single_step = tui.consumeSingleStepRequest();
-      if (!tui.command().paused || single_step) {
-        if (single_step) {
-          if (source_index + 1U < loaded.timeline.timeline.size()) {
-            timeline_time_ns = loaded.timeline.timeline.at(source_index + 1U).projected_time_ns;
-          }
-        } else if (attempt != 0U) {
-          timeline_time_ns += static_cast<std::int64_t>(
-              std::llround(static_cast<double>(solver_period_ns) * options.replay.playback_rate));
-        }
-        std::size_t next_index = source_index;
-        while (next_index + 1U < loaded.timeline.timeline.size() &&
-               loaded.timeline.timeline.at(next_index + 1U).projected_time_ns <= timeline_time_ns) {
-          ++next_index;
-        }
-        if (next_index > source_index) {
-          execution.dropped_frame_count += next_index - source_index - 1U;
-          ++execution.consumed_frame_count;
-          source_index = next_index;
-          const auto & source = loaded.timeline.timeline.at(source_index);
-          targets[0].target_pose = source.value.left.pose;
-          targets[1].target_pose = source.value.right.pose;
-          tui.setTargetPose(mcl::ArmSide::Left, targets[0].target_pose, "Replay TCP goal advanced");
-          tui.setTargetPose(mcl::ArmSide::Right, targets[1].target_pose,
-                            "Replay TCP goal advanced");
-        }
+      if (attempt != 0U) {
+        replay_source.advance(solver_period_ns);
       }
+      replay_source.waitForCurrentFrame();
+      execution.deadline_miss_count = replay_source.deadlineMissCount();
+      execution.dropped_frame_count = replay_source.droppedFrameCount();
+      execution.consumed_frame_count = replay_source.consumedFrameCount();
+      targets = replay_source.frame().targets;
 
       auto result = solver.solve(targets);
       ++attempt;
       ++execution.accepted_count;
-      const auto & source = loaded.timeline.timeline.at(source_index);
+      const auto & source = replay_source.sourceFrame();
       const auto & left_ee_error = result.end_effector_target_errors.at(0);
       const auto & right_ee_error = result.end_effector_target_errors.at(1);
       const auto & left_tcp_error = result.tcp_target_errors.at(0);
@@ -395,7 +396,7 @@ int runReplayLoop(ReplayAppOptions options, baseline::BaselineSolver & solver,
       frame.status = "Replay source=" + std::to_string(source.sequence) +
                      " frame scale=" + std::to_string(result.frame_scale) +
                      " config=" + config_sha256.substr(0, 12);
-      frame.paused = tui.command().paused;
+      frame.paused = replay_source.paused();
       auto visualization_debug_frame = frame;
       visualization_debug_frame.forward_kinematics = result.end_effector_forward_kinematics;
       visualization_debug_frame.target_errors = result.end_effector_target_errors;
@@ -404,14 +405,16 @@ int runReplayLoop(ReplayAppOptions options, baseline::BaselineSolver & solver,
           std::chrono::duration_cast<std::chrono::nanoseconds>(
               std::chrono::system_clock::now().time_since_epoch())
               .count()));
-      tui.render(frame, publish_count, visualization_sink->status());
+      tui.render(mcl::makeStandardIkTuiDocument(
+          frame, presentation, publish_count, visualization_sink->status(), title,
+          replay_source.status().detail));
       ++publish_count;
 
-      if (source_index + 1U == loaded.timeline.timeline.size() && !tui.command().paused) {
+      replay_source.markFrameProcessed();
+      if (replay_source.endOfStream()) {
         replay_state = "succeeded";
         break;
       }
-      solver_time_ns += solver_period_ns;
     }
   } catch (const std::exception & error) {
     ++execution.rejected_count;
@@ -440,9 +443,10 @@ int runReplayLoop(ReplayAppOptions options, baseline::BaselineSolver & solver,
   return EXIT_SUCCESS;
 }
 
-int runReplay(int argc, char ** argv)
+int runReplay(int argc, char ** argv, int process_argc, char ** process_argv)
 {
   auto options = parseReplayOptions(argc, argv);
+  options.replay.original_argv.assign(process_argv, process_argv + process_argc);
   const auto loaded = replay::loadReplay(options.replay);
   baseline::BaselineSolver solver(options.replay.urdf_path.string());
   return runReplayLoop(std::move(options), solver, loaded);
@@ -459,7 +463,7 @@ int run(int argc, char ** argv)
     return runTeleop(argc - 1, argv + 1);
   }
   if (mode == "replay") {
-    return runReplay(argc - 1, argv + 1);
+    return runReplay(argc - 1, argv + 1, argc, argv);
   }
   throw std::runtime_error("expected subcommand 'teleop' or 'replay'");
 }

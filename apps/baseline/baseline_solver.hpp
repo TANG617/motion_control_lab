@@ -9,7 +9,7 @@
 
 #include "placo/kinematics/kinematics_solver.h"
 #include "placo/model/robot_wrapper.h"
-#include "runtime/interactive_types.hpp"
+#include "contracts/presentation/ik_app_snapshot.hpp"
 
 namespace motion_control_lab::baseline
 {

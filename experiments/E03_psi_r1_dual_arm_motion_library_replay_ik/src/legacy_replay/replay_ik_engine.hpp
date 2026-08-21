@@ -8,7 +8,7 @@
 #include <vector>
 
 #include "adapters/replay/replay_support.hpp"
-#include "r1_robot_config.hpp"
+#include "components/robot/r1/r1_robot_config.hpp"
 
 namespace motion_control_lab::replay
 {

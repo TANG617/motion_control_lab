@@ -7,7 +7,7 @@
 #include "motion_control_lab/sha256.hpp"
 
 #if MCL_WITH_REPLAY_VISUALIZATION
-#include <motion_control_viz/foxglove_websocket_sink.hpp>
+#include "components/visualization/preview_transport.hpp"
 #include <motion_control_viz/render_batch.hpp>
 #include <motion_control_viz/render_sink.hpp>
 #endif
@@ -56,6 +56,8 @@ struct BatchOptions
   std::string visualization_host{"127.0.0.1"};
   std::uint16_t visualization_port{8765};
   double playback_rate{1.0};
+  std::string launcher;
+  std::vector<std::string> original_argv;
 };
 
 std::string jsonString(const Json::Value & value)
@@ -116,6 +118,7 @@ std::uint16_t parsePort(const std::string & value)
 BatchOptions parseOptions(int argc, char ** argv)
 {
   BatchOptions result;
+  result.original_argv.assign(argv, argv + argc);
   bool playback_rate_explicit = false;
   for (int index = 1; index < argc; ++index) {
     const std::string argument = argv[index];
@@ -149,6 +152,8 @@ BatchOptions parseOptions(int argc, char ** argv)
     } else if (argument == "--playback-rate") {
       result.playback_rate = parsePositiveDouble(requireValue(), argument);
       playback_rate_explicit = true;
+    } else if (argument == "--launcher") {
+      result.launcher = requireValue();
     } else {
       throw std::runtime_error("unknown option: " + argument);
     }
@@ -183,6 +188,7 @@ std::string help(const std::string & program)
          "  --viz-host <address>   Foxglove bind address (default 127.0.0.1)\n"
          "  --viz-port <port>      Foxglove port (default 8765)\n"
          "  --playback-rate <rate> Visualization replay rate (default 1)\n"
+         "  --launcher <path-or-id> Launcher identity recorded in artifacts\n"
          "  --help                 Show this help\n";
 }
 
@@ -597,6 +603,21 @@ Json::Value baseRunManifest(
   manifest["environment"]["runtime"] = std::string(mcl::e03::build_config::kRuntime);
   manifest["environment"]["visualization_enabled"] = options.visualize;
   manifest["environment"]["visualization_playback_rate"] = options.playback_rate;
+  manifest["invocation"]["launcher"] = options.launcher;
+  manifest["invocation"]["argv"] = Json::arrayValue;
+  for (const auto & argument : options.original_argv) {
+    manifest["invocation"]["argv"].append(argument);
+  }
+  manifest["resolved_config"]["urdf_path"] =
+    std::filesystem::absolute(options.urdf_path).lexically_normal().string();
+  manifest["resolved_config"]["library_directory"] =
+    std::filesystem::absolute(options.library_directory).lexically_normal().string();
+  manifest["resolved_config"]["output_root"] =
+    std::filesystem::absolute(options.output_root).lexically_normal().string();
+  manifest["resolved_config"]["visualization_enabled"] = options.visualize;
+  manifest["resolved_config"]["visualization_host"] = options.visualization_host;
+  manifest["resolved_config"]["visualization_port"] = options.visualization_port;
+  manifest["resolved_config"]["playback_rate"] = options.playback_rate;
   manifest["started_at_utc"] = started_at;
   manifest["inputs"] = Json::arrayValue;
   Json::Value contract_input;
@@ -786,12 +807,11 @@ int execute(const BatchOptions & options)
   std::unique_ptr<mcv::RenderSink> visualization_sink;
   if (options.visualize && batch_failure_code.empty()) {
     try {
-      mcv::FoxgloveWebSocketSinkOptions sink_options;
-      sink_options.server_name = "mcl_e03_batch_replay_ik";
+      mcl::PreviewSinkOptions sink_options;
+      sink_options.enabled = true;
       sink_options.host = options.visualization_host;
       sink_options.port = options.visualization_port;
-      visualization_sink =
-        std::make_unique<mcv::FoxgloveWebSocketSink>(std::move(sink_options));
+      visualization_sink = mcl::createPreviewSink(sink_options, "mcl_e03_batch_replay_ik");
       visualization_sink->open();
       std::cout << "Foxglove: " << visualization_sink->status() << '\n';
     } catch (const std::exception & error) {

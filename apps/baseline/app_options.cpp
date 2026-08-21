@@ -9,8 +9,8 @@
 #include <stdexcept>
 #include <string>
 
-#include "console/tui_help.hpp"
-#include "r1_robot_config.hpp"
+#include "components/robot/r1/r1_robot_config.hpp"
+#include "components/tui/tui_help.hpp"
 
 namespace motion_control_lab::baseline {
 namespace {
@@ -29,6 +29,26 @@ double parsePositiveDouble(const std::string &name, const std::string &value) {
     throw std::runtime_error(name + " must be a positive finite value");
   }
   return parsed;
+}
+
+bool isFrozenAlgorithmOption(const std::string &argument) {
+  return argument == "--rate" || argument == "--solver" || argument == "--backend" ||
+         argument == "--regularization" || argument == "--maximum-iterations" ||
+         argument == "--position-tolerance-m" ||
+         argument == "--orientation-tolerance-rad" || argument == "--posture-weight" ||
+         argument == "--joint-position-margin-rad" || argument == "--task-gain" ||
+         argument == "--task-weight";
+}
+
+[[noreturn]] void rejectFrozenOverride(const std::string &argument) {
+  if (argument == "--rate") {
+    throw std::runtime_error("--rate is not supported; the baseline is fixed at 100 Hz");
+  }
+  if (argument == "--solver" || argument == "--backend") {
+    throw std::runtime_error("unknown option: " + argument);
+  }
+  throw std::runtime_error(
+      argument + " is not supported; the baseline algorithm configuration is production-static");
 }
 
 void validate(const TeleopOptions &options) {
@@ -72,6 +92,7 @@ void printTeleopUsage(const char *program) {
       << "  --side <left|right>        Initially selected arm (default: "
       << defaults.tui.side << ")\n"
       << "  --ui <tui|none>            User interface mode (default: tui)\n"
+      << "  --viz <foxglove|none>      Visualization transport (default: foxglove)\n"
       << "  --duration <seconds>       Stop after duration; zero runs until "
          "stopped "
          "(default: "
@@ -120,6 +141,8 @@ void printReplayUsage(const char *program) {
       << "  --output-root <path>             Parent of an auto-named run\n"
       << "  --run-id <id>                    Override auto-generated run ID\n"
       << "  --ui tui|none                    User interface mode\n"
+      << "  --terminal-input on|off          Replay keyboard controls\n"
+      << "  --viz foxglove|none              Visualization transport\n"
       << "  --host <address>                 Foxglove bind address\n"
       << "  --port <port>                    Foxglove port\n"
       << "  --mcap <path>                    Record visualization MCAP\n"
@@ -141,9 +164,8 @@ TeleopOptions parseTeleopOptions(int argc, char **argv) {
     if (argument == "--help" || argument == "-h") {
       printTeleopUsage(argv[0]);
       std::exit(EXIT_SUCCESS);
-    } else if (argument == "--rate") {
-      throw std::runtime_error(
-          "--rate is not supported; the baseline is fixed at 100 Hz");
+    } else if (isFrozenAlgorithmOption(argument)) {
+      rejectFrozenOverride(argument);
     } else if (argument == "--side") {
       options.tui.side = requireValue(index, argc, argv, argument);
     } else if (argument == "--urdf") {
@@ -164,6 +186,15 @@ TeleopOptions parseTeleopOptions(int argc, char **argv) {
         options.tui_enabled = false;
       } else {
         throw std::runtime_error("ui must be either 'tui' or 'none'");
+      }
+    } else if (argument == "--viz") {
+      const auto value = requireValue(index, argc, argv, argument);
+      if (value == "foxglove") {
+        options.visualization.enabled = true;
+      } else if (value == "none") {
+        options.visualization.enabled = false;
+      } else {
+        throw std::runtime_error("viz must be either 'foxglove' or 'none'");
       }
     } else if (argument == "--duration") {
       options.duration_s = std::stod(requireValue(index, argc, argv, argument));
@@ -201,6 +232,9 @@ ReplayAppOptions parseReplayOptions(int argc, char **argv) {
     if (argument == "--help" || argument == "-h") {
       printReplayUsage(argv[0]);
       std::exit(EXIT_SUCCESS);
+    }
+    if (isFrozenAlgorithmOption(argument)) {
+      rejectFrozenOverride(argument);
     }
     if (argument == "--initial-joint-state-stream") {
       throw std::runtime_error("--initial-joint-state-stream is not supported; "

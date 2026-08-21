@@ -26,13 +26,16 @@ int main() {
   char backend[] = "eiquadprog";
   char ui_option[] = "--ui";
   char ui[] = "none";
+  char iterations_option[] = "--maximum-iterations";
+  char iterations[] = "42";
   char *custom_argv[]{program,       urdf_option, urdf,
                       solver_option, solver,      backend_option,
-                      backend,       ui_option,   ui};
-  const auto custom = app::parseAppOptions(9, custom_argv);
+                      backend,       ui_option,   ui, iterations_option,
+                      iterations};
+  const auto custom = app::parseAppOptions(11, custom_argv);
   if (custom.solver != app::SolverKind::Placo ||
       custom.backend != app::MccBackend::Eiquadprog ||
-      custom.interactive.tui_enabled) {
+      custom.interactive.tui_enabled || custom.algorithm.maximum_iterations != 42) {
     return EXIT_FAILURE;
   }
 

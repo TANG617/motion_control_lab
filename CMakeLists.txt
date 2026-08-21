@@ -79,6 +79,8 @@ option(
   "Compile Linux CPU affinity into IK applications"
   OFF
 )
+option(MCL_ENABLE_TUI "Build the FTXUI terminal renderer" ON)
+option(MCL_ENABLE_FOXGLOVE_TRANSPORT "Build Foxglove WebSocket/MCAP preview transports" ON)
 
 if(MCL_ENABLE_CPU_AFFINITY AND NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
   message(FATAL_ERROR "MCL_ENABLE_CPU_AFFINITY is supported only on Linux")
@@ -89,6 +91,13 @@ if(MCL_BUILD_E03_REPLAY_VISUALIZATION AND
   message(
     FATAL_ERROR
     "Replay visualization requires an enabled replay IK runner"
+  )
+endif()
+if(MCL_BUILD_E03_REPLAY_VISUALIZATION AND
+   NOT MCL_ENABLE_FOXGLOVE_TRANSPORT)
+  message(
+    FATAL_ERROR
+    "E03 replay visualization requires MCL_ENABLE_FOXGLOVE_TRANSPORT=ON"
   )
 endif()
 
@@ -104,9 +113,26 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+if(APPLE)
+  set(CMAKE_INSTALL_RPATH "@loader_path/../${CMAKE_INSTALL_LIBDIR}")
+elseif(UNIX)
+  # Core's bundled Ruckig is an indirect dependency. Old-dtags RPATH is
+  # intentionally transitive so build- and install-tree executables resolve
+  # the complete native stack without an LD_LIBRARY_PATH workaround.
+  add_link_options("LINKER:--disable-new-dtags")
+  set(CMAKE_INSTALL_RPATH "$ORIGIN/../${CMAKE_INSTALL_LIBDIR}")
+  set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
+endif()
+
 list(PREPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
 include(cmake/Dependencies.cmake)
+include(cmake/MclApp.cmake)
+
+install(
+  PROGRAMS "${CMAKE_CURRENT_SOURCE_DIR}/scripts/launch_app.sh"
+  DESTINATION scripts
+)
 
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
 
@@ -193,7 +219,25 @@ if(MCL_BUILD_ANY_INTERACTIVE_IK OR MCL_BUILD_CARTESIAN_PLANNING OR
   find_package(motion_control_viz 0.4 CONFIG REQUIRED)
 endif()
 
-add_subdirectory(apps/common)
+add_library(mcl_input_contract INTERFACE)
+add_library(motion_control_lab::input_contract ALIAS mcl_input_contract)
+target_include_directories(
+  mcl_input_contract INTERFACE "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>"
+)
+target_link_libraries(mcl_input_contract INTERFACE Eigen3::Eigen)
+
+add_library(mcl_presentation_contract INTERFACE)
+add_library(motion_control_lab::presentation_contract ALIAS mcl_presentation_contract)
+target_include_directories(
+  mcl_presentation_contract INTERFACE "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>"
+)
+target_link_libraries(mcl_presentation_contract INTERFACE Eigen3::Eigen)
+
+add_library(mcl_runtime_contract INTERFACE)
+add_library(motion_control_lab::runtime_contract ALIAS mcl_runtime_contract)
+target_include_directories(
+  mcl_runtime_contract INTERFACE "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>"
+)
 
 add_library(
   mcl_mcap
@@ -247,38 +291,121 @@ target_include_directories(
 )
 target_link_libraries(mcl_run_artifacts PUBLIC jsoncpp_lib)
 
-add_library(
-  mcl_replay_support
-  adapters/replay/replay_support.cpp
-)
-add_library(motion_control_lab::replay_support ALIAS mcl_replay_support)
-target_include_directories(
-  mcl_replay_support
-  PUBLIC "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>"
-)
+add_library(mcl_replay adapters/replay/replay_support.cpp components/replay/replay_source.cpp)
+add_library(motion_control_lab::replay ALIAS mcl_replay)
+target_include_directories(mcl_replay PUBLIC "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>")
 target_link_libraries(
-  mcl_replay_support
-  PUBLIC motion_control_lab::data motion_control_lab::run_artifacts jsoncpp_lib
+  mcl_replay PUBLIC
+    motion_control_lab::data
+    motion_control_lab::input_contract
+    motion_control_lab::run_artifacts
+    jsoncpp_lib
 )
+
+add_library(mcl_cpu_affinity components/app_helpers/cpu_affinity.cpp)
+add_library(motion_control_lab::cpu_affinity ALIAS mcl_cpu_affinity)
+target_include_directories(mcl_cpu_affinity PUBLIC "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>")
+target_compile_definitions(
+  mcl_cpu_affinity PUBLIC MCL_ENABLE_CPU_AFFINITY=$<BOOL:${MCL_ENABLE_CPU_AFFINITY}>
+)
+target_link_libraries(mcl_cpu_affinity PRIVATE Threads::Threads)
+
+add_library(mcl_r1_robot_config components/robot/r1/r1_robot_config.cpp)
+add_library(motion_control_lab::r1_robot_config ALIAS mcl_r1_robot_config)
+target_include_directories(mcl_r1_robot_config PUBLIC "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>")
+target_link_libraries(mcl_r1_robot_config PUBLIC Eigen3::Eigen)
+
+add_library(mcl_app_helpers components/app_helpers/app_helpers.cpp)
+add_library(motion_control_lab::app_helpers ALIAS mcl_app_helpers)
+target_include_directories(mcl_app_helpers PUBLIC "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>")
+target_link_libraries(
+  mcl_app_helpers PUBLIC
+    motion_control_lab::cpu_affinity
+    motion_control_lab::presentation_contract
+    Eigen3::Eigen
+)
+
+add_library(
+  mcl_scheduler
+  components/scheduler/grouped_worker.cpp
+  components/scheduler/rolling_percentiles.cpp
+  components/scheduler/single_rate_scheduler.cpp
+)
+add_library(motion_control_lab::scheduler ALIAS mcl_scheduler)
+target_include_directories(mcl_scheduler PUBLIC "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>")
+target_link_libraries(mcl_scheduler PUBLIC motion_control_lab::runtime_contract Threads::Threads)
+
+add_library(
+  mcl_terminal_frontend
+  components/terminal_frontend/terminal_frontend.cpp
+  components/terminal_frontend/key_router.cpp
+)
+add_library(motion_control_lab::terminal_frontend ALIAS mcl_terminal_frontend)
+target_include_directories(mcl_terminal_frontend PUBLIC "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>")
+target_link_libraries(mcl_terminal_frontend PUBLIC motion_control_lab::input_contract)
+
+add_library(mcl_keyboard_teleop components/teleop/keyboard/keyboard_teleop.cpp)
+add_library(motion_control_lab::keyboard_teleop ALIAS mcl_keyboard_teleop)
+target_include_directories(mcl_keyboard_teleop PUBLIC "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>")
+target_link_libraries(mcl_keyboard_teleop PUBLIC motion_control_lab::input_contract)
+
+add_library(mcl_cartesian_teleop components/teleop/cartesian/cartesian_teleop.cpp)
+add_library(motion_control_lab::cartesian_teleop ALIAS mcl_cartesian_teleop)
+target_include_directories(mcl_cartesian_teleop PUBLIC "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>")
+target_link_libraries(mcl_cartesian_teleop PUBLIC motion_control_lab::input_contract Eigen3::Eigen)
+
+add_library(mcl_keyboard_input components/teleop/keyboard/keyboard_target_source.cpp)
+add_library(motion_control_lab::keyboard_input ALIAS mcl_keyboard_input)
+target_include_directories(mcl_keyboard_input PUBLIC "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>")
+target_link_libraries(
+  mcl_keyboard_input PUBLIC
+    motion_control_lab::terminal_frontend
+    motion_control_lab::keyboard_teleop
+    motion_control_lab::cartesian_teleop
+)
+
+add_library(mcl_standard_ik_tui components/tui/standard_ik_tui.cpp)
+add_library(motion_control_lab::standard_ik_tui ALIAS mcl_standard_ik_tui)
+target_include_directories(
+  mcl_standard_ik_tui PUBLIC "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>"
+)
+target_link_libraries(mcl_standard_ik_tui PUBLIC motion_control_lab::presentation_contract)
+
+add_library(mcl_tui components/tui/tui_help.cpp components/tui/tui_renderer.cpp)
+add_library(motion_control_lab::tui ALIAS mcl_tui)
+target_include_directories(mcl_tui PUBLIC "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>")
+target_link_libraries(
+  mcl_tui PUBLIC motion_control_lab::input_contract motion_control_lab::presentation_contract
+)
+if(MCL_ENABLE_TUI)
+  target_compile_definitions(mcl_tui PRIVATE MCL_WITH_FTXUI=1)
+  target_link_libraries(mcl_tui PRIVATE ftxui::ftxui)
+else()
+  target_compile_definitions(mcl_tui PRIVATE MCL_WITH_FTXUI=0)
+endif()
+
+add_library(mcl_app_scaffold INTERFACE)
+add_library(motion_control_lab::app_scaffold ALIAS mcl_app_scaffold)
+target_include_directories(mcl_app_scaffold INTERFACE "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>")
+target_link_libraries(mcl_app_scaffold INTERFACE motion_control_lab::runtime_contract)
 
 if(MCL_BUILD_ANY_INTERACTIVE_IK OR MCL_BUILD_CARTESIAN_PLANNING OR
    MCL_BUILD_E03_REPLAY_VISUALIZATION)
   add_library(
     mcl_preview_transport
-    adapters/interactive/src/sinks/preview_sink_factory.cpp
+    components/visualization/preview_transport.cpp
   )
   add_library(motion_control_lab::preview_transport ALIAS mcl_preview_transport)
   target_include_directories(
     mcl_preview_transport
     PUBLIC
-      "${CMAKE_CURRENT_SOURCE_DIR}/adapters/interactive/src"
       "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>"
   )
   target_link_libraries(
     mcl_preview_transport
     PUBLIC motion_control_viz::render
   )
-  if(TARGET motion_control_viz::foxglove)
+  if(MCL_ENABLE_FOXGLOVE_TRANSPORT AND TARGET motion_control_viz::foxglove)
     target_link_libraries(
       mcl_preview_transport
       PRIVATE motion_control_viz::foxglove
@@ -296,44 +423,21 @@ if(MCL_BUILD_ANY_INTERACTIVE_IK OR MCL_BUILD_CARTESIAN_PLANNING OR
 endif()
 
 if(MCL_BUILD_ANY_INTERACTIVE_IK)
-
   add_library(
-    mcl_interactive_runtime
-    adapters/interactive/src/console/tui_help.cpp
-    adapters/interactive/src/runtime/grouped_worker.cpp
-    adapters/interactive/src/runtime/interactive_scheduler.cpp
-    adapters/interactive/src/runtime/rolling_percentiles.cpp
-    adapters/interactive/src/controls/tui_source_controls.cpp
-    adapters/interactive/src/console/tui_console.cpp
+    mcl_preview_projection
+    components/visualization/preview_projection.cpp
   )
-  add_library(motion_control_lab::interactive_runtime ALIAS mcl_interactive_runtime)
+  add_library(motion_control_lab::preview_projection ALIAS mcl_preview_projection)
   target_include_directories(
-    mcl_interactive_runtime
+    mcl_preview_projection
     PUBLIC
-      "${CMAKE_CURRENT_SOURCE_DIR}/adapters/interactive/src"
       "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>"
   )
   target_link_libraries(
-    mcl_interactive_runtime
-    PUBLIC Eigen3::Eigen
-    PRIVATE ftxui::ftxui
-  )
-
-  add_library(
-    mcl_ik_preview
-    adapters/interactive/src/sinks/ik_render_batch.cpp
-  )
-  add_library(motion_control_lab::ik_preview ALIAS mcl_ik_preview)
-  target_include_directories(
-    mcl_ik_preview
+    mcl_preview_projection
     PUBLIC
-      "${CMAKE_CURRENT_SOURCE_DIR}/adapters/interactive/src"
-      "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>"
-  )
-  target_link_libraries(
-    mcl_ik_preview
-    PUBLIC
-      motion_control_lab::interactive_runtime
+      motion_control_lab::presentation_contract
+      motion_control_lab::r1_robot_config
       motion_control_lab::visualization_contracts
       motion_control_viz::render
   )
@@ -420,7 +524,7 @@ if(MCL_BUILD_E03_BATCH_REPLAY_IK)
   target_link_libraries(
     mcl_e03_legacy_replay_ik_engine
     PUBLIC
-      motion_control_lab::replay_support
+      motion_control_lab::replay
       motion_control_lab::r1_robot_config
       motion_control_core::motion_control_core
   )
@@ -689,6 +793,69 @@ install(
 )
 
 if(BUILD_TESTING)
+  find_program(MCL_BASH_EXECUTABLE bash REQUIRED)
+  file(
+    GLOB_RECURSE MCL_APP_SHELL_SCRIPTS
+    CONFIGURE_DEPENDS
+    "${CMAKE_CURRENT_SOURCE_DIR}/scripts/*.sh"
+    "${CMAKE_CURRENT_SOURCE_DIR}/apps/*/scripts/*.sh"
+    "${CMAKE_CURRENT_SOURCE_DIR}/experiments/*/scripts/*.sh"
+  )
+  add_test(NAME scripts.bash_syntax COMMAND "${MCL_BASH_EXECUTABLE}" -n ${MCL_APP_SHELL_SCRIPTS})
+  find_program(MCL_SCRIPT_EXECUTABLE script)
+
+  if(MCL_BUILD_PLANNED_GROUPED_STEP_OTG)
+    add_test(
+      NAME scripts.source_launcher_path_resolution
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        --unset=MCL_BINARY
+        "PATH=$<TARGET_FILE_DIR:mcl_planned_grouped_step_otg>:$ENV{PATH}"
+        "MCL_UI=none"
+        "MCL_VIZ=none"
+        "${CMAKE_CURRENT_SOURCE_DIR}/apps/planned_grouped_step_otg/scripts/run_keyboard.sh"
+        --help
+    )
+
+    if(MCL_SCRIPT_EXECUTABLE)
+      add_test(
+        NAME scripts.planned_grouped_step_otg_keyboard_smoke
+        COMMAND
+          "${CMAKE_COMMAND}" -E env
+          --unset=MCL_BINARY
+          "PATH=$<TARGET_FILE_DIR:mcl_planned_grouped_step_otg>:$ENV{PATH}"
+          "MCL_UI=none"
+          "MCL_VIZ=none"
+          "${MCL_SCRIPT_EXECUTABLE}" -qec
+          "${CMAKE_CURRENT_SOURCE_DIR}/apps/planned_grouped_step_otg/scripts/run_keyboard.sh --duration 0.05"
+          /dev/null
+      )
+      set_tests_properties(
+        scripts.planned_grouped_step_otg_keyboard_smoke
+        PROPERTIES TIMEOUT 15
+      )
+    endif()
+  endif()
+
+  if(MCL_BUILD_PLANNED_GROUPED_SERVO_STEP AND MCL_SCRIPT_EXECUTABLE)
+    add_test(
+      NAME scripts.planned_grouped_servo_step_keyboard_smoke
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        --unset=MCL_BINARY
+        "PATH=$<TARGET_FILE_DIR:mcl_planned_grouped_servo_step>:$ENV{PATH}"
+        "MCL_UI=none"
+        "MCL_VIZ=none"
+        "${MCL_SCRIPT_EXECUTABLE}" -qec
+        "${CMAKE_CURRENT_SOURCE_DIR}/apps/planned_grouped_servo_step/scripts/run_keyboard.sh --duration 0.05"
+        /dev/null
+    )
+    set_tests_properties(
+      scripts.planned_grouped_servo_step_keyboard_smoke
+      PROPERTIES TIMEOUT 15
+    )
+  endif()
+
   add_test(
     NAME contracts.visualization_generator
     COMMAND
@@ -704,9 +871,39 @@ if(BUILD_TESTING)
   )
   target_link_libraries(
     test_data_pipeline
-    PRIVATE motion_control_lab::data
+    PRIVATE motion_control_lab::replay
   )
   add_test(NAME data.pipeline COMMAND test_data_pipeline)
+
+  add_executable(test_input_teleop tests/input_teleop.cpp)
+  target_link_libraries(
+    test_input_teleop PRIVATE motion_control_lab::keyboard_teleop motion_control_lab::cartesian_teleop
+  )
+  add_test(NAME input.teleop_contract COMMAND test_input_teleop)
+
+  add_executable(test_replay_source tests/replay_source.cpp)
+  target_link_libraries(test_replay_source PRIVATE motion_control_lab::replay)
+  add_test(NAME replay.state_machine COMMAND test_replay_source)
+
+  add_executable(test_replay_manifest tests/replay_manifest.cpp)
+  target_link_libraries(test_replay_manifest PRIVATE motion_control_lab::replay)
+  add_test(NAME artifacts.replay_manifest COMMAND test_replay_manifest)
+
+  add_executable(test_app_scaffold tests/app_scaffold.cpp)
+  target_link_libraries(test_app_scaffold PRIVATE motion_control_lab::app_scaffold)
+  add_test(NAME runtime.app_scaffold COMMAND test_app_scaffold)
+
+  add_test(
+    NAME architecture.boundaries
+    COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/architecture_boundaries.py"
+            "${CMAKE_CURRENT_SOURCE_DIR}"
+  )
+
+  if(TARGET mcl_preview_transport)
+    add_executable(test_preview_null tests/preview_null.cpp)
+    target_link_libraries(test_preview_null PRIVATE motion_control_lab::preview_transport)
+    add_test(NAME visualization.null_sink COMMAND test_preview_null)
+  endif()
 
   add_executable(
     test_cpu_affinity
@@ -726,8 +923,10 @@ if(BUILD_TESTING)
     target_link_libraries(
       test_interactive_ik_configuration
       PRIVATE
-        motion_control_lab::app_common
-        motion_control_lab::ik_preview
+        motion_control_lab::app_helpers
+        motion_control_lab::r1_robot_config
+        motion_control_lab::scheduler
+        motion_control_lab::preview_projection
         motion_control_lab::visualization_contracts
     )
     add_test(
@@ -741,7 +940,7 @@ if(BUILD_TESTING)
     )
     target_link_libraries(
       test_rolling_percentiles
-      PRIVATE motion_control_lab::interactive_runtime
+      PRIVATE motion_control_lab::scheduler
     )
     add_test(
       NAME interactive.rolling_percentiles
@@ -755,7 +954,7 @@ if(BUILD_TESTING)
     target_link_libraries(
       test_grouped_runtime
       PRIVATE
-        motion_control_lab::interactive_runtime
+        motion_control_lab::scheduler
         Threads::Threads
     )
     add_test(
@@ -769,55 +968,96 @@ if(BUILD_TESTING)
     )
     target_link_libraries(
       test_tui_console
-      PRIVATE motion_control_lab::interactive_runtime
+      PRIVATE
+        motion_control_lab::terminal_frontend
+        motion_control_lab::keyboard_input
+        motion_control_lab::tui
     )
-    add_test(
-      NAME interactive.tui_console_pty
-      COMMAND
-        "${Python3_EXECUTABLE}"
-        "${CMAKE_CURRENT_SOURCE_DIR}/tests/run_tui_pty.py"
-        "$<TARGET_FILE:test_tui_console>"
-    )
-    add_test(
-      NAME interactive.tui_exception_pty
-      COMMAND
-        "${Python3_EXECUTABLE}"
-        "${CMAKE_CURRENT_SOURCE_DIR}/tests/run_tui_pty.py"
-        "$<TARGET_FILE:test_tui_console>"
-        --expect-exception
-    )
-    add_test(
-      NAME interactive.tui_fault_hold_pty
-      COMMAND
-        "${Python3_EXECUTABLE}"
-        "${CMAKE_CURRENT_SOURCE_DIR}/tests/run_tui_pty.py"
-        "$<TARGET_FILE:test_tui_console>"
-        --fault-hold
-    )
-    add_test(
-      NAME interactive.tui_replay_controls_pty
-      COMMAND
-        "${Python3_EXECUTABLE}"
-        "${CMAKE_CURRENT_SOURCE_DIR}/tests/run_tui_pty.py"
-        "$<TARGET_FILE:test_tui_console>"
-        --replay
-    )
-    add_test(
-      NAME interactive.tui_replay_start_paused_pty
-      COMMAND
-        "${Python3_EXECUTABLE}"
-        "${CMAKE_CURRENT_SOURCE_DIR}/tests/run_tui_pty.py"
-        "$<TARGET_FILE:test_tui_console>"
-        --replay-start-paused
-    )
-    set_tests_properties(
-      interactive.tui_console_pty
-      interactive.tui_exception_pty
-      interactive.tui_fault_hold_pty
-      interactive.tui_replay_controls_pty
-      interactive.tui_replay_start_paused_pty
-      PROPERTIES TIMEOUT 15
-    )
+
+    add_executable(test_standard_ik_tui tests/standard_ik_tui.cpp)
+    target_link_libraries(test_standard_ik_tui PRIVATE motion_control_lab::standard_ik_tui)
+    add_test(NAME interactive.standard_ik_tui COMMAND test_standard_ik_tui)
+    if(MCL_ENABLE_TUI)
+      add_test(
+        NAME interactive.tui_console_pty
+        COMMAND
+          "${Python3_EXECUTABLE}"
+          "${CMAKE_CURRENT_SOURCE_DIR}/tests/run_tui_pty.py"
+          "$<TARGET_FILE:test_tui_console>"
+      )
+      add_test(
+        NAME interactive.tui_exception_pty
+        COMMAND
+          "${Python3_EXECUTABLE}"
+          "${CMAKE_CURRENT_SOURCE_DIR}/tests/run_tui_pty.py"
+          "$<TARGET_FILE:test_tui_console>"
+          --expect-exception
+      )
+      add_test(
+        NAME interactive.tui_fault_hold_pty
+        COMMAND
+          "${Python3_EXECUTABLE}"
+          "${CMAKE_CURRENT_SOURCE_DIR}/tests/run_tui_pty.py"
+          "$<TARGET_FILE:test_tui_console>"
+          --fault-hold
+      )
+      add_test(
+        NAME interactive.tui_replay_controls_pty
+        COMMAND
+          "${Python3_EXECUTABLE}"
+          "${CMAKE_CURRENT_SOURCE_DIR}/tests/run_tui_pty.py"
+          "$<TARGET_FILE:test_tui_console>"
+          --replay
+      )
+      add_test(
+        NAME interactive.tui_replay_start_paused_pty
+        COMMAND
+          "${Python3_EXECUTABLE}"
+          "${CMAKE_CURRENT_SOURCE_DIR}/tests/run_tui_pty.py"
+          "$<TARGET_FILE:test_tui_console>"
+          --replay-start-paused
+      )
+      set_tests_properties(
+        interactive.tui_console_pty
+        interactive.tui_exception_pty
+        interactive.tui_fault_hold_pty
+        interactive.tui_replay_controls_pty
+        interactive.tui_replay_start_paused_pty
+        PROPERTIES TIMEOUT 15
+      )
+
+      if(TARGET mcl_planned_grouped_servo_step)
+        add_test(
+          NAME apps.mcl_planned_grouped_servo_step_tui_pages_pty
+          COMMAND
+            "${Python3_EXECUTABLE}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tests/run_planned_tui_pages_pty.py"
+            "$<TARGET_FILE:mcl_planned_grouped_servo_step>"
+            6
+            "/workspace/models/Psi_R1_visual_collision.urdf"
+        )
+        set_tests_properties(
+          apps.mcl_planned_grouped_servo_step_tui_pages_pty
+          PROPERTIES TIMEOUT 20
+        )
+      endif()
+
+      if(TARGET mcl_planned_grouped_step_otg)
+        add_test(
+          NAME apps.mcl_planned_grouped_step_otg_tui_pages_pty
+          COMMAND
+            "${Python3_EXECUTABLE}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tests/run_planned_tui_pages_pty.py"
+            "$<TARGET_FILE:mcl_planned_grouped_step_otg>"
+            7
+            "/workspace/products/synrobot/modules/common/robot_description/psi_r1/urdf/Psi_R1_rev1.urdf"
+        )
+        set_tests_properties(
+          apps.mcl_planned_grouped_step_otg_tui_pages_pty
+          PROPERTIES TIMEOUT 20
+        )
+      endif()
+    endif()
 
     foreach(MCL_DUAL_ARM_TARGET IN ITEMS
         mcl_servo_step
@@ -866,17 +1106,22 @@ if(BUILD_TESTING)
         test_dual_arm_servo_solver_semantics
         tests/dual_arm_servo_solver_semantics.cpp
         apps/servo_step/app_options.cpp
+        apps/servo_step/diagnostics_projection.cpp
       )
       target_link_libraries(
         test_dual_arm_servo_solver_semantics
         PRIVATE
           motion_control_lab::cpu_affinity
-          motion_control_lab::app_common
+          motion_control_lab::app_helpers
+          motion_control_lab::r1_robot_config
           motion_control_core::motion_control_core
-          motion_control_lab::interactive_runtime
+          motion_control_lab::scheduler
+          motion_control_lab::keyboard_input
+          motion_control_lab::standard_ik_tui
+          motion_control_lab::tui
           motion_control_lab::preview_transport
-          motion_control_lab::ik_preview
-          motion_control_lab::replay_support
+          motion_control_lab::preview_projection
+          motion_control_lab::replay
           libplaco
       )
       add_test(
@@ -897,16 +1142,21 @@ if(BUILD_TESTING)
         test_dual_arm_target_solver_semantics
         tests/dual_arm_target_solver_semantics.cpp
         apps/target_solve/app_options.cpp
+        apps/target_solve/diagnostics_projection.cpp
       )
       target_link_libraries(
         test_dual_arm_target_solver_semantics
         PRIVATE
           motion_control_lab::cpu_affinity
-          motion_control_lab::app_common
+          motion_control_lab::app_helpers
+          motion_control_lab::r1_robot_config
           motion_control_core::motion_control_core
-          motion_control_lab::interactive_runtime
+          motion_control_lab::scheduler
+          motion_control_lab::keyboard_input
+          motion_control_lab::standard_ik_tui
+          motion_control_lab::tui
           motion_control_lab::preview_transport
-          motion_control_lab::ik_preview
+          motion_control_lab::preview_projection
           libplaco
       )
       add_test(
@@ -922,11 +1172,12 @@ if(BUILD_TESTING)
       )
     endif()
 
-    foreach(MCL_DUAL_ARM_TARGET IN ITEMS
-        mcl_servo_step
-        mcl_target_solve)
-      if(TARGET ${MCL_DUAL_ARM_TARGET})
-        foreach(MCL_SOLVER_TEST IN ITEMS default mcc_proxqp mcc_eiquadprog placo_ignored_backend)
+    if(MCL_ENABLE_TUI)
+      foreach(MCL_DUAL_ARM_TARGET IN ITEMS
+          mcl_servo_step
+          mcl_target_solve)
+        if(TARGET ${MCL_DUAL_ARM_TARGET})
+          foreach(MCL_SOLVER_TEST IN ITEMS default mcc_proxqp mcc_eiquadprog placo_ignored_backend)
           if(MCL_SOLVER_TEST STREQUAL "default")
             set(MCL_SOLVER_ARGUMENT default)
             set(MCL_BACKEND_ARGUMENT default)
@@ -957,9 +1208,10 @@ if(BUILD_TESTING)
               ENVIRONMENT_MODIFICATION
                 "LD_LIBRARY_PATH=path_list_prepend:$<TARGET_FILE_DIR:libplaco>"
           )
-        endforeach()
-      endif()
-    endforeach()
+          endforeach()
+        endif()
+      endforeach()
+    endif()
   endif()
 
   add_test(

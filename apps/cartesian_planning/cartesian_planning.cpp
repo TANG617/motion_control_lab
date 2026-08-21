@@ -1,6 +1,6 @@
 #include "cartesian_planning.hpp"
 
-#include "sinks/preview_sink_factory.hpp"
+#include "components/visualization/preview_transport.hpp"
 
 #include "matplotlibcpp.h"
 

@@ -9,6 +9,11 @@ replay 还是实验 runner，都必须使用相同 topic 和语义。非 IK app 
 CMake 的 `motion_control_lab::visualization_contracts` target 使用通用 Python generator 将 C++
 头生成到 build tree；source tree 不保存第二份手写 topic/schema 常量。
 
+Lab app 不直接操作 Foxglove SDK。solver-neutral `mcl_preview_projection` 和 app-local extension
+只构造 `motion_control_viz::RenderBatch`，再交给 `mcl_preview_transport` 选择 WebSocket、MCAP
+或 Null sink。`--viz none` 以及 `MCL_ENABLE_FOXGLOVE_TRANSPORT=OFF` 不得改变求解、replay
+timeline 或 canonical artifact 行为。
+
 `mcl_planned_grouped_servo_step` 另外发布在线规划后实际提交给 Red 的 reference；其独立扩展
 合同见 [`foxglove_planned_grouped_servo_step_contract.md`](./foxglove_planned_grouped_servo_step_contract.md)。
 
@@ -50,8 +55,8 @@ URDF `effort` 冒充 acceleration。若后续需要 acceleration 或 effort，�
 3. 选择两个 `/mc/fk/pose/*` pose 观察关节状态对应的实际末端位置。
 4. target 与 FK 的位置差才是可视化的笛卡尔跟踪误差；不要比较两个 target topic。
 
-E02 replay 在等待空格阶段也会周期发布完整五通道初始帧，因此 Foxglove 可以在 replay
-clock 启动前发现 topic 并完成面板配置。
+replay 从共享 `ReplaySource` 取得同一逻辑帧后才建立 visualization batch；Viz sink 不推进
+timeline，也不参与左右流 pairing、timestamp projection、pause/resume/step 或 EOS 状态机。
 
 可选的 preview MCAP 与 WebSocket 使用相同 RenderBatch，但 MCAP 只用于开发观察，不是正式
 实验证据；正式证据仍由 Lab trace、manifest 与 artifact 定义。

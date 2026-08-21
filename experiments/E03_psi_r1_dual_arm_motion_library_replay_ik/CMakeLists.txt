@@ -12,21 +12,12 @@ target_link_libraries(
   PUBLIC motion_control_lab::run_artifacts
 )
 
-add_executable(
-  mcl_e03_batch_replay_ik
-  src/main.cpp
-)
-set_target_properties(
-  mcl_e03_batch_replay_ik
-  PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}"
-)
-target_include_directories(
-  mcl_e03_batch_replay_ik
-  PRIVATE "${PROJECT_BINARY_DIR}/generated"
-)
-target_link_libraries(
-  mcl_e03_batch_replay_ik
-  PRIVATE
+mcl_add_app(
+  TARGET mcl_e03_batch_replay_ik
+  NO_HELP_SMOKE
+  SOURCES src/main.cpp
+  INCLUDE_DIRECTORIES "${PROJECT_BINARY_DIR}/generated"
+  LIBRARIES
     motion_control_lab::e03_batch_support
     motion_control_lab::e03_legacy_replay_ik_engine
     motion_control_lab::visualization_contracts
@@ -41,7 +32,7 @@ if(MCL_BUILD_E03_REPLAY_VISUALIZATION)
   endif()
   target_link_libraries(
     mcl_e03_batch_replay_ik
-    PRIVATE motion_control_viz::foxglove
+    PRIVATE motion_control_lab::preview_transport
   )
   target_compile_definitions(
     mcl_e03_batch_replay_ik
@@ -53,8 +44,6 @@ else()
     PRIVATE MCL_WITH_REPLAY_VISUALIZATION=0
   )
 endif()
-
-install(TARGETS mcl_e03_batch_replay_ik RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 
 if(BUILD_TESTING)
   find_package(Python3 REQUIRED COMPONENTS Interpreter)

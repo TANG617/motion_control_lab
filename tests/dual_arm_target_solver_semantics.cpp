@@ -46,8 +46,10 @@ void validatePositionLimits(
   for (std::size_t index = 0; index < robot.joint_names.size(); ++index) {
     const auto position_limits = model.get_joint_limits(robot.joint_names[index]);
     require(
-      result.positions[index] >= position_limits.first + kJointPositionMargin - 1.0e-8 &&
-        result.positions[index] <= position_limits.second - kJointPositionMargin + 1.0e-8,
+      result.positions[index] >= position_limits.first +
+          mcl::target_solve::AlgorithmOptions{}.joint_position_margin_rad - 1.0e-8 &&
+        result.positions[index] <= position_limits.second -
+          mcl::target_solve::AlgorithmOptions{}.joint_position_margin_rad + 1.0e-8,
       robot.joint_names[index] + " violated its position limit margin");
     require(result.velocities[index] == 0.0, "TargetSolve output velocity must be zero");
   }
@@ -68,7 +70,8 @@ void exerciseTargetSolver(
   require(initial.solver_debug.label == expected_label, "unexpected solver label");
   require(initial.solver_debug.backend == expected_backend, "unexpected QP backend");
   require(
-    initial.iterations >= 1 && initial.iterations <= kMaximumIterations,
+    initial.iterations >= 1 &&
+      initial.iterations <= mcl::target_solve::AlgorithmOptions{}.maximum_iterations,
     "initial target iteration count is invalid");
   require(
     isTargetTerminationReason(initial.solver_debug.termination_reason),
@@ -79,7 +82,8 @@ void exerciseTargetSolver(
   const auto stepped = solver.solve(targets);
   require(stepped.accepted, "5 mm target was not accepted");
   require(
-    stepped.iterations >= 1 && stepped.iterations <= kMaximumIterations,
+    stepped.iterations >= 1 &&
+      stepped.iterations <= mcl::target_solve::AlgorithmOptions{}.maximum_iterations,
     "5 mm target iteration count is invalid");
   require(
     isTargetTerminationReason(stepped.solver_debug.termination_reason),
@@ -129,9 +133,10 @@ int main(int argc, char ** argv)
     placo::model::RobotWrapper limit_model(
       urdf_path,
       placo::model::RobotWrapper::IGNORE_COLLISIONS | placo::model::RobotWrapper::IGNORE_GEOMETRY);
-    MccTargetSolver mcc_proxqp_solver(urdf_path, robot, MccBackend::Proxqp);
-    MccTargetSolver mcc_eiquadprog_solver(urdf_path, robot, MccBackend::Eiquadprog);
-    PlacoTargetSolver placo_solver(urdf_path, robot);
+    const mcl::target_solve::AlgorithmOptions algorithm;
+    MccTargetSolver mcc_proxqp_solver(urdf_path, robot, MccBackend::Proxqp, algorithm);
+    MccTargetSolver mcc_eiquadprog_solver(urdf_path, robot, MccBackend::Eiquadprog, algorithm);
+    PlacoTargetSolver placo_solver(urdf_path, robot, algorithm);
     require(
       mcc_proxqp_solver.currentPose(motion_control_lab::ArmSide::Left)
         .matrix()

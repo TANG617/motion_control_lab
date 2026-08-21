@@ -10,8 +10,8 @@
 #include <string>
 #include <vector>
 
-#include "console/tui_help.hpp"
-#include "r1_robot_config.hpp"
+#include "components/robot/r1/r1_robot_config.hpp"
+#include "components/tui/tui_help.hpp"
 
 namespace motion_control_lab::planned_grouped_step_otg {
 namespace {
@@ -39,6 +39,27 @@ bool optionIn(const std::string &option,
       [&](const char *candidate) { return option == candidate; });
 }
 
+bool parseSolverOption(const std::string &argument, const std::string &value,
+                       SolverOptions &options) {
+  const double parsed = parsePositiveDouble(argument, value);
+  if (argument == "--regularization") options.regularization = parsed;
+  else if (argument == "--position-tolerance-m") options.position_tolerance_m = parsed;
+  else if (argument == "--orientation-tolerance-rad") options.orientation_tolerance_rad = parsed;
+  else if (argument == "--maximum-hard-violation") options.maximum_accepted_hard_violation = parsed;
+  else if (argument == "--joint-position-margin-rad") options.joint_position_margin_rad = parsed;
+  else if (argument == "--cartesian-progress-weight") options.cartesian_progress_weight = parsed;
+  else if (argument == "--red-proxqp-absolute-tolerance") options.red_proxqp_absolute_tolerance = parsed;
+  else if (argument == "--red-proxqp-primal-infeasibility-tolerance") options.red_proxqp_primal_infeasibility_tolerance = parsed;
+  else if (argument == "--yellow-posture-weight") options.yellow_posture_weight = parsed;
+  else if (argument == "--yellow-to-red-coupling-weight") options.yellow_to_red_coupling_weight = parsed;
+  else if (argument == "--minimum-collision-distance-m") options.minimum_collision_distance_m = parsed;
+  else if (argument == "--collision-influence-distance-m") options.collision_influence_distance_m = parsed;
+  else if (argument == "--collision-damping-gain-per-s") options.collision_damping_gain_per_s = parsed;
+  else if (argument == "--collision-weight") options.collision_weight = parsed;
+  else return false;
+  return true;
+}
+
 void validate(const GroupedOptions &options) {
   if (!(options.red_rate_hz > options.yellow_rate_hz)) {
     throw std::runtime_error("rates must satisfy red > yellow > 0");
@@ -58,6 +79,11 @@ void validate(const GroupedOptions &options) {
   if (options.urdf_path.empty()) {
     throw std::runtime_error(std::string{"--urdf is required unless "} +
                              kMotionControlUrdfEnvironmentVariable + " is set");
+  }
+  if (options.solver.collision_influence_distance_m <=
+      options.solver.minimum_collision_distance_m) {
+    throw std::runtime_error(
+        "--collision-influence-distance-m must exceed --minimum-collision-distance-m");
   }
 }
 
@@ -83,6 +109,7 @@ void printGroupedUsage(const char *program) {
       << "  --ui-rate <hz>      TUI and visualization rate (default: "
       << defaults.ui_rate_hz << ")\n"
       << "  --ui <tui|none>     User interface mode (default: tui)\n"
+      << "  --viz <foxglove|none> Visualization transport (default: foxglove)\n"
       << "  --deadline-policy <strict|monitor> Deadline handling (default: "
          "strict)\n"
       << "  --duration <sec>    Stop after seconds; 0 runs until Ctrl-C "
@@ -99,6 +126,20 @@ void printGroupedUsage(const char *program) {
       << "  --mcap <path>       Write MCAP from the UI thread when Foxglove is "
          "enabled\n"
       << "  --no-mcap           Disable MCAP output (default)\n"
+      << "  --regularization <value>                 QP regularization\n"
+      << "  --position-tolerance-m <value>           Position tolerance\n"
+      << "  --orientation-tolerance-rad <value>      Orientation tolerance\n"
+      << "  --maximum-hard-violation <value>         App acceptance tolerance\n"
+      << "  --joint-position-margin-rad <value>      Joint limit margin\n"
+      << "  --cartesian-progress-weight <value>      Cartesian progress weight\n"
+      << "  --red-proxqp-absolute-tolerance <value>  Red QP tolerance\n"
+      << "  --red-proxqp-primal-infeasibility-tolerance <value> Red certificate tolerance\n"
+      << "  --yellow-posture-weight <value>          Yellow posture weight\n"
+      << "  --yellow-to-red-coupling-weight <value>  Coupling weight\n"
+      << "  --minimum-collision-distance-m <value>   Collision minimum distance\n"
+      << "  --collision-influence-distance-m <value> Collision influence distance\n"
+      << "  --collision-damping-gain-per-s <value>   Collision damping gain\n"
+      << "  --collision-weight <value>               Collision weight\n"
       << "  --help              Show this help text\n\n"
       << "Rates must satisfy red > yellow > 0. Each group period is its "
          "deadline.\n\n";
@@ -172,6 +213,15 @@ GroupedOptions parseGroupedOptions(int argc, char **argv) {
       } else {
         throw std::runtime_error("ui must be either 'tui' or 'none'");
       }
+    } else if (argument == "--viz") {
+      const auto value = requireValue(index, argc, argv, argument);
+      if (value == "foxglove") {
+        options.visualization.enabled = true;
+      } else if (value == "none") {
+        options.visualization.enabled = false;
+      } else {
+        throw std::runtime_error("viz must be either 'foxglove' or 'none'");
+      }
     } else if (argument == "--deadline-policy") {
       const auto value = requireValue(index, argc, argv, argument);
       if (value == "strict") {
@@ -199,6 +249,15 @@ GroupedOptions parseGroupedOptions(int argc, char **argv) {
     } else if (argument == "--rotation-step-deg") {
       options.tui.rotation_step_deg = parsePositiveDouble(
           "rotation step", requireValue(index, argc, argv, argument));
+    } else if (optionIn(argument, {
+                 "--regularization", "--position-tolerance-m", "--orientation-tolerance-rad",
+                 "--maximum-hard-violation", "--joint-position-margin-rad",
+                 "--cartesian-progress-weight", "--red-proxqp-absolute-tolerance",
+                 "--red-proxqp-primal-infeasibility-tolerance", "--yellow-posture-weight",
+                 "--yellow-to-red-coupling-weight", "--minimum-collision-distance-m",
+                 "--collision-influence-distance-m", "--collision-damping-gain-per-s",
+                 "--collision-weight"})) {
+      parseSolverOption(argument, requireValue(index, argc, argv, argument), options.solver);
     } else if (argument == "--mcap") {
       options.visualization.mcap_path =
           std::filesystem::path{requireValue(index, argc, argv, argument)};
@@ -277,10 +336,17 @@ PlannedOptions parsePlannedOptions(int argc, char **argv) {
       grouped_arguments.push_back(argv[index]);
     } else {
       const bool shared_value =
-          optionIn(argument, {"--urdf", "--ui", "--host", "--port", "--mcap"});
+          optionIn(argument, {"--urdf", "--ui", "--viz", "--host", "--port", "--mcap"});
       const bool grouped_value =
           optionIn(argument, {"--red-rate", "--yellow-rate", "--ui-rate",
-                              "--deadline-policy", "--duration"});
+                              "--deadline-policy", "--duration", "--regularization",
+                              "--position-tolerance-m", "--orientation-tolerance-rad",
+                              "--maximum-hard-violation", "--joint-position-margin-rad",
+                              "--cartesian-progress-weight", "--red-proxqp-absolute-tolerance",
+                              "--red-proxqp-primal-infeasibility-tolerance",
+                              "--yellow-posture-weight", "--yellow-to-red-coupling-weight",
+                              "--minimum-collision-distance-m", "--collision-influence-distance-m",
+                              "--collision-damping-gain-per-s", "--collision-weight"});
       const bool replay_value = optionIn(
           argument,
           {"--input", "--input-format", "--left-stream", "--right-stream",
@@ -288,7 +354,7 @@ PlannedOptions parsePlannedOptions(int argc, char **argv) {
            "--timestamp-source", "--target-period-ms", "--pairing-policy",
            "--nearest-tolerance-ms", "--unmatched-policy", "--execution-mode",
            "--playback-rate", "--output-dir", "--output-root", "--run-id",
-           "--viz-host", "--viz-port"});
+           "--viz-host", "--viz-port", "--terminal-input", "--launcher"});
       if (argument == "--no-mcap") {
         grouped_arguments.push_back(argv[index]);
         replay_arguments.push_back(argv[index]);
@@ -317,8 +383,10 @@ PlannedOptions parsePlannedOptions(int argc, char **argv) {
     result.replay =
         replay::parseReplayOptions(static_cast<int>(replay_arguments.size()),
                                    replay_arguments.data(), true);
-    if (result.start_paused && !result.interactive.tui_enabled) {
-      throw std::runtime_error("--start-paused requires --ui tui");
+    result.replay->original_argv.assign(argv, argv + argc);
+    result.interactive.visualization.enabled = result.replay->visualization_enabled;
+    if (result.start_paused && !result.replay->terminal_input_enabled) {
+      throw std::runtime_error("--start-paused requires --terminal-input on");
     }
   }
   return result;

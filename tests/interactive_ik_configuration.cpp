@@ -4,18 +4,15 @@
 #include <string>
 
 #include "contracts/visualization/foxglove_ik_v1.hpp"
-#include "ik_app_utils.hpp"
-#include "r1_interactive_config.hpp"
-#include "r1_robot_config.hpp"
-#include "runtime/interactive_scheduler.hpp"
-#include "runtime/interactive_types.hpp"
-#include "sinks/ik_render_batch.hpp"
+#include "components/app_helpers/app_helpers.hpp"
+#include "components/robot/r1/r1_robot_config.hpp"
+#include "components/scheduler/single_rate_scheduler.hpp"
+#include "components/visualization/preview_projection.hpp"
+#include "contracts/presentation/ik_app_snapshot.hpp"
 #include "tests/visualization_contract_conformance.hpp"
 
 int main()
 {
-  namespace mcc = motion_control::core;
-
   const auto & robot = motion_control_lab::r1RobotConfig();
   const auto presentation = motion_control_lab::makeArmPresentation(
     robot, motion_control_lab::foxgloveIkVisualizationChannels());
@@ -74,8 +71,8 @@ int main()
     return EXIT_FAILURE;
   }
 
-  motion_control_lab::installInteractiveSignalHandlers();
-  motion_control_lab::InteractiveScheduler scheduler({50.0, 1.0});
+  motion_control_lab::installRuntimeSignalHandlers();
+  motion_control_lab::SingleRateScheduler scheduler({50.0, 1.0});
   const auto first_schedule = scheduler.next();
   if (
     !first_schedule || !first_schedule->update_due || !first_schedule->draw_due ||

@@ -23,16 +23,11 @@ target_link_libraries(
     Python3::NumPy
 )
 
-add_executable(mcl_cartesian_planning main.cpp)
-set_target_properties(
-  mcl_cartesian_planning
-  PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}"
+mcl_add_app(
+  TARGET mcl_cartesian_planning
+  SOURCES main.cpp
+  LIBRARIES mcl_cartesian_planning_support
 )
-target_link_libraries(
-  mcl_cartesian_planning
-  PRIVATE mcl_cartesian_planning_support
-)
-install(TARGETS mcl_cartesian_planning RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 
 if(BUILD_TESTING)
   add_executable(
@@ -53,13 +48,6 @@ if(BUILD_TESTING)
       "${PROJECT_BINARY_DIR}/test-cartesian-planning"
   )
   add_test(
-    NAME apps.mcl_cartesian_planning_help
-    COMMAND
-      "${CMAKE_COMMAND}"
-      "-DAPP=$<TARGET_FILE:mcl_cartesian_planning>"
-      -P "${PROJECT_SOURCE_DIR}/tests/check_app_help.cmake"
-  )
-  add_test(
     NAME apps.mcl_cartesian_planning_smoke
     COMMAND
       mcl_cartesian_planning
@@ -69,4 +57,10 @@ if(BUILD_TESTING)
       --once
       --force
   )
+  if(EXISTS "/usr/lib/python3/dist-packages/matplotlib")
+    set_tests_properties(
+      apps.mcl_cartesian_planning_smoke
+      PROPERTIES ENVIRONMENT "PYTHONPATH=/usr/lib/python3/dist-packages"
+    )
+  endif()
 endif()

@@ -9,22 +9,32 @@
 #include <vector>
 
 #include "app_options.hpp"
-#include "console/tui_console.hpp"
-#include "cpu_affinity.hpp"
-#include "ik_app_utils.hpp"
-#include "r1_interactive_config.hpp"
-#include "r1_robot_config.hpp"
-#include "runtime/interactive_scheduler.hpp"
-#include "runtime/interactive_types.hpp"
-#include "runtime/rolling_percentiles.hpp"
-#include "sinks/ik_render_batch.hpp"
-#include "sinks/preview_sink_factory.hpp"
+#include "components/app_helpers/app_helpers.hpp"
+#include "components/robot/r1/r1_robot_config.hpp"
+#include "components/scheduler/rolling_percentiles.hpp"
+#include "components/scheduler/single_rate_scheduler.hpp"
+#include "components/teleop/keyboard/keyboard_target_source.hpp"
+#include "components/tui/tui_renderer.hpp"
+#include "components/visualization/preview_projection.hpp"
+#include "components/visualization/preview_transport.hpp"
+#include "contracts/presentation/ik_app_snapshot.hpp"
+#include "diagnostics_projection.hpp"
+#include "components/tui/standard_ik_tui.hpp"
 
 namespace
 {
 
 namespace mcc = motion_control::core;
 namespace mcl = motion_control_lab;
+
+mcc::RobotState makeRobotState(
+  const std::vector<double> & positions, const std::vector<double> & velocities)
+{
+  mcc::RobotState state;
+  state.joint_positions = mcl::toEigen(positions);
+  state.joint_velocities = mcl::toEigen(velocities);
+  return state;
+}
 
 constexpr const char * kProgramId = "mcl_single_arm_servo_step";
 constexpr const char * kTitle = "Motion Control Single-arm IK";
@@ -63,11 +73,11 @@ int run(int argc, char ** argv)
   solver_config.servo_period = 1.0 / options.rate_hz;
   solver_config.joint_limit_policy = mcc::KinematicsJointLimitPolicy::ExplicitRequirements;
   solver_config.qp.backend = mcc::QpBackend::ProxQp;
-  solver_config.qp.regularization = 1.0e-8;
-  solver_config.maximum_iterations = 1;
+  solver_config.qp.regularization = options.regularization;
+  solver_config.maximum_iterations = options.maximum_iterations;
   solver_config.soft_solve_time_budget_ms = 100.0;
-  solver_config.position_tolerance_m = 1.0e-4;
-  solver_config.orientation_tolerance_rad = 1.0e-4;
+  solver_config.position_tolerance_m = options.position_tolerance_m;
+  solver_config.orientation_tolerance_rad = options.orientation_tolerance_rad;
   solver_config.minimum_position_improvement_m = 1.0e-8;
   solver_config.minimum_orientation_improvement_rad = 1.0e-8;
 
@@ -88,7 +98,7 @@ int run(int argc, char ** argv)
     builder.addOrientationTask(controlled_frame, orientation_task_config, orientation_task));
 
   mcc::JointPositionLimitConfig joint_limit_config;
-  joint_limit_config.margin = 0.0;
+  joint_limit_config.margin = options.joint_position_margin_rad;
   joint_limit_config.enforcement = mcc::HardEnforcement{};
   mcc::JointPositionLimitHandle joint_limits;
   throwIfError(builder.addJointPositionLimits(joint_limit_config, joint_limits));
@@ -103,7 +113,7 @@ int run(int argc, char ** argv)
 
   auto currentTargetPose = [&](mcl::ArmSide side) {
     mcc::ForwardKinematicsRequest request;
-    request.state = mcl::makeRobotState(positions, velocities);
+    request.state = makeRobotState(positions, velocities);
     request.frame_names = {mcl::frameForSide(robot, side)};
     request.reference_frame_name = robot.base_frame;
     mcc::ForwardKinematicsSolution solution;
@@ -115,19 +125,20 @@ int run(int argc, char ** argv)
   const auto presentation = mcl::makeArmPresentation(robot, mcl::foxgloveIkVisualizationChannels());
   const auto initial_left_fk = currentTargetPose(mcl::ArmSide::Left);
   const auto initial_right_fk = currentTargetPose(mcl::ArmSide::Right);
-  mcl::TuiConsole tui(
-    options.tui, options.rate_hz, kTitle, presentation,
-    {{mcl::ArmSide::Left, initial_left_fk}, {mcl::ArmSide::Right, initial_right_fk}}, false,
-    options.tui_enabled);
+  mcl::TerminalFrontend terminal({true, options.tui_enabled});
+  mcl::KeyboardTargetSource input(
+    terminal, mcl::KeyboardSourceMode::Teleop, options.tui,
+    {{mcl::ArmSide::Left, initial_left_fk}, {mcl::ArmSide::Right, initial_right_fk}}, false);
+  mcl::TuiRenderer tui(options.tui_enabled);
   auto visualization_sink = mcl::createPreviewSink(options.visualization, kProgramId);
 
-  mcl::installInteractiveSignalHandlers();
-  mcl::InteractiveScheduler scheduler({options.rate_hz, options.duration_s});
+  mcl::installRuntimeSignalHandlers();
+  mcl::SingleRateScheduler scheduler({options.rate_hz, options.duration_s});
   mcl::RollingPercentiles solve_time_percentiles;
   std::size_t publish_count = 0;
 
   mcl::IkDebugFrame latest_frame;
-  latest_frame.targets = tui.command().targets;
+  latest_frame.targets = input.targets();
   latest_frame.forward_kinematics = {
     {mcl::ArmSide::Left, initial_left_fk}, {mcl::ArmSide::Right, initial_right_fk}};
   latest_frame.joint_names = joint_names;
@@ -139,23 +150,25 @@ int run(int argc, char ** argv)
   visualization_sink->open();
 
   while (const auto schedule = scheduler.next()) {
-    tui.poll();
-    if (const auto reset_side = tui.consumeResetRequest()) {
-      tui.setTargetPose(
+    const auto input_update = input.poll(schedule->dt);
+    for (const auto & event : input_update.navigation) {
+      tui.handleNavigation(event);
+    }
+    if (const auto reset_side = input.consumeResetRequest()) {
+      input.setTargetPose(
         *reset_side, currentTargetPose(*reset_side),
         std::string{"Reset "} + mcl::armSideName(*reset_side) + " target from current FK");
     }
 
-    const auto & command = tui.command();
-    if (command.stop_requested) {
+    if (input.stopRequested()) {
       break;
     }
 
-    if (schedule->update_due && !command.paused) {
-      const auto & target = command.targets.at(controlled_side == mcl::ArmSide::Left ? 0 : 1);
+    if (schedule->update_due && !input.paused()) {
+      const auto & target = input.targets().at(controlled_side == mcl::ArmSide::Left ? 0 : 1);
       mcc::InverseKinematicsRequest request;
       request.reference_frame_name = robot.base_frame;
-      request.state = mcl::makeRobotState(positions, velocities);
+      request.state = makeRobotState(positions, velocities);
       request.position_targets.push_back({position_task, target.target_pose.translation(), true});
       request.orientation_targets.push_back({orientation_task, target.target_pose.linear(), true});
 
@@ -170,7 +183,7 @@ int run(int argc, char ** argv)
       positions = mcl::toStdVector(solution.joint_positions);
       velocities = mcl::toStdVector(solution.joint_velocities);
 
-      latest_frame.targets = command.targets;
+      latest_frame.targets = input.targets();
       latest_frame.forward_kinematics = {
         {mcl::ArmSide::Left, currentTargetPose(mcl::ArmSide::Left)},
         {mcl::ArmSide::Right, currentTargetPose(mcl::ArmSide::Right)}};
@@ -209,8 +222,8 @@ int run(int argc, char ** argv)
         latest_frame.target_errors.push_back(target_error);
       }
       latest_frame.status = "IK accepted";
-      latest_frame.paused = command.paused;
-      latest_frame.selected_side = command.selected_side;
+      latest_frame.paused = input.paused();
+      latest_frame.selected_side = input.selectedSide();
 
       visualization_sink->write(mcl::makeIkRenderBatch(
         latest_frame, presentation, schedule->emit_time_ns));
@@ -221,8 +234,10 @@ int run(int argc, char ** argv)
       if (!latest_frame.solvers.empty()) {
         latest_frame.solvers.front().ik_solve_time_percentiles = solve_time_percentiles.snapshot();
       }
-      latest_frame.paused = tui.command().paused;
-      tui.render(latest_frame, publish_count, visualization_sink->status());
+      latest_frame.paused = input.paused();
+      tui.render(mcl::makeStandardIkTuiDocument(
+        latest_frame, presentation, publish_count, visualization_sink->status(), kTitle,
+        input.status()));
     }
     scheduler.sleep();
   }

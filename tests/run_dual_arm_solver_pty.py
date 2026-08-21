@@ -73,7 +73,7 @@ def main() -> int:
         command[option_index:option_index] = ["--backend", requested_backend]
 
     master_fd, slave_fd = pty.openpty()
-    fcntl.ioctl(slave_fd, termios.TIOCSWINSZ, struct.pack("HHHH", 45, 180, 0, 0))
+    fcntl.ioctl(slave_fd, termios.TIOCSWINSZ, struct.pack("HHHH", 74, 155, 0, 0))
     environment = os.environ.copy()
     environment["TERM"] = "xterm-256color"
     environment.setdefault("LC_ALL", "C.UTF-8")
@@ -141,12 +141,15 @@ def main() -> int:
         expected_markers = (
             expected_label,
             expected_qp,
-            b"IK solve-time percentiles",
-            b"P90 [ms]",
-            b"P95 [ms]",
-            b"P99 [ms]",
-            b"attempts/accepted/rejected",
-            b"IK accepted",
+            b"IK calculation percentiles [ms]",
+            b"90th percentile",
+            b"95th percentile",
+            b"99th percentile",
+            b"Run counters",
+            b"Attempts",
+            b"Accepted",
+            b"Rejected",
+            b"Disposition",
         )
         missing = [marker for marker in expected_markers if marker not in output]
         if return_code != 0 or not terminal_restored or missing:

@@ -7,8 +7,8 @@
 #include "../planning_request_visualization.hpp"
 #include "contracts/visualization/foxglove_ik_v1.hpp"
 #include "contracts/visualization/foxglove_planned_grouped_step_otg_v1.hpp"
-#include "runtime/interactive_types.hpp"
-#include "sinks/ik_render_batch.hpp"
+#include "contracts/presentation/ik_app_snapshot.hpp"
+#include "components/visualization/preview_projection.hpp"
 #include "tests/visualization_contract_conformance.hpp"
 
 int main() {

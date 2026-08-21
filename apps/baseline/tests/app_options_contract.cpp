@@ -47,7 +47,11 @@ int main() {
   char *missing_argv[]{program, urdf_option, urdf, side_option};
   char bad_ui[] = "bad";
   char *bad_ui_argv[]{program, urdf_option, urdf, ui_option, bad_ui};
-  if (!expectFailure(5, rate_argv) || !expectFailure(4, unknown_argv) ||
+  char regularization_option[] = "--regularization";
+  char regularization[] = "1e-8";
+  char *regularization_argv[]{program, urdf_option, urdf, regularization_option, regularization};
+  if (!expectFailure(5, rate_argv) || !expectFailure(5, regularization_argv) ||
+      !expectFailure(4, unknown_argv) ||
       !expectFailure(4, missing_argv) || !expectFailure(5, bad_ui_argv)) {
     return EXIT_FAILURE;
   }

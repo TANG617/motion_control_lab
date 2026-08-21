@@ -7,8 +7,8 @@
 #include <stdexcept>
 #include <string>
 
-#include "console/tui_help.hpp"
-#include "r1_robot_config.hpp"
+#include "components/robot/r1/r1_robot_config.hpp"
+#include "components/tui/tui_help.hpp"
 
 namespace motion_control_lab::target_solve {
 namespace {
@@ -27,6 +27,43 @@ double parsePositiveDouble(const std::string &name, const std::string &value) {
     throw std::runtime_error(name + " must be a positive finite value");
   }
   return parsed;
+}
+
+double parseNonnegativeDouble(const std::string &name, const std::string &value) {
+  const double parsed = std::stod(value);
+  if (parsed < 0.0 || !std::isfinite(parsed)) {
+    throw std::runtime_error(name + " must be a finite non-negative value");
+  }
+  return parsed;
+}
+
+bool parseAlgorithmOption(const std::string &argument, const std::string &value,
+                          AlgorithmOptions &options) {
+  if (argument == "--maximum-iterations") {
+    options.maximum_iterations = std::stoi(value);
+    if (options.maximum_iterations <= 0) throw std::runtime_error("maximum iterations must be positive");
+  } else if (argument == "--solve-time-budget-ms") {
+    options.soft_solve_time_budget_ms = parsePositiveDouble("solve time budget", value);
+  } else if (argument == "--position-tolerance-m") {
+    options.position_tolerance_m = parsePositiveDouble("position tolerance", value);
+  } else if (argument == "--orientation-tolerance-rad") {
+    options.orientation_tolerance_rad = parsePositiveDouble("orientation tolerance", value);
+  } else if (argument == "--minimum-position-improvement-m") {
+    options.minimum_position_improvement_m = parseNonnegativeDouble("position improvement", value);
+  } else if (argument == "--minimum-orientation-improvement-rad") {
+    options.minimum_orientation_improvement_rad = parseNonnegativeDouble("orientation improvement", value);
+  } else if (argument == "--joint-position-margin-rad") {
+    options.joint_position_margin_rad = parseNonnegativeDouble("joint position margin", value);
+  } else if (argument == "--posture-weight") {
+    options.posture_weight = parsePositiveDouble("posture weight", value);
+  } else if (argument == "--regularization") {
+    options.regularization = parsePositiveDouble("regularization", value);
+  } else if (argument == "--proxqp-absolute-tolerance") {
+    options.proxqp_absolute_tolerance = parsePositiveDouble("ProxQP absolute tolerance", value);
+  } else {
+    return false;
+  }
+  return true;
 }
 
 void validate(const TeleopOptions &options) {
@@ -67,6 +104,7 @@ void printUsage(const char *program) {
       << "  --rate <hz>         IK and publish rate in Hz (default: "
       << interactive.rate_hz << ")\n"
       << "  --ui <tui|none>     User interface mode (default: tui)\n"
+      << "  --viz <foxglove|none> Visualization transport (default: foxglove)\n"
       << "  --duration <sec>    Stop after seconds; 0 runs until Ctrl-C "
          "(default: "
       << interactive.duration_s << ")\n"
@@ -85,6 +123,16 @@ void printUsage(const char *program) {
          "mcc)\n"
       << "  --backend <proxqp|eiquadprog>     MCC QP backend (default: proxqp; "
          "ignored for placo)\n"
+      << "  --maximum-iterations <count>      TargetSolve iteration budget\n"
+      << "  --solve-time-budget-ms <value>    Soft solve time budget\n"
+      << "  --position-tolerance-m <value>    Position tolerance\n"
+      << "  --orientation-tolerance-rad <value> Orientation tolerance\n"
+      << "  --minimum-position-improvement-m <value> No-progress threshold\n"
+      << "  --minimum-orientation-improvement-rad <value> No-progress threshold\n"
+      << "  --joint-position-margin-rad <value> Joint limit margin\n"
+      << "  --posture-weight <value>          Posture regularization weight\n"
+      << "  --regularization <value>          QP regularization\n"
+      << "  --proxqp-absolute-tolerance <value> ProxQP tolerance\n"
       << "  --help              Show this help text\n\n";
   printTuiControlsHelp(std::cout);
 }
@@ -120,6 +168,14 @@ AppOptions parseAppOptions(int argc, char **argv) {
         throw std::runtime_error(
             "--backend must be either 'proxqp' or 'eiquadprog'");
       }
+    } else if (argument == "--maximum-iterations" || argument == "--solve-time-budget-ms" ||
+               argument == "--position-tolerance-m" ||
+               argument == "--orientation-tolerance-rad" ||
+               argument == "--minimum-position-improvement-m" ||
+               argument == "--minimum-orientation-improvement-rad" ||
+               argument == "--joint-position-margin-rad" || argument == "--posture-weight" ||
+               argument == "--regularization" || argument == "--proxqp-absolute-tolerance") {
+      parseAlgorithmOption(argument, requireValue(index, argc, argv, argument), result.algorithm);
     } else if (argument == "--side") {
       options.tui.side = requireValue(index, argc, argv, argument);
     } else if (argument == "--urdf") {
@@ -143,6 +199,15 @@ AppOptions parseAppOptions(int argc, char **argv) {
         options.tui_enabled = false;
       } else {
         throw std::runtime_error("ui must be either 'tui' or 'none'");
+      }
+    } else if (argument == "--viz") {
+      const auto value = requireValue(index, argc, argv, argument);
+      if (value == "foxglove") {
+        options.visualization.enabled = true;
+      } else if (value == "none") {
+        options.visualization.enabled = false;
+      } else {
+        throw std::runtime_error("viz must be either 'foxglove' or 'none'");
       }
     } else if (argument == "--duration") {
       options.duration_s = std::stod(requireValue(index, argc, argv, argument));
