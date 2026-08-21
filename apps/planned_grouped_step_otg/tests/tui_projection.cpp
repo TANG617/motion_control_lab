@@ -1,4 +1,4 @@
-#include "apps/planned_grouped_step_otg/tui_projection.hpp"
+#include "components/tui/planned_grouped_tui.hpp"
 
 #include <Eigen/Geometry>
 
@@ -145,7 +145,7 @@ int main()
   collision.pairs.push_back({"left_link", "right_link", 0.12, 0.13, true});
   frame.self_collisions.push_back(std::move(collision));
 
-  mcl::PlannedGroupedStepOtgTuiDebug app;
+  mcl::PlannedGroupedJointOtgTuiDebug app;
   app.source_mode = "mcap replay";
   app.target_mode = "future-o1-pv";
   app.feedback_topology = "split IK reference / OTG execution";
@@ -180,8 +180,17 @@ int main()
 
   mcl::InteractiveIkPresentation presentation;
   presentation.base_frame_id = "base_link";
-  const auto document = mcl::makeAppTuiDocument(frame, app, presentation, 38, "ws://127.0.0.1:8765",
-                                                "Planned OTG", "paused");
+  const mcl::PlannedGroupedTuiSnapshot servo_snapshot{
+      &frame, &presentation, std::nullopt, 37, "ws://127.0.0.1:8765", "Planned Servo", "paused"};
+  const auto servo_document = mcl::makePlannedGroupedTuiDocument(servo_snapshot);
+  require(servo_document.pages.size() == 6U,
+          "snapshot without Joint-OTG capability must produce six pages");
+  require(!hasUiLabel(servo_document, "Joint Planning"),
+          "snapshot without Joint-OTG capability must not produce an N/A page");
+
+  const mcl::PlannedGroupedTuiSnapshot snapshot{
+      &frame, &presentation, app, 38, "ws://127.0.0.1:8765", "Planned OTG", "paused"};
+  const auto document = mcl::makePlannedGroupedTuiDocument(snapshot);
 
   const std::vector<std::string> expected_titles{
       "Overview", "Cartesian Planning", "Joint Planning", "Solver and Quadratic Programming",

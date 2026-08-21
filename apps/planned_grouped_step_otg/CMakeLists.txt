@@ -1,7 +1,8 @@
 add_library(
   mcl_planned_grouped_step_otg_support
-  joint_target_processing.cpp
-  retarget_state_clamp.cpp
+  solver.cpp
+  planning.cpp
+  loop.cpp
 )
 add_library(
   motion_control_lab::planned_grouped_step_otg_support
@@ -13,22 +14,14 @@ target_include_directories(
 )
 target_link_libraries(
   mcl_planned_grouped_step_otg_support
-  PUBLIC motion_control_core::motion_control_core
-)
-
-mcl_add_app(
-  TARGET mcl_planned_grouped_step_otg
-  SOURCES
-    main.cpp app_options.cpp diagnostics_projection.cpp tui_projection.cpp
-  LIBRARIES
+  PUBLIC
+    motion_control_core::motion_control_core
     motion_control_lab::cpu_affinity
     motion_control_lab::app_helpers
     motion_control_lab::r1_robot_config
-    motion_control_lab::planned_grouped_step_otg_support
     motion_control_lab::scheduler
     motion_control_lab::keyboard_input
-    motion_control_lab::standard_ik_tui
-    motion_control_lab::tui
+    motion_control_lab::planned_grouped_tui
     motion_control_lab::preview_transport
     motion_control_lab::preview_projection
     motion_control_lab::visualization_contracts
@@ -36,11 +29,17 @@ mcl_add_app(
     Threads::Threads
 )
 
+mcl_add_app(
+  TARGET mcl_planned_grouped_step_otg
+  SOURCES main.cpp options.cpp
+  LIBRARIES motion_control_lab::planned_grouped_step_otg_support
+)
+
 if(BUILD_TESTING)
   add_executable(
     test_planned_grouped_step_otg_app_options
     tests/app_options_contract.cpp
-    app_options.cpp
+    options.cpp
   )
   target_link_libraries(
     test_planned_grouped_step_otg_app_options
@@ -50,16 +49,24 @@ if(BUILD_TESTING)
       motion_control_lab::replay
       motion_control_lab::tui
       motion_control_lab::r1_robot_config
+      motion_control_core::motion_control_core
   )
   add_test(
     NAME apps.mcl_planned_grouped_step_otg_options
     COMMAND test_planned_grouped_step_otg_app_options
   )
 
-  add_executable(
-    test_planned_grouped_step_otg_joint_target
-    tests/joint_target_processing.cpp
+  add_executable(test_planned_grouped_step_otg_solver tests/solver.cpp)
+  target_link_libraries(
+    test_planned_grouped_step_otg_solver
+    PRIVATE motion_control_lab::planned_grouped_step_otg_support
   )
+  add_test(
+    NAME apps.mcl_planned_grouped_step_otg_solver
+    COMMAND test_planned_grouped_step_otg_solver
+  )
+
+  add_executable(test_planned_grouped_step_otg_joint_target tests/joint_target_processing.cpp)
   target_link_libraries(
     test_planned_grouped_step_otg_joint_target
     PRIVATE motion_control_lab::planned_grouped_step_otg_support
@@ -69,10 +76,7 @@ if(BUILD_TESTING)
     COMMAND test_planned_grouped_step_otg_joint_target
   )
 
-  add_executable(
-    test_planned_grouped_step_otg_retarget_clamp
-    tests/retarget_state_clamp.cpp
-  )
+  add_executable(test_planned_grouped_step_otg_retarget_clamp tests/retarget_state_clamp.cpp)
   target_link_libraries(
     test_planned_grouped_step_otg_retarget_clamp
     PRIVATE motion_control_lab::planned_grouped_step_otg_support
@@ -82,15 +86,10 @@ if(BUILD_TESTING)
     COMMAND test_planned_grouped_step_otg_retarget_clamp
   )
 
-  add_executable(
-    test_planned_grouped_step_otg_visualization
-    tests/visualization.cpp
-  )
+  add_executable(test_planned_grouped_step_otg_visualization tests/visualization.cpp)
   target_link_libraries(
     test_planned_grouped_step_otg_visualization
-    PRIVATE
-      motion_control_lab::preview_projection
-      motion_control_lab::visualization_contracts
+    PRIVATE motion_control_lab::planned_grouped_step_otg_support
   )
   add_test(
     NAME apps.mcl_planned_grouped_step_otg_visualization
@@ -100,15 +99,13 @@ if(BUILD_TESTING)
   add_executable(
     test_planned_grouped_step_otg_tui_projection
     tests/tui_projection.cpp
-    tui_projection.cpp
   )
   target_link_libraries(
     test_planned_grouped_step_otg_tui_projection
-    PRIVATE motion_control_lab::standard_ik_tui
+    PRIVATE motion_control_lab::planned_grouped_tui
   )
   add_test(
     NAME apps.mcl_planned_grouped_step_otg_tui_projection
     COMMAND test_planned_grouped_step_otg_tui_projection
   )
-
 endif()

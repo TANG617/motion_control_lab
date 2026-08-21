@@ -2,7 +2,7 @@
 
 #include <cstdlib>
 
-#include "apps/planned_grouped_servo_step/planning_request_visualization.hpp"
+#include "apps/planned_grouped_servo_step/loop.hpp"
 #include "contracts/visualization/foxglove_ik_v1.hpp"
 #include "contracts/visualization/foxglove_planned_grouped_servo_step_v1.hpp"
 #include "contracts/presentation/ik_app_snapshot.hpp"

@@ -1,4 +1,4 @@
-#include "../app_options.hpp"
+#include "../options.hpp"
 
 #include <cstdlib>
 #include <iostream>
@@ -33,7 +33,7 @@ int main() {
                       tolerance_option, tolerance};
   const auto custom = app::parseGroupedOptions(11, custom_argv);
   if (custom.red_rate_hz != 200.0 || custom.yellow_rate_hz != 40.0 ||
-      custom.tui_enabled || custom.solver.red_proxqp_absolute_tolerance != 3.0e-5) {
+      custom.presentation.enabled || custom.solver.red_proxqp_absolute_tolerance != 3.0e-5) {
     return EXIT_FAILURE;
   }
 

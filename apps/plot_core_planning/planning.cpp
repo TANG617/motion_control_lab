@@ -1,0 +1,135 @@
+#include "matplotlibcpp.h"
+
+#include "planning.hpp"
+
+#include "components/robot/r1/r1_robot_config.hpp"
+#include "motion_control_core/planning/cartesian_planner.hpp"
+#include "motion_control_core/planning/joint_planner.hpp"
+
+#include <Eigen/Geometry>
+
+#include <filesystem>
+#include <map>
+#include <string>
+#include <vector>
+
+namespace motion_control_lab::plot_core_planning {
+namespace {
+
+namespace mcc = motion_control::core;
+namespace plt = matplotlibcpp;
+
+mcc::Pose makePose(const Eigen::Vector3d &translation, double yaw) {
+  mcc::Pose pose = mcc::Pose::Identity();
+  pose.translation() = translation;
+  pose.linear() =
+      Eigen::AngleAxisd(yaw, Eigen::Vector3d::UnitZ()).toRotationMatrix();
+  return pose;
+}
+
+} // namespace
+
+void initializePlotBackend() { plt::backend("Agg"); }
+
+mcc::CartesianLineRequest makeCartesianRequest() {
+  const auto &robot = motion_control_lab::r1RobotConfig();
+  mcc::CartesianLineRequest request;
+  request.reference_frame_name = robot.base_frame;
+  request.sample_period = 0.01;
+  request.path_limits.max_velocity = 0.2;
+  request.path_limits.max_acceleration = 0.6;
+  request.path_limits.max_jerk = 2.0;
+
+  request.segments.push_back(mcc::CartesianLineSegment{
+      robot.left_end_effector_frame,
+      makePose(Eigen::Vector3d{0.40, 0.20, 0.80}, 0.0), mcc::Twist::Zero(),
+      mcc::SpatialAcceleration::Zero(),
+      makePose(Eigen::Vector3d{0.55, 0.28, 0.86}, 0.45), 0.5});
+  request.segments.push_back(mcc::CartesianLineSegment{
+      robot.right_end_effector_frame,
+      makePose(Eigen::Vector3d{0.40, -0.20, 0.80}, 0.0), mcc::Twist::Zero(),
+      mcc::SpatialAcceleration::Zero(),
+      makePose(Eigen::Vector3d{0.50, -0.30, 0.82}, -0.30), 0.5});
+
+  return request;
+}
+
+mcc::JointTrajectoryRequest makeJointRequest() {
+  const auto &robot = motion_control_lab::r1RobotConfig();
+  mcc::JointTrajectoryRequest request;
+  for (const auto index : robot.left_arm_joint_indices) {
+    request.joint_names.push_back(robot.joint_names.at(index));
+  }
+
+  request.current.positions = {0.90, -1.38, -1.57, -1.40, -0.45, 0.00, 0.00};
+  request.current.velocities.assign(request.joint_names.size(), 0.0);
+  request.current.accelerations.assign(request.joint_names.size(), 0.0);
+
+  request.target.positions = {0.75, -1.10, -1.35, -1.15, -0.30, 0.20, -0.10};
+  request.target.velocities.assign(request.joint_names.size(), 0.0);
+  request.target.accelerations.assign(request.joint_names.size(), 0.0);
+
+  request.limits.position_lower.assign(request.joint_names.size(), -3.14);
+  request.limits.position_upper.assign(request.joint_names.size(), 3.14);
+  request.limits.max_velocity.assign(request.joint_names.size(), 1.0);
+  request.limits.max_acceleration.assign(request.joint_names.size(), 2.0);
+  request.limits.max_jerk.assign(request.joint_names.size(), 8.0);
+  request.sample_period = 0.01;
+  return request;
+}
+
+void saveCartesianPlot(const mcc::CartesianTrajectory &trajectory,
+                       const std::filesystem::path &path) {
+  std::map<std::string, std::vector<double>> x_by_frame;
+  std::map<std::string, std::vector<double>> y_by_frame;
+
+  for (const auto &sample : trajectory.samples) {
+    for (const auto &frame : sample.frames) {
+      x_by_frame[frame.frame_name].push_back(frame.pose.translation().x());
+      y_by_frame[frame.frame_name].push_back(frame.pose.translation().y());
+    }
+  }
+
+  plt::figure();
+  plt::figure_size(1000, 700);
+  for (const auto &entry : x_by_frame) {
+    plt::named_plot(entry.first, entry.second, y_by_frame.at(entry.first));
+  }
+  plt::title("Cartesian move-line XY path");
+  plt::xlabel("x [m]");
+  plt::ylabel("y [m]");
+  plt::axis("equal");
+  plt::grid(true);
+  plt::legend();
+  plt::tight_layout();
+  plt::save(path.string());
+  plt::close();
+}
+
+void saveJointPlot(const mcc::JointTrajectory &trajectory,
+                   const std::filesystem::path &path) {
+  std::vector<double> time;
+  std::vector<std::vector<double>> positions(trajectory.joint_names.size());
+  for (const auto &sample : trajectory.samples) {
+    time.push_back(sample.time_from_start);
+    for (std::size_t index = 0; index < sample.positions.size(); ++index) {
+      positions.at(index).push_back(sample.positions.at(index));
+    }
+  }
+
+  plt::figure();
+  plt::figure_size(1200, 700);
+  for (std::size_t index = 0; index < trajectory.joint_names.size(); ++index) {
+    plt::named_plot(trajectory.joint_names[index], time, positions[index]);
+  }
+  plt::title("Joint trajectory positions");
+  plt::xlabel("time from start [s]");
+  plt::ylabel("position [rad]");
+  plt::grid(true);
+  plt::legend();
+  plt::tight_layout();
+  plt::save(path.string());
+  plt::close();
+}
+
+} // namespace motion_control_lab::plot_core_planning

@@ -4,7 +4,7 @@
 #include <string>
 #include <vector>
 
-#include "../planning_request_visualization.hpp"
+#include "../loop.hpp"
 #include "contracts/visualization/foxglove_ik_v1.hpp"
 #include "contracts/visualization/foxglove_planned_grouped_step_otg_v1.hpp"
 #include "contracts/presentation/ik_app_snapshot.hpp"

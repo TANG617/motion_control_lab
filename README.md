@@ -31,8 +31,9 @@ TUI 与 wall-clock pacing；Lab-owned IK projection 把算法快照映射为通�
 共享层已拆为 solver-neutral 的 input/presentation/runtime contracts，以及 scheduler、terminal
 frontend/key router、keyboard/cartesian teleop、TUI renderer、ReplaySource、preview
 projection/transport、run artifacts、R1 config、机械 helpers 和薄 App Scaffolding targets。
-每个交互 app 直接拥有自己的 backend topology、任务、solver 配置、主循环、诊断解释以及
-TUI/Viz 专属投影；即使配置相同，也在各自目录中显式保留。旧 `apps/common/` 与
+每个交互 app 直接拥有自己的 backend topology、任务、solver 配置、可选 planning、主循环、
+诊断解释以及 TUI/Viz snapshot；运动控制 app 以 `main/options/solver/[planning]/loop` 为主要
+结构，只有实际规划职责才建立 `planning.*`，即使配置相同也在各自目录中显式保留。旧 `apps/common/` 与
 `adapters/interactive/` 聚合层已经删除。MCAP/CSV 经相同 typed pipeline 和单一
 `ReplaySource`；solver loop、trace 解释与失败语义仍由各 app 自己拥有。
 
@@ -388,7 +389,10 @@ cmake --build build/dual-arm \
 ```
 
 所有交互 app 复用 solver-neutral 的标准 IK 文档构造和同一个只消费 `TuiDocument` 的
-FTXUI renderer；只有 Joint Planning、OTG、projection/clamp 等专属内容留在 app 目录。
+FTXUI renderer；planned-grouped presenter 按 solver-neutral snapshot capability 增加 Joint
+Planning、OTG、projection/clamp 内容，MCC diagnostics 的解释仍留在 app。
+planned-grouped options 嵌入共享 `PlannedGroupedTuiConfig`，loop 只调用
+`tui.handleNavigation(event)` 与 `tui.render(snapshot)`。
 页面数量按快照能力为 5、6 或 7，数字键、对应的 F1–F7 和 `Tab` 动态切换；
 `PageUp/PageDown/Home/End` 滚动当前页面，`h` 或 `?` 打开完整快捷键帮助。完整布局以
 `155×74` 为验收尺寸，更小窗口继续使用滚动。
@@ -405,7 +409,7 @@ app-local flags 覆盖。ServoStep 每次只执行一个 QP update，`--rate` �
 `servo_period`/PlaCo `dt`，并启用 Hard joint-velocity limits。TargetSolve 不注册 velocity limits，
 增加默认权重 `1e-5` 的 initial-pose Soft joints task；默认最多迭代 10000 次，并使用
 100 ms soft budget、`1e-4` Cartesian tolerance 和 `1e-8` minimum-improvement 终止规则。
-这些实验参数由 `apps/target_solve/app_options.*` 解析；其 `--rate` 只控制交互求解和发布频率。
+这些实验参数由 `apps/target_solve/options.*` 解析；其 `--rate` 只控制交互求解和发布频率。
 
 各求解路径复用相同 TUI 和五个 IK/FK Viz 通道。TUI 标题及 Solver 页明确显示
 `MCC/ProxQP`、`MCC/eiquadprog` 或 `PlaCo/eiquadprog`；对应的 visualization run ID 仍按
@@ -434,7 +438,7 @@ full/degraded/stuck 状态。Red 默认使用 `1e-6` 的 ProxQP absolute toleran
 start；Cartesian equality 与 limit 的默认 accepted hard-violation 上限为 `5e-4`。raw grouped 的 Red 注册
 position+velocity limits；planned grouped 还注册既定 PSI R1 acceleration limits。两者 Yellow
 都只注册 position limits。joint position limit 默认使用 `1e-2 rad` 内部 margin。这些数值、
-worker rates、deadline policy 与 collision 参数由每个 grouped app 自己的 `app_options.*` 暴露，
+worker rates、deadline policy 与 collision 参数由每个 grouped app 自己的 `options.*` 暴露，
 不会进入 scheduler 或共享配置对象。
 
 Yellow 当前使用 4 对 app-local R1 link pair 的 Soft self-collision velocity damping：minimum
@@ -533,15 +537,17 @@ adapters/replay/          replay typed load、provenance 与 artifact mechanics
 contracts/input/          MotionTargetFrame、InputStatus、SourceControl、TeleopIntent、KeyEvent
 contracts/presentation/   solver-neutral AppSnapshot 与 TuiDocument
 contracts/runtime/        scheduler/runtime 共享状态合同
-components/               scheduler、terminal、teleop、标准 IK TUI、renderer、replay、Viz、R1 config 与 scaffolding
-apps/cartesian_planning/  JSON 驱动的纯 Cartesian MoveLine 规划、渲染和 Foxglove 回放
-apps/plot_core_planning/  可选的 Core planning API matplotlib smoke app
-apps/replay_plan/         不运行 solver 的 canonical timeline inspect/artifact 入口
-apps/baseline/           PlaCo production-static teleop/replay 对照基线
-apps/servo_step/         普通双臂 ServoStep；teleop/replay 使用同一 solver topology
-apps/grouped_servo_step/ raw Red/Yellow ServoStep；Red position+velocity，Yellow position
-apps/planned_grouped_servo_step/ 在线 Cartesian replan；Red position+velocity+acceleration
-apps/<entry>/             独立 main、CMake 和 help test；按入口选择或直接拥有 solve topology
+components/               无 MCC 依赖的 scheduler、terminal、teleop、TUI、replay、Viz、R1 config 与 scaffolding
+apps/cartesian_planning/  main/options/planning/loop；JSON MoveLine 规划、渲染和 Foxglove 回放
+apps/plot_core_planning/  main/options/planning；可选 Core planning API matplotlib smoke app
+apps/replay_plan/         main/options/loop；不运行 solver 的 timeline inspect/artifact 入口
+apps/baseline/            main/options/solver/loop；PlaCo production-static teleop/replay 对照基线
+apps/servo_step/          main/options/solver/loop；普通双臂 ServoStep teleop/replay
+apps/target_solve/        main/options/solver/loop；普通双臂 TargetSolve
+apps/single_arm_servo_step/ main/options/solver/loop；单臂 ServoStep
+apps/grouped_servo_step/  main/options/solver/loop；raw Red/Yellow ServoStep
+apps/planned_grouped_servo_step/ main/options/solver/planning/loop；在线 Cartesian replan
+apps/planned_grouped_step_otg/ main/options/solver/planning/loop；Cartesian replan + JointPlanner OTG
 contracts/                definition、manifest、metric 与 visualization 合同
 data/raw/                 原始数据占位；不得静默改写
 data/canonical/           规范数据占位

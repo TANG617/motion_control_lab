@@ -14,6 +14,9 @@
   enforcement、mask、优先级和 task handle 的使用。
 - app 专属的运行流程、状态更新、诊断数据解释和可视化内容组装也必须留在具体 app 中；
   solver-neutral `IkDebugFrame` 的标准 TUI 页面格式可以由共享 component 统一生成。
+- MCC solver、task、constraint、`CartesianPlanner` 和 `JointPlanner` 必须由具体 app 直接
+  include、构造和调用；不得在 `components/` 中增加二次 facade、controller、统一 runner 或
+  mode-driven pipeline 来代替 MCC API。
 - 两个或多个 app 出现相同的 solver、task 或业务流程代码时，允许并鼓励保留重复；不要
   为消除重复把这些内容提取到 `apps/common/`，也不要通过 mode、flag、callback 或配置对象
   在 common 中隐藏 app 差异。
@@ -28,7 +31,8 @@
 - terminal session、归一化 `KeyEvent` 与 key routing；
 - `KeyEvent -> TeleopIntent/SourceControl` 和 Cartesian target 积分；
 - 只消费 `TuiDocument` 的 renderer，以及 solver-neutral `IkDebugFrame -> TuiDocument`
-  标准页面构造；
+  标准页面构造；共享 TUI 可以按 solver-neutral snapshot capability 增加 planning/OTG 页面，
+  但不得 include MCC 或解释 MCC diagnostics；
 - single/grouped scheduler、mailbox、deadline 与 stop/join；
 - MCAP/CSV typed pipeline、唯一 `ReplaySource` 状态机；
 - solver-neutral IK preview projection、WebSocket/MCAP/Null transport adapter；
@@ -37,14 +41,22 @@
 
 任何代码只要知道具体 solver、solve mode、task、约束、planner/OTG 实现、fault policy 或 app
 名称，就必须留在具体 app。共享 TUI 只格式化 presentation contract 已提供的 solver-neutral
-快照；不得用 mode enum、virtual callback、`std::function` 或大配置对象重建新的聚合 runtime。
+快照；`components/` 不得 include `motion_control_core`，也不得用 mode enum、virtual callback、
+`std::function` 或大配置对象重建新的聚合 runtime。
 
 ## App 目录和启动合同
 
 - `apps/<a>` 不得 include 或 link `apps/<b>`；app-local executable 与测试可以共享留在同目录的
   `mcl_<app>_support` target。
-- 每个 app 保留 `app_options.*`，共享组件只接收 typed config；禁止全局 CLI parser、全局
+- 每个 app 保留 app-local `options.*`，共享组件只接收 typed config；禁止全局 CLI parser、全局
   option registry 或统一 `mcl` executable。
+- 运动控制 app 按 `main.*`、`options.*`、`solver.*`、`loop.*` 组织；只有实际调用
+  `CartesianPlanner`、`JointPlanner` 或其他规划算法的 app 才增加 `planning.*`：
+  `main` 是短 composition root，`solver` 直接持有 MCC topology，`planning` 直接持有 MCC planning，
+  `loop` 可以合并 worker、input、replay、presentation、Viz 和 artifact 等非核心胶水。不要为了
+  目录看起来极简而把 solver/planning 搬到共享 component，也不要为了形式化分层继续拆分非重点代码。
+- 纯 planning、plot 或 replay inspection 工具不得为满足文件形状伪造空 solver；它们保留
+  `main/options/planning/loop` 中实际存在的职责，且算法入口仍使用上述简洁名称。
 - 按实际 source 能力提供 `scripts/run_keyboard.sh`、`run_mcap_replay.sh`、
   `run_csv_replay.sh` 或 JSON request script。脚本最后必须原样转发 `"$@"`。
 - 参数优先级是 compiled defaults、script preset/environment、trailing explicit arguments。
@@ -68,7 +80,8 @@
 修改或 review `apps/` 时，必须先盘点全部 `apps/<app_name>/` 目录以及直接放在 `apps/`
 下的 app 源文件；不能只检查本次被点名的 app。至少确认：
 
-1. 新增或修改的 solver/task 配置是否仍位于具体 app 目录；
-2. common 的新增内容是否完全落在白名单内；
-3. 是否为了去重引入了跨 app 的 solver/task 抽象；
-4. 是否新增了会吞掉、改写或延迟暴露错误的校验、异常处理或 fallback。
+1. 新增或修改的 solver/task/planner 配置是否仍位于具体 app 目录并直接使用 MCC；
+2. shared component 的新增内容是否完全落在白名单内且不 include MCC；
+3. `main` 是否仍清楚展示 solver 与 planning 装配，而非退化成统一 `runApp()`；
+4. 是否为了去重引入了跨 app 的 solver/task 抽象；
+5. 是否新增了会吞掉、改写或延迟暴露错误的校验、异常处理或 fallback。

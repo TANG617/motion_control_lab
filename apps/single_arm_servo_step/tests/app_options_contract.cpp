@@ -1,4 +1,4 @@
-#include "../app_options.hpp"
+#include "../options.hpp"
 
 #include <cstdlib>
 #include <iostream>
@@ -13,7 +13,7 @@ int main() {
   char urdf_option[] = "--urdf";
   char urdf[] = "/tmp/robot.urdf";
   char *defaults_argv[]{program, urdf_option, urdf};
-  const auto defaults = app::parseAppOptions(3, defaults_argv);
+  const auto defaults = app::parseOptions(3, defaults_argv);
   if (defaults.rate_hz != 100.0 || defaults.duration_s != 0.0 ||
       !defaults.tui_enabled || defaults.tui.step_m != 0.005 ||
       defaults.tui.min_step_m != 0.001 || defaults.tui.max_step_m != 0.5 ||
@@ -32,7 +32,7 @@ int main() {
   char *custom_argv[]{program,   urdf_option, urdf,        rate_option, rate,
                       ui_option, ui,          side_option, side,
                       regularization_option, regularization};
-  const auto custom = app::parseAppOptions(11, custom_argv);
+  const auto custom = app::parseOptions(11, custom_argv);
   if (custom.rate_hz != 50.0 || custom.tui_enabled ||
       custom.tui.side != "right" || custom.regularization != 2.0e-8) {
     return EXIT_FAILURE;
@@ -40,7 +40,7 @@ int main() {
 
   auto expectFailure = [&](int argc, char **argv) {
     try {
-      (void)app::parseAppOptions(argc, argv);
+      (void)app::parseOptions(argc, argv);
       return false;
     } catch (const std::runtime_error &) {
       return true;

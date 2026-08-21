@@ -10,6 +10,7 @@ import sys
 
 ROOT = pathlib.Path(sys.argv[1]).resolve()
 APP_ROOT = ROOT / "apps"
+COMPONENT_ROOT = ROOT / "components"
 APP_NAMES = {
     path.name
     for path in APP_ROOT.iterdir()
@@ -28,6 +29,35 @@ FORBIDDEN_OLD = re.compile(
     )
 )
 TEXT_SUFFIXES = {".cpp", ".hpp", ".h", ".cmake", ".txt"}
+MCC_COMPONENT_PATTERNS = (
+    re.compile(r"#\s*include\s*[<\"]motion_control_core/"),
+    re.compile(r"\bmotion_control::core::(?:KinematicsSolverBuilder|GroupedKinematicsSolver|CartesianPlanner|JointPlanner)\b"),
+    re.compile(r"\bmotion_control_core(?:::[A-Za-z0-9_]+)?\b"),
+)
+APP_SOURCE_FILES = {
+    "baseline": {"main.cpp", "options.cpp", "options.hpp", "solver.cpp", "solver.hpp", "loop.cpp", "loop.hpp"},
+    "cartesian_planning": {"main.cpp", "options.cpp", "options.hpp", "planning.cpp", "planning.hpp", "loop.cpp", "loop.hpp"},
+    "grouped_servo_step": {"main.cpp", "options.cpp", "options.hpp", "solver.cpp", "solver.hpp", "loop.cpp", "loop.hpp"},
+    "planned_grouped_servo_step": {"main.cpp", "options.cpp", "options.hpp", "solver.cpp", "solver.hpp", "planning.cpp", "planning.hpp", "loop.cpp", "loop.hpp"},
+    "planned_grouped_step_otg": {"main.cpp", "options.cpp", "options.hpp", "solver.cpp", "solver.hpp", "planning.cpp", "planning.hpp", "loop.cpp", "loop.hpp"},
+    "plot_core_planning": {"main.cpp", "options.cpp", "options.hpp", "planning.cpp", "planning.hpp"},
+    "replay_plan": {"main.cpp", "options.cpp", "options.hpp", "loop.cpp", "loop.hpp"},
+    "servo_step": {"main.cpp", "options.cpp", "options.hpp", "solver.cpp", "solver.hpp", "loop.cpp", "loop.hpp"},
+    "single_arm_servo_step": {"main.cpp", "options.cpp", "options.hpp", "solver.cpp", "solver.hpp", "loop.cpp", "loop.hpp"},
+    "target_solve": {"main.cpp", "options.cpp", "options.hpp", "solver.cpp", "solver.hpp", "loop.cpp", "loop.hpp"},
+}
+APP_MAIN_REQUIREMENTS = {
+    "baseline": ("parseTeleopOptions", "parseReplayOptions", "BaselineSolver", "runLoop", "runReplayLoop"),
+    "cartesian_planning": ("parseOptions", "CartesianPlanner", "planner.generate", "playTrajectory"),
+    "grouped_servo_step": ("parseOptions", "KinematicsSolverBuilder", "GroupedKinematicsSolver", "configureSolver", "builder.finalize", "runLoop"),
+    "planned_grouped_servo_step": ("parseOptions", "KinematicsSolverBuilder", "GroupedKinematicsSolver", "configureSolver", "builder.finalize", "CartesianPlanner", "runLoop"),
+    "planned_grouped_step_otg": ("parseOptions", "KinematicsSolverBuilder", "GroupedKinematicsSolver", "configureSolver", "builder.finalize", "CartesianPlanner", "JointPlanner", "runLoop"),
+    "plot_core_planning": ("parseOptions", "CartesianPlanner", "JointPlanner", "cartesian_planner.generate", "joint_planner.generate"),
+    "replay_plan": ("parseOptions", "runLoop"),
+    "servo_step": ("parseOptions", "parseReplayOptions", "MccServoSolver", "PlacoServoSolver", "runLoop", "runReplayLoop"),
+    "single_arm_servo_step": ("parseOptions", "KinematicsSolverBuilder", "KinematicsSolver", "configureSolver", "builder.finalize", "runLoop"),
+    "target_solve": ("parseOptions", "MccTargetSolver", "PlacoTargetSolver", "runLoop"),
+}
 
 
 def fail(message: str) -> None:
@@ -44,6 +74,55 @@ for app in sorted(APP_NAMES):
         for other in APP_NAMES - {app}:
             if f"apps/{other}/" in text or f"apps/{other}" in text:
                 fail(f"cross-app dependency: {path.relative_to(ROOT)} -> apps/{other}")
+
+for path in COMPONENT_ROOT.rglob("*"):
+    if not path.is_file() or (path.suffix not in TEXT_SUFFIXES and path.name != "CMakeLists.txt"):
+        continue
+    text = path.read_text(errors="replace")
+    for pattern in MCC_COMPONENT_PATTERNS:
+        if pattern.search(text):
+            fail(f"shared component depends on MCC: {path.relative_to(ROOT)}")
+
+if APP_NAMES != APP_SOURCE_FILES.keys():
+    missing = sorted(APP_NAMES - APP_SOURCE_FILES.keys())
+    stale = sorted(APP_SOURCE_FILES.keys() - APP_NAMES)
+    fail(f"app source-shape registry mismatch: missing={missing}, stale={stale}")
+
+for app, expected_sources in APP_SOURCE_FILES.items():
+    app_dir = APP_ROOT / app
+    actual_sources = {
+        path.name
+        for path in app_dir.iterdir()
+        if path.is_file() and path.suffix in {".cpp", ".hpp"}
+    }
+    if actual_sources != expected_sources:
+        missing = sorted(expected_sources - actual_sources)
+        extra = sorted(actual_sources - expected_sources)
+        fail(f"app source shape mismatch: {app}: missing={missing}, extra={extra}")
+
+    main_text = (app_dir / "main.cpp").read_text(errors="replace")
+    main_lines = len(main_text.splitlines())
+    if not 15 <= main_lines <= 200:
+        fail(f"app main is not a short composition root: {app}: {main_lines} lines")
+    for required in APP_MAIN_REQUIREMENTS[app]:
+        if required not in main_text:
+            fail(f"app main hides required composition: {app}: {required}")
+    for forbidden in (
+        "struct ",
+        "TuiDocument",
+        "ReplayExecutionMetadata",
+        "while (",
+        "PlanningRequestVisualization",
+    ):
+        if forbidden in main_text:
+            fail(f"app main contains runtime implementation: {app}: {forbidden.strip()}")
+
+    cmake_text = (app_dir / "CMakeLists.txt").read_text(errors="replace")
+    if f"mcl_{app}_support" not in cmake_text:
+        fail(f"app-local support target is missing: {app}")
+    for other in APP_NAMES - {app}:
+        if f"mcl_{other}_support" in cmake_text or f"motion_control_lab::{other}_support" in cmake_text:
+            fail(f"app support target links another app: {app} -> {other}")
 
 scaffold_text = (ROOT / "components/app_scaffold/app_scaffold.hpp").read_text()
 for forbidden in ("motion_control_core", "solver", "task", "argc", "argv", "std::function", "virtual"):

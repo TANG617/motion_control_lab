@@ -1,4 +1,4 @@
-#define MCL_SERVO_STEP_TESTING
+#include <algorithm>
 #include <cmath>
 #include <cstdlib>
 #include <iostream>
@@ -6,7 +6,14 @@
 #include <string>
 #include <vector>
 
-#include "../apps/servo_step/main.cpp"
+#include "../apps/servo_step/solver.hpp"
+#include "placo/model/robot_wrapper.h"
+
+namespace mcl = motion_control_lab;
+using motion_control_lab::servo_step::MccBackend;
+using motion_control_lab::servo_step::MccServoSolver;
+using motion_control_lab::servo_step::PlacoServoSolver;
+using motion_control_lab::servo_step::ServoSolveResult;
 
 namespace
 {

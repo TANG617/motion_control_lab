@@ -1,33 +1,27 @@
 add_library(
-  mcl_planned_grouped_servo_step_retarget_clamp
-  retarget_state_clamp.cpp
+  mcl_planned_grouped_servo_step_support
+  solver.cpp
+  planning.cpp
+  loop.cpp
 )
 add_library(
-  motion_control_lab::planned_grouped_servo_step_retarget_clamp
-  ALIAS mcl_planned_grouped_servo_step_retarget_clamp
+  motion_control_lab::planned_grouped_servo_step_support
+  ALIAS mcl_planned_grouped_servo_step_support
 )
 target_include_directories(
-  mcl_planned_grouped_servo_step_retarget_clamp
+  mcl_planned_grouped_servo_step_support
   PUBLIC "$<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}>"
 )
 target_link_libraries(
-  mcl_planned_grouped_servo_step_retarget_clamp
-  PUBLIC motion_control_core::motion_control_core
-)
-
-mcl_add_app(
-  TARGET mcl_planned_grouped_servo_step
-  SOURCES
-    main.cpp app_options.cpp diagnostics_projection.cpp
-  LIBRARIES
+  mcl_planned_grouped_servo_step_support
+  PUBLIC
+    motion_control_core::motion_control_core
     motion_control_lab::cpu_affinity
     motion_control_lab::app_helpers
     motion_control_lab::r1_robot_config
-    motion_control_lab::planned_grouped_servo_step_retarget_clamp
     motion_control_lab::scheduler
     motion_control_lab::keyboard_input
-    motion_control_lab::standard_ik_tui
-    motion_control_lab::tui
+    motion_control_lab::planned_grouped_tui
     motion_control_lab::preview_transport
     motion_control_lab::preview_projection
     motion_control_lab::visualization_contracts
@@ -35,11 +29,17 @@ mcl_add_app(
     Threads::Threads
 )
 
+mcl_add_app(
+  TARGET mcl_planned_grouped_servo_step
+  SOURCES main.cpp options.cpp
+  LIBRARIES motion_control_lab::planned_grouped_servo_step_support
+)
+
 if(BUILD_TESTING)
   add_executable(
     test_planned_grouped_servo_step_app_options
     tests/app_options_contract.cpp
-    app_options.cpp
+    options.cpp
   )
   target_link_libraries(
     test_planned_grouped_servo_step_app_options
@@ -55,13 +55,23 @@ if(BUILD_TESTING)
     COMMAND test_planned_grouped_servo_step_app_options
   )
 
+  add_executable(test_planned_grouped_servo_step_solver tests/solver.cpp)
+  target_link_libraries(
+    test_planned_grouped_servo_step_solver
+    PRIVATE motion_control_lab::planned_grouped_servo_step_support
+  )
+  add_test(
+    NAME apps.mcl_planned_grouped_servo_step_solver
+    COMMAND test_planned_grouped_servo_step_solver
+  )
+
   add_executable(
     test_planned_grouped_servo_step_retarget_clamp
     "${PROJECT_SOURCE_DIR}/tests/planned_grouped_servo_step_retarget_clamp.cpp"
   )
   target_link_libraries(
     test_planned_grouped_servo_step_retarget_clamp
-    PRIVATE motion_control_lab::planned_grouped_servo_step_retarget_clamp
+    PRIVATE motion_control_lab::planned_grouped_servo_step_support
   )
   add_test(
     NAME apps.mcl_planned_grouped_servo_step_retarget_clamp
@@ -74,13 +84,10 @@ if(BUILD_TESTING)
   )
   target_link_libraries(
     test_planned_grouped_servo_step_visualization
-    PRIVATE
-      motion_control_lab::preview_projection
-      motion_control_lab::visualization_contracts
+    PRIVATE motion_control_lab::planned_grouped_servo_step_support
   )
   add_test(
     NAME apps.mcl_planned_grouped_servo_step_visualization
     COMMAND test_planned_grouped_servo_step_visualization
   )
-
 endif()

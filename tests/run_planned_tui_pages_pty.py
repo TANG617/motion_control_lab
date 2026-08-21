@@ -59,10 +59,16 @@ def main() -> int:
     output = bytearray()
     ready_at = None
     action_index = 0
-    actions = tuple(str(page).encode() for page in range(1, page_count + 1)) + (
-        b"\t",
-        b"\x1b[Z",
-        b"x",
+    actions = tuple(
+        ("input", str(page).encode()) for page in range(1, page_count + 1)
+    ) + (
+        ("input", b"\t"),
+        ("input", b"\x1b[Z"),
+        ("resize", (24, 80)),
+        ("input", b"1"),
+        ("resize", (24, 60)),
+        ("input", b"2"),
+        ("input", b"x"),
     )
     deadline = time.monotonic() + 15.0
     try:
@@ -72,7 +78,16 @@ def main() -> int:
             if ready_at is not None and action_index < len(actions):
                 elapsed = time.monotonic() - ready_at
                 if elapsed >= 0.25 + 0.30 * action_index:
-                    os.write(master_fd, actions[action_index])
+                    action, payload = actions[action_index]
+                    if action == "input":
+                        os.write(master_fd, payload)
+                    else:
+                        rows, columns = payload
+                        fcntl.ioctl(
+                            master_fd,
+                            termios.TIOCSWINSZ,
+                            struct.pack("HHHH", rows, columns, 0, 0),
+                        )
                     action_index += 1
 
             readable, _, _ = select.select([master_fd], [], [], 0.05)
@@ -131,12 +146,14 @@ def main() -> int:
         else:
             expected_markers.append(b"Reference angular motion")
         missing = [marker for marker in expected_markers if marker not in output]
-        if return_code != 0 or not terminal_restored or missing:
+        actions_completed = action_index == len(actions)
+        if return_code != 0 or not terminal_restored or missing or not actions_completed:
             sys.stderr.buffer.write(output)
             sys.stderr.write(
                 "planned TUI PTY validation failed: "
                 + ", ".join(marker.decode() for marker in missing)
-                + f" (exit={return_code}, restored={terminal_restored})\n"
+                + f" (exit={return_code}, restored={terminal_restored}, "
+                + f"actions={action_index}/{len(actions)})\n"
             )
             return 1
         if "┌".encode() in output:

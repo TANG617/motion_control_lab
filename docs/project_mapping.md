@@ -22,7 +22,7 @@ planned。
 | Cartesian planning preview | `apps/cartesian_planning/` 读取版本化 JSON，调用 Core `CartesianPlanner`，输出 CSV/PNG 并循环发布 Foxglove；不加载 robot model 或调用 IK |
 | Input contracts | `motion_control_lab::input_contract` 定义 `MotionTargetFrame`、`InputStatus`、`SourceControl`、`TeleopIntent` 与归一化 `KeyEvent` |
 | Terminal / teleop | `terminal_frontend`、`keyboard_teleop`、`cartesian_teleop` 分别负责 raw terminal、intent 解释和 target 积分；与 TUI rendering 正交 |
-| TUI | `motion_control_lab::standard_ik_tui` 组装 solver-neutral 标准页面，`motion_control_lab::tui` 只渲染/导航 `TuiDocument`；仅专属 planner/OTG 诊断由 app-local projection 扩展 |
+| TUI | `motion_control_lab::standard_ik_tui` 组装标准页面，planned-grouped presenter 按 solver-neutral capability 增加 OTG 页面，`motion_control_lab::tui` 只渲染/导航 `TuiDocument`；MCC diagnostics 解释保持 app-local |
 | Scheduler | `motion_control_lab::scheduler` 提供 single tick、grouped worker、deadline、mailbox 与 stop/join，不依赖 input、Viz、replay 或 solver |
 | Preview transport | `mcl_preview_transport` 提供 WebSocket/MCAP/Null sink；CLI/config policy 由 app-local options 持有 |
 | IK preview projection | `mcl_preview_projection` 将 solver-neutral `IkDebugFrame` 的 target、FK 与 joint state 投影为通用 `RenderBatch`；planning/OTG/collision extension 留在 app |
@@ -68,9 +68,11 @@ E01/E04 使用同一个固定 R1 模型和按名称映射的关节状态，只�
 MCC 交互预览采用另一条非证据主链：
 
 ```text
-Single/Dual/Grouped app main.cpp
-        |-- MCC builder + typed task topology
-        |-- MCC request + solver state
+Single/Dual/Grouped app
+        |-- app-local solver.*: MCC builder + typed task topology
+        |-- optional app-local planning.*: CartesianPlanner / JointPlanner
+        |-- app-local loop.*: MCC request + solver state
+        |-- short main.cpp: explicit composition root
         |-- Input source -> MotionTargetFrame
         |-- app-local snapshot -> TuiDocument -> shared renderer
         |-- scheduler tick/workers

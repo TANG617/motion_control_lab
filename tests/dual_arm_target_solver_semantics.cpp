@@ -1,4 +1,3 @@
-#define MCL_TARGET_SOLVE_TESTING
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
@@ -7,8 +6,15 @@
 #include <string>
 #include <vector>
 
-#include "../apps/target_solve/main.cpp"
+#include "../apps/target_solve/solver.hpp"
+#include "placo/model/robot_wrapper.h"
 #include "placo/problem/qp_error.h"
+
+namespace mcl = motion_control_lab;
+using motion_control_lab::target_solve::MccTargetSolver;
+using motion_control_lab::target_solve::MccBackend;
+using motion_control_lab::target_solve::PlacoTargetSolver;
+using motion_control_lab::target_solve::TargetSolveResult;
 
 namespace
 {
@@ -47,9 +53,9 @@ void validatePositionLimits(
     const auto position_limits = model.get_joint_limits(robot.joint_names[index]);
     require(
       result.positions[index] >= position_limits.first +
-          mcl::target_solve::AlgorithmOptions{}.joint_position_margin_rad - 1.0e-8 &&
+      motion_control_lab::target_solve::AlgorithmOptions{}.joint_position_margin_rad - 1.0e-8 &&
         result.positions[index] <= position_limits.second -
-          mcl::target_solve::AlgorithmOptions{}.joint_position_margin_rad + 1.0e-8,
+          motion_control_lab::target_solve::AlgorithmOptions{}.joint_position_margin_rad + 1.0e-8,
       robot.joint_names[index] + " violated its position limit margin");
     require(result.velocities[index] == 0.0, "TargetSolve output velocity must be zero");
   }
@@ -71,7 +77,7 @@ void exerciseTargetSolver(
   require(initial.solver_debug.backend == expected_backend, "unexpected QP backend");
   require(
     initial.iterations >= 1 &&
-      initial.iterations <= mcl::target_solve::AlgorithmOptions{}.maximum_iterations,
+      initial.iterations <= motion_control_lab::target_solve::AlgorithmOptions{}.maximum_iterations,
     "initial target iteration count is invalid");
   require(
     isTargetTerminationReason(initial.solver_debug.termination_reason),
@@ -83,7 +89,7 @@ void exerciseTargetSolver(
   require(stepped.accepted, "5 mm target was not accepted");
   require(
     stepped.iterations >= 1 &&
-      stepped.iterations <= mcl::target_solve::AlgorithmOptions{}.maximum_iterations,
+      stepped.iterations <= motion_control_lab::target_solve::AlgorithmOptions{}.maximum_iterations,
     "5 mm target iteration count is invalid");
   require(
     isTargetTerminationReason(stepped.solver_debug.termination_reason),

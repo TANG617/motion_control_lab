@@ -1,6 +1,6 @@
 # Motion Control Lab 应用与组件契约架构
 
-> 更新日期：2026-08-19
+> 更新日期：2026-08-21
 >
 > 状态：已实施。本文同时是现行职责合同和依赖验收基线。
 
@@ -15,7 +15,7 @@ Lab 内部组件，同时保持每个 app 的算法语义和实验参数独立�
 2. `apps/<app>/` 之间禁止 include、link 或调用。一个 app 的新增和修改不要求同步修改
    另一个 app。
 3. 不建设统一 CLI、统一 `mcl` executable 或全局 option registry。每个 app 保留自己的
-   `app_options.*`；推荐运行入口是 app 自己的 `scripts/*.sh`。
+   `options.*`；推荐运行入口是 app 自己的 `scripts/*.sh`。
 4. 建设薄的 App Scaffolding，但它不是统一 runner、app 基类或用 mode/callback 隐藏差异的
    业务框架。它只负责公共组件的装配、生命周期和构建样板。
 5. TUI 只负责展示和 TUI 导航；键盘遥操作是独立 input adapter。以后新增 gamepad、
@@ -23,7 +23,8 @@ Lab 内部组件，同时保持每个 app 的算法语义和实验参数独立�
 6. MCAP 和 CSV 是同一个 replay 能力的不同物理 backend，不分别复制 replay clock、
    pause/step、timeline 或 EOS 状态机。
 7. solver、task、constraint、规划/OTG 语义、主循环、诊断解释和 app 专属投影继续由具体
-   app 拥有。共享组件不依赖具体 solver 类型。
+   app 拥有并直接使用 MCC API。共享组件不依赖 MCC；不建立 solver/planner facade、controller
+   或统一 runner。
 8. TUI 和 Viz 都是可选输出。headless replay、batch 和测试路径不得依赖 FTXUI、Foxglove
    或网络端口。
 
@@ -33,13 +34,13 @@ Lab 内部组件，同时保持每个 app 的算法语义和实验参数独立�
 flowchart TB
   subgraph Launch[每个 app 自己的启动层]
     Scripts["apps/app/scripts/*.sh"]
-    Options["app-local app_options"]
+    Options["app-local options"]
   end
 
   subgraph Apps[彼此独立的 app]
-    AppA["app A: solver/task/run loop"]
-    AppB["app B: solver/task/run loop"]
-    AppC["app C: solver/task/run loop"]
+    AppA["IK app: main/options/solver/loop"]
+    AppB["planned IK app: main/options/solver/planning/loop"]
+    AppC["planning/replay tool: only real roles"]
   end
 
   subgraph Shared[MCL 内部共享组件]
@@ -149,9 +150,19 @@ realtime、playback rate、pause/resume/step、EOS 和来源诊断。
 Overview、Cartesian Planning、Solver and Quadratic Programming、Joint State、Runtime 和
 Events 页面。它只生成 `TuiDocument`，不依赖 FTXUI、MCC 或具体 app。
 
-每个 app 仍负责把自己的 solver/runtime 状态解释并填入 `IkDebugFrame`。Joint Planning、OTG、
-projection、clamp 等专属页面和 section 继续由 `apps/<app>/tui_projection.*` 组装。真正的
+每个 app 仍负责把自己的 solver/runtime 状态解释并填入 solver-neutral snapshot。共享的
+planned-grouped TUI presenter 根据 snapshot capability 决定是否增加 Joint Planning、OTG、
+projection 和 clamp 页面；它只格式化数据，不 include MCC、不解释 MCC diagnostics。真正的
 FTXUI 渲染实现只存在一份，也不通过 callback、mode 或配置对象隐藏 app 差异。
+
+两个 planned-grouped app 的 `options.*` 直接嵌入 `PlannedGroupedTuiConfig`，loop 侧只保留
+短调用；app 先完成 MCC diagnostics 到 solver-neutral snapshot 的解释：
+
+```cpp
+PlannedGroupedTui tui(options.presentation);
+tui.handleNavigation(event);
+tui.render(snapshot);
+```
 
 `TerminalFrontend` 拥有 terminal session 和原始事件读取。`KeyRouter` 把导航键送到 TUI，
 把运动键送到 `keyboard_teleop`。这样 `--ui none` 仍可在需要时使用键盘输入，而 TUI 也可以
@@ -204,20 +215,19 @@ Scheduler 不读取键盘，不渲染 TUI，不发布 Viz，不加载 replay，�
 - 不解释 accepted/rejected、scale、collision、fault hold 等算法状态；
 - 不决定 rate、deadline policy、输出 topic 或 artifact 内容。
 
-app composition root 使用的实际 API 形状如下。input、scheduler、terminal、TUI、Viz 和
-artifact writer 都由 app 先行选择；scaffolding 不拥有主循环：
+app composition root 使用的实际 API 形状如下。solver 与 planner 由 app 直接构造；input、
+scheduler、terminal、TUI、Viz 和 artifact writer 由 app 选择；scaffolding 不拥有主循环：
 
 ```cpp
 int main(int argc, char** argv) {
-  const AppConfig config = parseAppOptions(argc, argv);  // app-local
-  auto input = makeInputForThisApp(config);
-  auto scheduler = makeSchedulerForThisApp(config);
-  auto services = makeRuntimeServices(
-      input, scheduler, terminal, tui, viz, artifacts);
-  auto lifecycle = makeRuntimeLifecycle(resource_a, resource_b);
-  lifecycle.start();
-  while (appLocalStateMachineTick(config, services)) {}  // app-local semantics
-  lifecycle.finish();
+  const Options options = parseOptions(argc, argv);
+  motion_control::core::KinematicsSolverBuilder builder;
+  SolverHandles handles;
+  configureSolver(builder, handles, model, collision_model, robot, options);
+  motion_control::core::GroupedKinematicsSolver solver;
+  requireOk(builder.finalize(solver));
+  motion_control::core::CartesianPlanner cartesian_planner;
+  return runLoop(options, robot, solver, handles, cartesian_planner);
 }
 ```
 
@@ -229,11 +239,11 @@ help smoke、组件依赖检查和脚本位置。模板不生成 solver/task 实
 ```text
 apps/<app>/
   CMakeLists.txt
-  main.cpp                 # composition root
-  app.hpp / app.cpp        # solver, task, run loop and state transitions
-  app_options.hpp / .cpp   # only this app's runtime options
-  tui_projection.*         # append app-specific pages/sections, only when needed
-  viz_projection.*         # AppSnapshot -> RenderBatch, when needed
+  main.cpp                 # short composition root; exposes MCC solver/planner topology
+  options.hpp / .cpp       # only this app's CLI, defaults and typed options
+  solver.hpp / .cpp        # direct MCC solver/task/constraint construction
+  planning.hpp / .cpp      # optional: only when the app directly uses a planner
+  loop.hpp / .cpp          # workers, input/replay, presentation/Viz/artifact glue
   scripts/
     run_keyboard.sh
     run_mcap_replay.sh
@@ -241,9 +251,12 @@ apps/<app>/
   tests/
 ```
 
-app 只创建并调用共享组件，不复制 FTXUI renderer、Foxglove transport、MCAP/CSV decoder、
-replay clock 或 scheduler worker；但 app 会保留自己的算法和主循环代码，即使与另一个 app
-局部相似。
+纯 planning/plot 工具省略 `solver.*`，单次执行且没有 runtime loop 的工具也省略 `loop.*`；
+replay inspection 工具省略 `solver.*` 和 `planning.*`。这些省略反映真实职责，不建立空文件占位。
+
+app 不复制 FTXUI renderer、Foxglove transport、MCAP/CSV decoder、replay clock 或 scheduler
+机制；但 app 直接保留自己的 MCC solver、planning 和主循环代码，即使与另一个 app 局部相似。
+同一 app 可以建立只供本 executable 与测试链接的 support target；它不是共享算法 component。
 
 ## CMake 组件边界
 
@@ -258,6 +271,7 @@ replay clock 或 scheduler worker；但 app 会保留自己的算法和主循环
 | `motion_control_lab::cartesian_teleop` | TeleopIntent 到 MotionTargetFrame | 具体设备、TUI、solver |
 | `motion_control_lab::keyboard_input` | 组合 terminal/router/keyboard/cartesian 的 typed keyboard source | solver、Viz、artifact |
 | `motion_control_lab::standard_ik_tui` | solver-neutral IkDebugFrame 到标准 TuiDocument | FTXUI、MCC、具体 app |
+| `motion_control_lab::planned_grouped_tui` | solver-neutral planned/optional OTG snapshot 到 TuiDocument | MCC、具体 app、solver policy |
 | `motion_control_lab::tui` | TuiDocument 渲染与导航 | teleop、replay、solver、Viz |
 | `motion_control_lab::data` | typed source、decoder、temporal pipeline | app、solver、TUI、Viz |
 | `motion_control_lab::replay` | 单一 replay source 和 clock/state machine | app、solver、TUI、Viz |
@@ -304,6 +318,11 @@ preview_transport  -> motion_control_viz::render + [motion_control_viz::foxglove
 - app-local `AppConfig`、默认值和 option parser；
 - solver/runtime 状态到 `IkDebugFrame` 的语义投影，以及专属 TUI/Viz 页面内容；
 - 本 app 的 run artifact 内容和实验解释。
+
+运动控制 app 的主要阅读入口固定为 `solver.*`；只有实际存在 Cartesian、Joint 或其他规划
+算法时才增加 `planning.*` 并作为第二个算法入口。`main.cpp` 负责显式装配，`loop.*` 可以合并
+剩余的非核心 orchestration；这不是把 app 语义迁移到共享 component 的理由。纯 planning、
+plot 或 replay inspection 工具只保留实际存在的职责，不为满足目录模板伪造空 solver。
 
 共享 `r1_robot_config` 只保存固定 R1 joint、frame、TCP 和默认 pose。production-static
 baseline 的冻结 solver/task/rate/profile 参数继续位于 `apps/baseline/`，不开放 runtime
@@ -409,7 +428,7 @@ motion-control-lab/
     replay/                  # typed load、provenance、manifest mechanics
     execution/               # run artifacts 与 SHA-256
   apps/
-    <app>/
+    <app>/                    # main/options/solver/[planning]/loop + scripts/tests
   experiments/
   analyses/
 ```
@@ -435,6 +454,8 @@ motion-control-lab/
    以新名字回归。
 9. production-static baseline 的冻结参数仍不可覆盖，且其 resolved config/artifact 可审计。
 10. Lab README、`apps/AGENTS.md`、CMake dependency tests、app scripts 与本文保持同步。
+11. 通用 `components/` 不 include MCC；所有运动控制 app 的 MCC topology 直接位于各自
+    `solver.*`，实际存在的 planning 位于 `planning.*`，且 app-local support target 不互相链接。
 
 这些边界由 `tests/architecture_boundaries.py`、独立 component tests、每个 app 的 option/help
 tests、TUI PTY smoke、完整 CTest，以及关闭 `MCL_ENABLE_TUI` 与

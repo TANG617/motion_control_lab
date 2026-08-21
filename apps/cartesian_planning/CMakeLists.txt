@@ -1,6 +1,11 @@
 add_library(
   mcl_cartesian_planning_support
-  cartesian_planning.cpp
+  planning.cpp
+  loop.cpp
+)
+add_library(
+  motion_control_lab::cartesian_planning_support
+  ALIAS mcl_cartesian_planning_support
 )
 target_include_directories(
   mcl_cartesian_planning_support
@@ -25,19 +30,20 @@ target_link_libraries(
 
 mcl_add_app(
   TARGET mcl_cartesian_planning
-  SOURCES main.cpp
-  LIBRARIES mcl_cartesian_planning_support
+  SOURCES main.cpp options.cpp
+  LIBRARIES motion_control_lab::cartesian_planning_support
 )
 
 if(BUILD_TESTING)
   add_executable(
     test_cartesian_planning
     "${PROJECT_SOURCE_DIR}/tests/cartesian_planning.cpp"
+    options.cpp
   )
   target_link_libraries(
     test_cartesian_planning
     PRIVATE
-      mcl_cartesian_planning_support
+      motion_control_lab::cartesian_planning_support
       jsoncpp_lib
   )
   add_test(

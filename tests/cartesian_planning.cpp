@@ -1,4 +1,6 @@
-#include "cartesian_planning.hpp"
+#include "loop.hpp"
+#include "options.hpp"
+#include "planning.hpp"
 
 #include <motion_control_core/motion_control_core.hpp>
 
@@ -85,7 +87,7 @@ int main(int argc, char ** argv)
       rate_option,
       rate_value,
       no_live_option};
-    const auto options = mcp::parseAppOptions(8, app_argv);
+    const auto options = mcp::parseOptions(8, app_argv);
     if (options.request_path != request_value || options.output_dir != output_value ||
       options.playback_rate != 2.5 || options.live)
     {

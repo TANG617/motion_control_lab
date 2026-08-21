@@ -371,6 +371,18 @@ target_include_directories(
 )
 target_link_libraries(mcl_standard_ik_tui PUBLIC motion_control_lab::presentation_contract)
 
+add_library(mcl_planned_grouped_tui components/tui/planned_grouped_tui.cpp)
+add_library(motion_control_lab::planned_grouped_tui ALIAS mcl_planned_grouped_tui)
+target_include_directories(
+  mcl_planned_grouped_tui PUBLIC "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>"
+)
+target_link_libraries(
+  mcl_planned_grouped_tui
+  PUBLIC
+    motion_control_lab::standard_ik_tui
+    motion_control_lab::tui
+)
+
 add_library(mcl_tui components/tui/tui_help.cpp components/tui/tui_renderer.cpp)
 add_library(motion_control_lab::tui ALIAS mcl_tui)
 target_include_directories(mcl_tui PUBLIC "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>")
@@ -1105,12 +1117,11 @@ if(BUILD_TESTING)
       add_executable(
         test_dual_arm_servo_solver_semantics
         tests/dual_arm_servo_solver_semantics.cpp
-        apps/servo_step/app_options.cpp
-        apps/servo_step/diagnostics_projection.cpp
       )
       target_link_libraries(
         test_dual_arm_servo_solver_semantics
         PRIVATE
+          motion_control_lab::servo_step_support
           motion_control_lab::cpu_affinity
           motion_control_lab::app_helpers
           motion_control_lab::r1_robot_config
@@ -1141,12 +1152,11 @@ if(BUILD_TESTING)
       add_executable(
         test_dual_arm_target_solver_semantics
         tests/dual_arm_target_solver_semantics.cpp
-        apps/target_solve/app_options.cpp
-        apps/target_solve/diagnostics_projection.cpp
       )
       target_link_libraries(
         test_dual_arm_target_solver_semantics
         PRIVATE
+          motion_control_lab::target_solve_support
           motion_control_lab::cpu_affinity
           motion_control_lab::app_helpers
           motion_control_lab::r1_robot_config

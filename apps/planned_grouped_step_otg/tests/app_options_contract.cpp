@@ -1,4 +1,5 @@
-#include "../app_options.hpp"
+#include "../options.hpp"
+#include "../planning.hpp"
 
 #include <cstdlib>
 #include <iostream>
@@ -33,7 +34,7 @@ int main() {
                       collision_option, collision};
   const auto custom = app::parseGroupedOptions(11, custom_argv);
   if (custom.red_rate_hz != 200.0 || custom.yellow_rate_hz != 40.0 ||
-      custom.tui_enabled || custom.solver.collision_weight != 12.0) {
+      custom.presentation.enabled || custom.solver.collision_weight != 12.0) {
     return EXIT_FAILURE;
   }
 
@@ -41,7 +42,7 @@ int main() {
   char mode_option[] = "--joint-target-mode";
   char mode[] = "ik-pv";
   char *planned_argv[]{program, teleop, urdf_option, urdf, mode_option, mode};
-  const auto planned = app::parsePlannedOptions(6, planned_argv);
+  const auto planned = app::parseOptions(6, planned_argv);
   if (planned.joint_target_mode != app::JointTargetMode::IkPv ||
       planned.interactive.red_rate_hz != 1000.0 ||
       planned.interactive.yellow_rate_hz != 100.0) {

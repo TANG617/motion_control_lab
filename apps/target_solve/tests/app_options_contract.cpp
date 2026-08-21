@@ -1,4 +1,4 @@
-#include "../app_options.hpp"
+#include "../options.hpp"
 
 #include <cstdlib>
 #include <iostream>
@@ -13,7 +13,7 @@ int main() {
   char urdf_option[] = "--urdf";
   char urdf[] = "/tmp/robot.urdf";
   char *defaults_argv[]{program, urdf_option, urdf};
-  const auto defaults = app::parseAppOptions(3, defaults_argv);
+  const auto defaults = app::parseOptions(3, defaults_argv);
   if (defaults.interactive.rate_hz != 100.0 ||
       defaults.solver != app::SolverKind::Mcc ||
       defaults.backend != app::MccBackend::Proxqp) {
@@ -32,7 +32,7 @@ int main() {
                       solver_option, solver,      backend_option,
                       backend,       ui_option,   ui, iterations_option,
                       iterations};
-  const auto custom = app::parseAppOptions(11, custom_argv);
+  const auto custom = app::parseOptions(11, custom_argv);
   if (custom.solver != app::SolverKind::Placo ||
       custom.backend != app::MccBackend::Eiquadprog ||
       custom.interactive.tui_enabled || custom.algorithm.maximum_iterations != 42) {
@@ -41,7 +41,7 @@ int main() {
 
   auto expectFailure = [&](int argc, char **argv) {
     try {
-      (void)app::parseAppOptions(argc, argv);
+      (void)app::parseOptions(argc, argv);
       return false;
     } catch (const std::runtime_error &) {
       return true;

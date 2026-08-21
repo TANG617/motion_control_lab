@@ -1,4 +1,4 @@
-#include "../joint_target_processing.hpp"
+#include "../planning.hpp"
 
 #include <cmath>
 #include <cstdlib>

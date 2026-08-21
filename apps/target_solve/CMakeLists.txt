@@ -1,7 +1,19 @@
-mcl_add_app(
-  TARGET mcl_target_solve
-  SOURCES main.cpp app_options.cpp diagnostics_projection.cpp
-  LIBRARIES
+add_library(
+  mcl_target_solve_support
+  solver.cpp
+  loop.cpp
+)
+add_library(
+  motion_control_lab::target_solve_support
+  ALIAS mcl_target_solve_support
+)
+target_include_directories(
+  mcl_target_solve_support
+  PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}"
+)
+target_link_libraries(
+  mcl_target_solve_support
+  PUBLIC
     motion_control_lab::cpu_affinity
     motion_control_lab::app_helpers
     motion_control_lab::r1_robot_config
@@ -13,6 +25,12 @@ mcl_add_app(
     motion_control_lab::preview_transport
     motion_control_lab::preview_projection
     libplaco
+)
+
+mcl_add_app(
+  TARGET mcl_target_solve
+  SOURCES main.cpp options.cpp
+  LIBRARIES motion_control_lab::target_solve_support
 )
 if(APPLE)
   set_property(
@@ -33,7 +51,7 @@ if(BUILD_TESTING)
   add_executable(
     test_target_solve_app_options
     tests/app_options_contract.cpp
-    app_options.cpp
+    options.cpp
   )
   target_link_libraries(
     test_target_solve_app_options

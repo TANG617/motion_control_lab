@@ -1,25 +1,22 @@
 add_library(
-  mcl_baseline_runtime
-  baseline_config.cpp
-  baseline_solver.cpp
+  mcl_baseline_support
+  solver.cpp
+  loop.cpp
+)
+add_library(
+  motion_control_lab::baseline_support
+  ALIAS mcl_baseline_support
 )
 target_include_directories(
-  mcl_baseline_runtime
+  mcl_baseline_support
   PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}"
 )
 target_link_libraries(
-  mcl_baseline_runtime
+  mcl_baseline_support
   PUBLIC
     motion_control_lab::presentation_contract
     libplaco
     jsoncpp_lib
-)
-
-mcl_add_app(
-  TARGET mcl_baseline
-  SOURCES main.cpp app_options.cpp
-  LIBRARIES
-    mcl_baseline_runtime
     motion_control_lab::cpu_affinity
     motion_control_lab::app_helpers
     motion_control_lab::r1_robot_config
@@ -31,6 +28,12 @@ mcl_add_app(
     motion_control_lab::preview_projection
     motion_control_lab::replay
     motion_control_lab::run_artifacts
+)
+
+mcl_add_app(
+  TARGET mcl_baseline
+  SOURCES main.cpp options.cpp
+  LIBRARIES motion_control_lab::baseline_support
 )
 if(APPLE)
   set_property(
@@ -53,12 +56,12 @@ if(BUILD_TESTING)
   add_executable(
     test_baseline_app_options
     tests/app_options_contract.cpp
-    app_options.cpp
+    options.cpp
   )
   target_link_libraries(
     test_baseline_app_options
     PRIVATE
-      mcl_baseline_runtime
+      motion_control_lab::baseline_support
       motion_control_lab::replay
       motion_control_lab::tui
       motion_control_lab::r1_robot_config
@@ -82,7 +85,7 @@ if(BUILD_TESTING)
   )
   target_link_libraries(
     test_baseline_config_contract
-    PRIVATE mcl_baseline_runtime motion_control_lab::run_artifacts
+    PRIVATE motion_control_lab::baseline_support motion_control_lab::run_artifacts
   )
   add_test(
     NAME apps.mcl_baseline_config_contract
@@ -108,7 +111,7 @@ if(BUILD_TESTING)
   )
   target_link_libraries(
     test_baseline_solver_semantics
-    PRIVATE mcl_baseline_runtime
+    PRIVATE motion_control_lab::baseline_support
   )
   add_test(
     NAME apps.mcl_baseline_solver_semantics
