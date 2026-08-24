@@ -132,6 +132,20 @@ const char *qpStatusName(mcc::QpSolveStatus value) {
   return "unknown";
 }
 
+const char *hierarchicalPassName(mcc::HierarchicalSolvePass value) {
+  switch (value) {
+  case mcc::HierarchicalSolvePass::Primary:
+    return "Primary";
+  case mcc::HierarchicalSolvePass::Secondary:
+    return "Secondary";
+  case mcc::HierarchicalSolvePass::Tertiary:
+    return "Tertiary";
+  case mcc::HierarchicalSolvePass::Terminal:
+    return "Terminal";
+  }
+  return "unknown";
+}
+
 const char *hierarchicalRejectionReasonName(SolverRejectionReason value) {
   switch (value) {
   case SolverRejectionReason::None:
@@ -187,10 +201,20 @@ void updateSolverDebug(mcl::SolverDebug &output,
     output.primal_residual = 0.0;
     output.dual_residual = 0.0;
     output.maximum_hard_violation = diagnostics.maximum_hard_violation;
-    output.qp_solve_time_ms = diagnostics.solve_time_ms;
+    output.qp_solve_time_ms = diagnostics.qp_solve_time_ms;
     output.qp_iterations = diagnostics.iterations;
     output.active_set_size = 0;
-    output.warm_start_used = last_pass->warm_start_used;
+    output.warm_start_used = false;
+    output.qp_passes.clear();
+    output.qp_passes.reserve(diagnostics.hierarchy.passes.size());
+    for (const auto &pass : diagnostics.hierarchy.passes) {
+      output.warm_start_used =
+          output.warm_start_used || pass.warm_start_used;
+      output.qp_passes.push_back(
+          {hierarchicalPassName(pass.pass), pass.attempted, pass.succeeded,
+           qpStatusName(pass.backend_status), pass.native_status,
+           pass.solve_time_ms, pass.iterations, pass.warm_start_used});
+    }
     output.task_scales.resize(diagnostics.hierarchy.task_scales.size());
     for (std::size_t index = 0;
          index < diagnostics.hierarchy.task_scales.size(); ++index) {
@@ -223,6 +247,7 @@ void updateSolverDebug(mcl::SolverDebug &output,
     output.qp_iterations = optimization.iterations;
     output.active_set_size = optimization.active_set_size;
     output.warm_start_used = optimization.warm_start_used;
+    output.qp_passes.clear();
     output.task_scales.resize(optimization.task_scales.size());
     for (std::size_t index = 0; index < optimization.task_scales.size();
          ++index) {

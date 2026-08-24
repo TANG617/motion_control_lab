@@ -435,6 +435,7 @@ TuiPage makeSolverPage(const IkDebugFrame & frame)
   page.title = "Solver and Quadratic Programming";
   std::vector<std::vector<std::string>> summary_rows;
   std::vector<std::vector<std::string>> timing_rows;
+  std::vector<std::vector<std::string>> pass_rows;
   std::vector<std::vector<std::string>> percentile_rows;
   std::vector<std::vector<std::string>> diagnostic_rows;
   std::vector<std::vector<std::string>> counter_rows;
@@ -450,6 +451,14 @@ TuiPage makeSolverPage(const IkDebugFrame & frame)
     timing_rows.push_back(
       {solver.label, fixed(solver.ik_solve_time_ms, 4), fixed(solver.qp_solve_time_ms, 4),
        fixed(std::max(0.0, solver.ik_solve_time_ms - solver.qp_solve_time_ms), 4)});
+    for (const auto & pass : solver.qp_passes) {
+      const std::string state = !pass.attempted ? "not attempted" :
+                                pass.succeeded ? "succeeded" : "failed";
+      pass_rows.push_back(
+        {solver.label, pass.label, state, fixed(pass.solve_time_ms, 4),
+         std::to_string(pass.iterations), yesNo(pass.warm_start_used), pass.status,
+         pass.native_status});
+    }
     percentile_rows.push_back(
       {solver.label, std::to_string(solver.ik_solve_time_percentiles.window_sample_count),
        fixed(solver.ik_solve_time_percentiles.p90, 4),
@@ -509,6 +518,14 @@ TuiPage makeSolverPage(const IkDebugFrame & frame)
     requirement_rows.push_back(noneRow(8U));
   }
 
+  if (!pass_rows.empty()) {
+    page.sections.push_back(sheet(
+      "Hierarchical QP pass timing",
+      {textColumn("Solver"), textColumn("Pass"), textColumn("State"),
+       numberColumn("Time [ms]"), numberColumn("Iter"), textColumn("Warm"),
+       textColumn("Status"), textColumn("Native status")},
+      std::move(pass_rows)));
+  }
   page.sections.push_back(sheet(
     "Solver summary",
     {textColumn("Solver"), textColumn("Disposition"), textColumn("Termination"),

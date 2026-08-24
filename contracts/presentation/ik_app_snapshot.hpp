@@ -89,6 +89,18 @@ struct SolverRunCounters
   std::uint64_t rejected{0};
 };
 
+struct QpPassDebug
+{
+  std::string label;
+  bool attempted{false};
+  bool succeeded{false};
+  std::string status;
+  std::string native_status;
+  double solve_time_ms{0.0};
+  int iterations{0};
+  bool warm_start_used{false};
+};
+
 struct SolverDebug
 {
   std::string label{"IK"};
@@ -112,6 +124,7 @@ struct SolverDebug
   int qp_iterations{0};
   int active_set_size{0};
   bool warm_start_used{false};
+  std::vector<QpPassDebug> qp_passes;
   std::vector<TaskScaleDebug> task_scales;
   std::vector<RequirementDebug> requirements;
   std::optional<SolverRunCounters> run_counters;

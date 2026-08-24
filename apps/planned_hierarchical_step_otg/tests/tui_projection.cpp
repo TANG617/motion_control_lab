@@ -124,6 +124,16 @@ int main()
     solver.qp_solve_time_ms = 0.12;
     solver.maximum_hard_violation = 1.0e-6;
     solver.ik_solve_time_percentiles.p95 = 0.42;
+    if (label == "Red") {
+      solver.qp_passes = {
+          {"Primary", true, true, "optimal", "PROXQP_SOLVED", 0.21, 2,
+           false},
+          {"Secondary", true, true, "optimal", "PROXQP_SOLVED", 0.19, 1,
+           false},
+          {"Tertiary", false, false, "not-run", "", 0.0, 0, false},
+          {"Terminal", true, true, "optimal", "PROXQP_SOLVED", 0.18, 1,
+           false}};
+    }
     solver.grouped_attempt =
         mcl::GroupedAttemptDebug{"none", 2, 10, 9, "active", 8, 77, 1000};
     solver.task_scales.push_back({"arm", true, 0.95, 4.0, false, false});
@@ -258,6 +268,17 @@ int main()
           "joint projection mapping mismatch");
   require(targets.columns.at(1).alignment == mcl::TuiTableAlignment::Right,
           "joint numeric columns must be right aligned");
+  const auto &passes =
+      section(page(document, "Solver and Quadratic Programming"),
+              "Hierarchical QP pass timing")
+          .tables.at(0);
+  require(passes.columns.size() == 8U && passes.rows.size() == 4U,
+          "hierarchical pass timing sheet shape mismatch");
+  require(passes.rows.at(0).at(1) == "Primary" &&
+              passes.rows.at(0).at(3) == "0.2100" &&
+              passes.rows.at(2).at(2) == "not attempted" &&
+              passes.rows.at(3).at(1) == "Terminal",
+          "hierarchical pass timing values were not preserved");
   const auto & execution =
       section(page(document, "Joint State"), "Executed joint state").tables.at(0);
   require(execution.rows.size() == 20U && execution.rows.back().front() == "joint_19",

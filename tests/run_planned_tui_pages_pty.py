@@ -138,6 +138,7 @@ def main() -> int:
             expected_markers.extend(
                 [
                     b"Joint Planning",
+                    b"Hierarchical QP pass timing",
                     b"Execution and limit utilization",
                     b"Safety",
                     b"Planning",

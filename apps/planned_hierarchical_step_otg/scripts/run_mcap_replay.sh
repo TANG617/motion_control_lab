@@ -37,9 +37,9 @@ exec "${lab_root}/scripts/launch_app.sh" "${binary}" replay --urdf "${urdf}" \
   --max-linear-velocity-mps "${MCL_MAX_LINEAR_VELOCITY_MPS:-0.9}" \
   --max-linear-acceleration-mps2 "${MCL_MAX_LINEAR_ACCELERATION_MPS2:-5.0}" \
   --max-linear-jerk-mps3 "${MCL_MAX_LINEAR_JERK_MPS3:-80.0}" \
-  --max-angular-velocity-rps "${MCL_MAX_ANGULAR_VELOCITY_RPS:-1.5}" \
-  --max-angular-acceleration-rps2 "${MCL_MAX_ANGULAR_ACCELERATION_RPS2:-5.0}" \
-  --max-angular-jerk-rps3 "${MCL_MAX_ANGULAR_JERK_RPS3:-50.0}" \
+  --max-angular-velocity-rps "${MCL_MAX_ANGULAR_VELOCITY_RPS:-3.0}" \
+  --max-angular-acceleration-rps2 "${MCL_MAX_ANGULAR_ACCELERATION_RPS2:-20.0}" \
+  --max-angular-jerk-rps3 "${MCL_MAX_ANGULAR_JERK_RPS3:-150.0}" \
   --ui "${MCL_UI:-tui}" \
   --terminal-input "${MCL_TERMINAL_INPUT:-on}" \
   --viz "${MCL_VIZ:-foxglove}" \

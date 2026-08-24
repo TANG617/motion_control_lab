@@ -75,6 +75,7 @@ struct SolverDiagnostics {
   mcc::InverseKinematicsDiagnostics kinematics;
   mcc::HierarchicalInverseKinematicsDiagnostics hierarchy;
   double solve_time_ms{0.0};
+  double qp_solve_time_ms{0.0};
   int iterations{0};
   bool converged{false};
   double maximum_hard_violation{0.0};

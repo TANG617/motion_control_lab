@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <filesystem>
 #include <stdexcept>
 #include <string_view>
@@ -361,6 +362,8 @@ mcc::Status SolverRuntime::solveYellow(const SolverRequest &request,
   const auto status = yellow_solver_.solveInverseKinematics(
       local, candidate, diagnostics.kinematics);
   diagnostics.solve_time_ms = diagnostics.kinematics.solve_time_ms;
+  diagnostics.qp_solve_time_ms =
+      diagnostics.kinematics.optimization.solve_time_ms;
   diagnostics.iterations = diagnostics.kinematics.iterations;
   diagnostics.converged = diagnostics.kinematics.converged;
   diagnostics.maximum_hard_violation =
@@ -411,9 +414,14 @@ mcc::Status SolverRuntime::solveRed(const SolverRequest &request,
                                          : disabled_coupling_positions_,
                                      coupling_active);
   mcc::InverseKinematicsSolution candidate;
+  const auto solve_started = std::chrono::steady_clock::now();
   const auto status = red_solver_.solveInverseKinematics(local, candidate,
                                                          diagnostics.hierarchy);
-  diagnostics.solve_time_ms = hierarchySolveTime(diagnostics.hierarchy);
+  const auto solve_finished = std::chrono::steady_clock::now();
+  diagnostics.solve_time_ms =
+      std::chrono::duration<double, std::milli>(solve_finished - solve_started)
+          .count();
+  diagnostics.qp_solve_time_ms = hierarchySolveTime(diagnostics.hierarchy);
   diagnostics.iterations = hierarchyIterations(diagnostics.hierarchy);
   diagnostics.maximum_hard_violation =
       diagnostics.hierarchy.maximum_shared_hard_violation;
