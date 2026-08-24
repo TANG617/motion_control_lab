@@ -17,7 +17,7 @@
     "pairing_policy": "nearest",
     "nearest_tolerance_ms": 5.0,
     "unmatched_policy": "drop_with_diagnostics",
-    "executor": "mcl_servo_step replay",
+    "executor": "mcl_step replay",
     "timestamp_projection": "fixed-period",
     "target_period_ms": 10.0,
     "solver_rate_hz": 100.0,
@@ -45,7 +45,7 @@
   "arms": [
     {
       "arm_id": "mcc_red_only",
-      "method": "mcl_servo_step_motion_control_core",
+      "method": "mcl_step_motion_control_core",
       "required": true
     }
   ],

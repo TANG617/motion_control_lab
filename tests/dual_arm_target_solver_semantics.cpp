@@ -6,15 +6,15 @@
 #include <string>
 #include <vector>
 
-#include "../apps/target_solve/solver.hpp"
+#include "../apps/target/solver.hpp"
 #include "placo/model/robot_wrapper.h"
 #include "placo/problem/qp_error.h"
 
 namespace mcl = motion_control_lab;
-using motion_control_lab::target_solve::MccTargetSolver;
-using motion_control_lab::target_solve::MccBackend;
-using motion_control_lab::target_solve::PlacoTargetSolver;
-using motion_control_lab::target_solve::TargetSolveResult;
+using motion_control_lab::target::MccTargetSolver;
+using motion_control_lab::target::MccBackend;
+using motion_control_lab::target::PlacoTargetSolver;
+using motion_control_lab::target::TargetSolveResult;
 
 namespace
 {
@@ -53,9 +53,9 @@ void validatePositionLimits(
     const auto position_limits = model.get_joint_limits(robot.joint_names[index]);
     require(
       result.positions[index] >= position_limits.first +
-      motion_control_lab::target_solve::AlgorithmOptions{}.joint_position_margin_rad - 1.0e-8 &&
+      motion_control_lab::target::AlgorithmOptions{}.joint_position_margin_rad - 1.0e-8 &&
         result.positions[index] <= position_limits.second -
-          motion_control_lab::target_solve::AlgorithmOptions{}.joint_position_margin_rad + 1.0e-8,
+          motion_control_lab::target::AlgorithmOptions{}.joint_position_margin_rad + 1.0e-8,
       robot.joint_names[index] + " violated its position limit margin");
     require(result.velocities[index] == 0.0, "TargetSolve output velocity must be zero");
   }
@@ -77,7 +77,7 @@ void exerciseTargetSolver(
   require(initial.solver_debug.backend == expected_backend, "unexpected QP backend");
   require(
     initial.iterations >= 1 &&
-      initial.iterations <= motion_control_lab::target_solve::AlgorithmOptions{}.maximum_iterations,
+      initial.iterations <= motion_control_lab::target::AlgorithmOptions{}.maximum_iterations,
     "initial target iteration count is invalid");
   require(
     isTargetTerminationReason(initial.solver_debug.termination_reason),
@@ -89,7 +89,7 @@ void exerciseTargetSolver(
   require(stepped.accepted, "5 mm target was not accepted");
   require(
     stepped.iterations >= 1 &&
-      stepped.iterations <= motion_control_lab::target_solve::AlgorithmOptions{}.maximum_iterations,
+      stepped.iterations <= motion_control_lab::target::AlgorithmOptions{}.maximum_iterations,
     "5 mm target iteration count is invalid");
   require(
     isTargetTerminationReason(stepped.solver_debug.termination_reason),
@@ -139,7 +139,7 @@ int main(int argc, char ** argv)
     placo::model::RobotWrapper limit_model(
       urdf_path,
       placo::model::RobotWrapper::IGNORE_COLLISIONS | placo::model::RobotWrapper::IGNORE_GEOMETRY);
-    const mcl::target_solve::AlgorithmOptions algorithm;
+    const mcl::target::AlgorithmOptions algorithm;
     MccTargetSolver mcc_proxqp_solver(urdf_path, robot, MccBackend::Proxqp, algorithm);
     MccTargetSolver mcc_eiquadprog_solver(urdf_path, robot, MccBackend::Eiquadprog, algorithm);
     PlacoTargetSolver placo_solver(urdf_path, robot, algorithm);

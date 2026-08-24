@@ -469,8 +469,7 @@ TuiPage makeSolverPage(const IkDebugFrame & frame)
     if (solver.grouped_attempt.has_value()) {
       const auto & attempt = *solver.grouped_attempt;
       attempt_rows.push_back(
-        {solver.label, attempt.rejection_reason, yesNo(attempt.attempt_accepted),
-         yesNo(attempt.has_accepted_value), attempt.coupling_state});
+        {solver.label, attempt.rejection_reason, attempt.coupling_state});
       revision_rows.push_back(
         {solver.label, std::to_string(attempt.run_generation),
          std::to_string(attempt.attempt_revision), std::to_string(attempt.value_revision),
@@ -500,7 +499,7 @@ TuiPage makeSolverPage(const IkDebugFrame & frame)
     counter_rows.push_back(noneRow(4U));
   }
   if (attempt_rows.empty()) {
-    attempt_rows.push_back(noneRow(5U));
+    attempt_rows.push_back(noneRow(3U));
     revision_rows.push_back(noneRow(7U));
   }
   if (scale_rows.empty()) {
@@ -540,8 +539,7 @@ TuiPage makeSolverPage(const IkDebugFrame & frame)
     std::move(counter_rows)));
   page.sections.push_back(sheet(
     "Grouped attempt and coupling",
-    {textColumn("Solver"), textColumn("Rejection reason"), textColumn("Attempt accepted"),
-     textColumn("Has accepted value"), textColumn("Coupling state")},
+    {textColumn("Solver"), textColumn("Rejection reason"), textColumn("Coupling state")},
     std::move(attempt_rows)));
   page.sections.push_back(sheet(
     "Grouped revisions and captured state",

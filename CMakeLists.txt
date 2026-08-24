@@ -15,18 +15,18 @@ include(CTest)
 include(GNUInstallDirs)
 
 option(
-  MCL_BUILD_SINGLE_ARM_SERVO_STEP
+  MCL_BUILD_SINGLE_ARM_STEP
   "Build the single-arm interactive IK application"
   ON
 )
 option(
-  MCL_BUILD_SERVO_STEP
-  "Build the dual-arm ServoStep interactive IK application"
+  MCL_BUILD_STEP
+  "Build the dual-arm Step interactive IK application"
   ON
 )
 option(
-  MCL_BUILD_TARGET_SOLVE
-  "Build the dual-arm TargetSolve interactive IK application"
+  MCL_BUILD_TARGET
+  "Build the dual-arm Target interactive IK application"
   ON
 )
 option(
@@ -35,17 +35,17 @@ option(
   ON
 )
 option(
-  MCL_BUILD_GROUPED_SERVO_STEP
+  MCL_BUILD_HIERARCHICAL_STEP
   "Build the Red/Yellow dual-arm IK application"
   ON
 )
 option(
-  MCL_BUILD_PLANNED_GROUPED_SERVO_STEP
+  MCL_BUILD_PLANNED_HIERARCHICAL_STEP
   "Build the online-planned Red/Yellow dual-arm IK application"
   ON
 )
 option(
-  MCL_BUILD_PLANNED_GROUPED_STEP_OTG
+  MCL_BUILD_PLANNED_HIERARCHICAL_STEP_OTG
   "Build the online-planned Red/Yellow IK plus joint-OTG application"
   ON
 )
@@ -102,9 +102,9 @@ if(MCL_BUILD_E03_REPLAY_VISUALIZATION AND
 endif()
 
 set(MCL_BUILD_ANY_INTERACTIVE_IK OFF)
-if(MCL_BUILD_SINGLE_ARM_SERVO_STEP OR MCL_BUILD_SERVO_STEP OR
-   MCL_BUILD_TARGET_SOLVE OR MCL_BUILD_BASELINE OR MCL_BUILD_GROUPED_SERVO_STEP OR
-   MCL_BUILD_PLANNED_GROUPED_SERVO_STEP OR MCL_BUILD_PLANNED_GROUPED_STEP_OTG)
+if(MCL_BUILD_SINGLE_ARM_STEP OR MCL_BUILD_STEP OR
+   MCL_BUILD_TARGET OR MCL_BUILD_BASELINE OR MCL_BUILD_HIERARCHICAL_STEP OR
+   MCL_BUILD_PLANNED_HIERARCHICAL_STEP OR MCL_BUILD_PLANNED_HIERARCHICAL_STEP_OTG)
   set(MCL_BUILD_ANY_INTERACTIVE_IK ON)
 endif()
 
@@ -144,8 +144,8 @@ set(MCL_CONTRACT_GENERATOR
     "${MCL_VISUALIZATION_CONTRACT_DIR}/generate_contract_header.py")
 set(MCL_VISUALIZATION_CONTRACT_JSONS
     "${MCL_VISUALIZATION_CONTRACT_DIR}/foxglove_ik.v1.json"
-    "${MCL_VISUALIZATION_CONTRACT_DIR}/foxglove_planned_grouped_servo_step.v1.json"
-    "${MCL_VISUALIZATION_CONTRACT_DIR}/foxglove_planned_grouped_step_otg.v1.json")
+    "${MCL_VISUALIZATION_CONTRACT_DIR}/foxglove_planned_hierarchical_step.v1.json"
+    "${MCL_VISUALIZATION_CONTRACT_DIR}/foxglove_planned_hierarchical_step_otg.v1.json")
 
 set(MCL_CHANNEL_SPEC_HEADER
     "${MCL_GENERATED_CONTRACT_DIR}/channel_spec.hpp")
@@ -178,11 +178,11 @@ endfunction()
 mcl_generate_visualization_contract(
   foxglove_ik motion_control_lab::contracts::foxglove_ik_v1)
 mcl_generate_visualization_contract(
-  foxglove_planned_grouped_servo_step
-  motion_control_lab::contracts::foxglove_planned_grouped_servo_step_v1)
+  foxglove_planned_hierarchical_step
+  motion_control_lab::contracts::foxglove_planned_hierarchical_step_v1)
 mcl_generate_visualization_contract(
-  foxglove_planned_grouped_step_otg
-  motion_control_lab::contracts::foxglove_planned_grouped_step_otg_v1)
+  foxglove_planned_hierarchical_step_otg
+  motion_control_lab::contracts::foxglove_planned_hierarchical_step_otg_v1)
 
 add_custom_target(
   mcl_visualization_contract_headers
@@ -454,26 +454,26 @@ if(MCL_BUILD_ANY_INTERACTIVE_IK)
       motion_control_viz::render
   )
 
-  if(MCL_BUILD_SINGLE_ARM_SERVO_STEP)
-    add_subdirectory(apps/single_arm_servo_step)
+  if(MCL_BUILD_SINGLE_ARM_STEP)
+    add_subdirectory(apps/single_arm_step)
   endif()
-  if(MCL_BUILD_SERVO_STEP)
-    add_subdirectory(apps/servo_step)
+  if(MCL_BUILD_STEP)
+    add_subdirectory(apps/step)
   endif()
-  if(MCL_BUILD_TARGET_SOLVE)
-    add_subdirectory(apps/target_solve)
+  if(MCL_BUILD_TARGET)
+    add_subdirectory(apps/target)
   endif()
   if(MCL_BUILD_BASELINE)
     add_subdirectory(apps/baseline)
   endif()
-  if(MCL_BUILD_GROUPED_SERVO_STEP)
-    add_subdirectory(apps/grouped_servo_step)
+  if(MCL_BUILD_HIERARCHICAL_STEP)
+    add_subdirectory(apps/hierarchical_step)
   endif()
-  if(MCL_BUILD_PLANNED_GROUPED_SERVO_STEP)
-    add_subdirectory(apps/planned_grouped_servo_step)
+  if(MCL_BUILD_PLANNED_HIERARCHICAL_STEP)
+    add_subdirectory(apps/planned_hierarchical_step)
   endif()
-  if(MCL_BUILD_PLANNED_GROUPED_STEP_OTG)
-    add_subdirectory(apps/planned_grouped_step_otg)
+  if(MCL_BUILD_PLANNED_HIERARCHICAL_STEP_OTG)
+    add_subdirectory(apps/planned_hierarchical_step_otg)
   endif()
 endif()
 
@@ -816,54 +816,54 @@ if(BUILD_TESTING)
   add_test(NAME scripts.bash_syntax COMMAND "${MCL_BASH_EXECUTABLE}" -n ${MCL_APP_SHELL_SCRIPTS})
   find_program(MCL_SCRIPT_EXECUTABLE script)
 
-  if(MCL_BUILD_PLANNED_GROUPED_STEP_OTG)
+  if(MCL_BUILD_PLANNED_HIERARCHICAL_STEP_OTG)
     add_test(
       NAME scripts.source_launcher_path_resolution
       COMMAND
         "${CMAKE_COMMAND}" -E env
         --unset=MCL_BINARY
-        "PATH=$<TARGET_FILE_DIR:mcl_planned_grouped_step_otg>:$ENV{PATH}"
+        "PATH=$<TARGET_FILE_DIR:mcl_planned_hierarchical_step_otg>:$ENV{PATH}"
         "MCL_UI=none"
         "MCL_VIZ=none"
-        "${CMAKE_CURRENT_SOURCE_DIR}/apps/planned_grouped_step_otg/scripts/run_keyboard.sh"
+        "${CMAKE_CURRENT_SOURCE_DIR}/apps/planned_hierarchical_step_otg/scripts/run_keyboard.sh"
         --help
     )
 
     if(MCL_SCRIPT_EXECUTABLE)
       add_test(
-        NAME scripts.planned_grouped_step_otg_keyboard_smoke
+        NAME scripts.planned_hierarchical_step_otg_keyboard_smoke
         COMMAND
           "${CMAKE_COMMAND}" -E env
           --unset=MCL_BINARY
-          "PATH=$<TARGET_FILE_DIR:mcl_planned_grouped_step_otg>:$ENV{PATH}"
+          "PATH=$<TARGET_FILE_DIR:mcl_planned_hierarchical_step_otg>:$ENV{PATH}"
           "MCL_UI=none"
           "MCL_VIZ=none"
           "${MCL_SCRIPT_EXECUTABLE}" -qec
-          "${CMAKE_CURRENT_SOURCE_DIR}/apps/planned_grouped_step_otg/scripts/run_keyboard.sh --duration 0.05"
+          "${CMAKE_CURRENT_SOURCE_DIR}/apps/planned_hierarchical_step_otg/scripts/run_keyboard.sh --duration 0.05"
           /dev/null
       )
       set_tests_properties(
-        scripts.planned_grouped_step_otg_keyboard_smoke
+        scripts.planned_hierarchical_step_otg_keyboard_smoke
         PROPERTIES TIMEOUT 15
       )
     endif()
   endif()
 
-  if(MCL_BUILD_PLANNED_GROUPED_SERVO_STEP AND MCL_SCRIPT_EXECUTABLE)
+  if(MCL_BUILD_PLANNED_HIERARCHICAL_STEP AND MCL_SCRIPT_EXECUTABLE)
     add_test(
-      NAME scripts.planned_grouped_servo_step_keyboard_smoke
+      NAME scripts.planned_hierarchical_step_keyboard_smoke
       COMMAND
         "${CMAKE_COMMAND}" -E env
         --unset=MCL_BINARY
-        "PATH=$<TARGET_FILE_DIR:mcl_planned_grouped_servo_step>:$ENV{PATH}"
+        "PATH=$<TARGET_FILE_DIR:mcl_planned_hierarchical_step>:$ENV{PATH}"
         "MCL_UI=none"
         "MCL_VIZ=none"
         "${MCL_SCRIPT_EXECUTABLE}" -qec
-        "${CMAKE_CURRENT_SOURCE_DIR}/apps/planned_grouped_servo_step/scripts/run_keyboard.sh --duration 0.05"
+        "${CMAKE_CURRENT_SOURCE_DIR}/apps/planned_hierarchical_step/scripts/run_keyboard.sh --duration 0.05"
         /dev/null
     )
     set_tests_properties(
-      scripts.planned_grouped_servo_step_keyboard_smoke
+      scripts.planned_hierarchical_step_keyboard_smoke
       PROPERTIES TIMEOUT 15
     )
   endif()
@@ -1038,44 +1038,44 @@ if(BUILD_TESTING)
         PROPERTIES TIMEOUT 15
       )
 
-      if(TARGET mcl_planned_grouped_servo_step)
+      if(TARGET mcl_planned_hierarchical_step)
         add_test(
-          NAME apps.mcl_planned_grouped_servo_step_tui_pages_pty
+          NAME apps.mcl_planned_hierarchical_step_tui_pages_pty
           COMMAND
             "${Python3_EXECUTABLE}"
             "${CMAKE_CURRENT_SOURCE_DIR}/tests/run_planned_tui_pages_pty.py"
-            "$<TARGET_FILE:mcl_planned_grouped_servo_step>"
+            "$<TARGET_FILE:mcl_planned_hierarchical_step>"
             6
             "/workspace/models/Psi_R1_visual_collision.urdf"
         )
         set_tests_properties(
-          apps.mcl_planned_grouped_servo_step_tui_pages_pty
+          apps.mcl_planned_hierarchical_step_tui_pages_pty
           PROPERTIES TIMEOUT 20
         )
       endif()
 
-      if(TARGET mcl_planned_grouped_step_otg)
+      if(TARGET mcl_planned_hierarchical_step_otg)
         add_test(
-          NAME apps.mcl_planned_grouped_step_otg_tui_pages_pty
+          NAME apps.mcl_planned_hierarchical_step_otg_tui_pages_pty
           COMMAND
             "${Python3_EXECUTABLE}"
             "${CMAKE_CURRENT_SOURCE_DIR}/tests/run_planned_tui_pages_pty.py"
-            "$<TARGET_FILE:mcl_planned_grouped_step_otg>"
+            "$<TARGET_FILE:mcl_planned_hierarchical_step_otg>"
             7
             "/workspace/products/synrobot/modules/common/robot_description/psi_r1/urdf/Psi_R1_rev1.urdf"
         )
         set_tests_properties(
-          apps.mcl_planned_grouped_step_otg_tui_pages_pty
+          apps.mcl_planned_hierarchical_step_otg_tui_pages_pty
           PROPERTIES TIMEOUT 20
         )
       endif()
     endif()
 
     foreach(MCL_DUAL_ARM_TARGET IN ITEMS
-        mcl_servo_step
-        mcl_target_solve)
+        mcl_step
+        mcl_target)
       if(TARGET ${MCL_DUAL_ARM_TARGET})
-        if(MCL_DUAL_ARM_TARGET STREQUAL "mcl_servo_step")
+        if(MCL_DUAL_ARM_TARGET STREQUAL "mcl_step")
           set(MCL_DUAL_ARM_SUBCOMMAND teleop)
         else()
           set(MCL_DUAL_ARM_SUBCOMMAND "")
@@ -1092,14 +1092,14 @@ if(BUILD_TESTING)
     endforeach()
 
     foreach(MCL_SERVO_TARGET IN ITEMS
-        mcl_servo_step
-        mcl_grouped_servo_step
-        mcl_planned_grouped_servo_step
-        mcl_planned_grouped_step_otg)
+        mcl_step
+        mcl_hierarchical_step
+        mcl_planned_hierarchical_step
+        mcl_planned_hierarchical_step_otg)
       if(TARGET ${MCL_SERVO_TARGET})
         set(MCL_SERVO_PLANNED OFF)
-        if(MCL_SERVO_TARGET STREQUAL "mcl_planned_grouped_servo_step" OR
-           MCL_SERVO_TARGET STREQUAL "mcl_planned_grouped_step_otg")
+        if(MCL_SERVO_TARGET STREQUAL "mcl_planned_hierarchical_step" OR
+           MCL_SERVO_TARGET STREQUAL "mcl_planned_hierarchical_step_otg")
           set(MCL_SERVO_PLANNED ON)
         endif()
         add_test(
@@ -1113,7 +1113,7 @@ if(BUILD_TESTING)
       endif()
     endforeach()
 
-    if(TARGET mcl_servo_step)
+    if(TARGET mcl_step)
       add_executable(
         test_dual_arm_servo_solver_semantics
         tests/dual_arm_servo_solver_semantics.cpp
@@ -1121,7 +1121,7 @@ if(BUILD_TESTING)
       target_link_libraries(
         test_dual_arm_servo_solver_semantics
         PRIVATE
-          motion_control_lab::servo_step_support
+          motion_control_lab::step_support
           motion_control_lab::cpu_affinity
           motion_control_lab::app_helpers
           motion_control_lab::r1_robot_config
@@ -1136,11 +1136,11 @@ if(BUILD_TESTING)
           libplaco
       )
       add_test(
-        NAME apps.mcl_servo_step_semantics
+        NAME apps.mcl_step_semantics
         COMMAND test_dual_arm_servo_solver_semantics "${E01_MODEL}"
       )
       set_tests_properties(
-        apps.mcl_servo_step_semantics
+        apps.mcl_step_semantics
         PROPERTIES
           TIMEOUT 20
           ENVIRONMENT_MODIFICATION
@@ -1148,7 +1148,7 @@ if(BUILD_TESTING)
       )
     endif()
 
-    if(TARGET mcl_target_solve)
+    if(TARGET mcl_target)
       add_executable(
         test_dual_arm_target_solver_semantics
         tests/dual_arm_target_solver_semantics.cpp
@@ -1156,7 +1156,7 @@ if(BUILD_TESTING)
       target_link_libraries(
         test_dual_arm_target_solver_semantics
         PRIVATE
-          motion_control_lab::target_solve_support
+          motion_control_lab::target_support
           motion_control_lab::cpu_affinity
           motion_control_lab::app_helpers
           motion_control_lab::r1_robot_config
@@ -1170,11 +1170,11 @@ if(BUILD_TESTING)
           libplaco
       )
       add_test(
-        NAME apps.mcl_target_solve_semantics
+        NAME apps.mcl_target_semantics
         COMMAND test_dual_arm_target_solver_semantics "${E01_MODEL}"
       )
       set_tests_properties(
-        apps.mcl_target_solve_semantics
+        apps.mcl_target_semantics
         PROPERTIES
           TIMEOUT 20
           ENVIRONMENT_MODIFICATION
@@ -1184,8 +1184,8 @@ if(BUILD_TESTING)
 
     if(MCL_ENABLE_TUI)
       foreach(MCL_DUAL_ARM_TARGET IN ITEMS
-          mcl_servo_step
-          mcl_target_solve)
+          mcl_step
+          mcl_target)
         if(TARGET ${MCL_DUAL_ARM_TARGET})
           foreach(MCL_SOLVER_TEST IN ITEMS default mcc_proxqp mcc_eiquadprog placo_ignored_backend)
           if(MCL_SOLVER_TEST STREQUAL "default")

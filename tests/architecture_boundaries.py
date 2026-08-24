@@ -31,32 +31,32 @@ FORBIDDEN_OLD = re.compile(
 TEXT_SUFFIXES = {".cpp", ".hpp", ".h", ".cmake", ".txt"}
 MCC_COMPONENT_PATTERNS = (
     re.compile(r"#\s*include\s*[<\"]motion_control_core/"),
-    re.compile(r"\bmotion_control::core::(?:KinematicsSolverBuilder|GroupedKinematicsSolver|CartesianPlanner|JointPlanner)\b"),
+    re.compile(r"\bmotion_control::core::(?:KinematicsSolverBuilder|HierarchicalKinematicsSolver|CartesianPlanner|JointPlanner)\b"),
     re.compile(r"\bmotion_control_core(?:::[A-Za-z0-9_]+)?\b"),
 )
 APP_SOURCE_FILES = {
     "baseline": {"main.cpp", "options.cpp", "options.hpp", "solver.cpp", "solver.hpp", "loop.cpp", "loop.hpp"},
     "cartesian_planning": {"main.cpp", "options.cpp", "options.hpp", "planning.cpp", "planning.hpp", "loop.cpp", "loop.hpp"},
-    "grouped_servo_step": {"main.cpp", "options.cpp", "options.hpp", "solver.cpp", "solver.hpp", "loop.cpp", "loop.hpp"},
-    "planned_grouped_servo_step": {"main.cpp", "options.cpp", "options.hpp", "solver.cpp", "solver.hpp", "planning.cpp", "planning.hpp", "loop.cpp", "loop.hpp"},
-    "planned_grouped_step_otg": {"main.cpp", "options.cpp", "options.hpp", "solver.cpp", "solver.hpp", "planning.cpp", "planning.hpp", "loop.cpp", "loop.hpp"},
+    "hierarchical_step": {"main.cpp", "options.cpp", "options.hpp", "solver.cpp", "solver.hpp", "loop.cpp", "loop.hpp"},
+    "planned_hierarchical_step": {"main.cpp", "options.cpp", "options.hpp", "solver.cpp", "solver.hpp", "planning.cpp", "planning.hpp", "loop.cpp", "loop.hpp"},
+    "planned_hierarchical_step_otg": {"main.cpp", "options.cpp", "options.hpp", "solver.cpp", "solver.hpp", "planning.cpp", "planning.hpp", "loop.cpp", "loop.hpp"},
     "plot_core_planning": {"main.cpp", "options.cpp", "options.hpp", "planning.cpp", "planning.hpp"},
     "replay_plan": {"main.cpp", "options.cpp", "options.hpp", "loop.cpp", "loop.hpp"},
-    "servo_step": {"main.cpp", "options.cpp", "options.hpp", "solver.cpp", "solver.hpp", "loop.cpp", "loop.hpp"},
-    "single_arm_servo_step": {"main.cpp", "options.cpp", "options.hpp", "solver.cpp", "solver.hpp", "loop.cpp", "loop.hpp"},
-    "target_solve": {"main.cpp", "options.cpp", "options.hpp", "solver.cpp", "solver.hpp", "loop.cpp", "loop.hpp"},
+    "step": {"main.cpp", "options.cpp", "options.hpp", "solver.cpp", "solver.hpp", "loop.cpp", "loop.hpp"},
+    "single_arm_step": {"main.cpp", "options.cpp", "options.hpp", "solver.cpp", "solver.hpp", "loop.cpp", "loop.hpp"},
+    "target": {"main.cpp", "options.cpp", "options.hpp", "solver.cpp", "solver.hpp", "loop.cpp", "loop.hpp"},
 }
 APP_MAIN_REQUIREMENTS = {
     "baseline": ("parseTeleopOptions", "parseReplayOptions", "BaselineSolver", "runLoop", "runReplayLoop"),
     "cartesian_planning": ("parseOptions", "CartesianPlanner", "planner.generate", "playTrajectory"),
-    "grouped_servo_step": ("parseOptions", "KinematicsSolverBuilder", "GroupedKinematicsSolver", "configureSolver", "builder.finalize", "runLoop"),
-    "planned_grouped_servo_step": ("parseOptions", "KinematicsSolverBuilder", "GroupedKinematicsSolver", "configureSolver", "builder.finalize", "CartesianPlanner", "runLoop"),
-    "planned_grouped_step_otg": ("parseOptions", "KinematicsSolverBuilder", "GroupedKinematicsSolver", "configureSolver", "builder.finalize", "CartesianPlanner", "JointPlanner", "runLoop"),
+    "hierarchical_step": ("parseOptions", "SolverRuntime", "configureSolver", "runLoop"),
+    "planned_hierarchical_step": ("parseOptions", "SolverRuntime", "configureSolver", "CartesianPlanner", "runLoop"),
+    "planned_hierarchical_step_otg": ("parseOptions", "SolverRuntime", "configureSolver", "CartesianPlanner", "JointPlanner", "runLoop"),
     "plot_core_planning": ("parseOptions", "CartesianPlanner", "JointPlanner", "cartesian_planner.generate", "joint_planner.generate"),
     "replay_plan": ("parseOptions", "runLoop"),
-    "servo_step": ("parseOptions", "parseReplayOptions", "MccServoSolver", "PlacoServoSolver", "runLoop", "runReplayLoop"),
-    "single_arm_servo_step": ("parseOptions", "KinematicsSolverBuilder", "KinematicsSolver", "configureSolver", "builder.finalize", "runLoop"),
-    "target_solve": ("parseOptions", "MccTargetSolver", "PlacoTargetSolver", "runLoop"),
+    "step": ("parseOptions", "parseReplayOptions", "MccServoSolver", "PlacoServoSolver", "runLoop", "runReplayLoop"),
+    "single_arm_step": ("parseOptions", "KinematicsSolverBuilder", "KinematicsSolver", "configureSolver", "builder.finalize", "runLoop"),
+    "target": ("parseOptions", "MccTargetSolver", "PlacoTargetSolver", "runLoop"),
 }
 
 

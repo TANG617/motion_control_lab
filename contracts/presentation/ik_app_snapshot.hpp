@@ -76,8 +76,6 @@ struct GroupedAttemptDebug
   std::uint64_t run_generation{0};
   std::uint64_t attempt_revision{0};
   std::uint64_t value_revision{0};
-  bool attempt_accepted{false};
-  bool has_accepted_value{false};
   std::string coupling_state;
   std::uint64_t consumed_source_value_revision{0};
   std::uint64_t captured_state_sequence{0};

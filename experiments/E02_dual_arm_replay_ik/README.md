@@ -1,6 +1,6 @@
 # E02: PSI R1 dual-arm canonical replay IK
 
-E02 replays the fixed PSI R1 MCAP dual-arm TCP targets through `mcl_servo_step replay`.
+E02 replays the fixed PSI R1 MCAP dual-arm TCP targets through `mcl_step replay`.
 The replay and teleop paths use the same ordinary ServoStep solver/task topology. The first
 `/mc/ik/joint_states` sample initializes the 20 configured joints by name, and each TCP target
 is converted with the declared `0.1 m` tool offset before solving.
@@ -13,15 +13,15 @@ From the Lab repository root, build replay visualization support with:
 
 ```bash
 cmake -S . -B /workspace/build/motion_control_lab \
-  -DMCL_BUILD_SERVO_STEP=ON \
+  -DMCL_BUILD_STEP=ON \
   -DCMAKE_PREFIX_PATH="/workspace/install/motion_control_core;/workspace/install/motion_control_viz"
-cmake --build /workspace/build/motion_control_lab --target mcl_servo_step -j8
+cmake --build /workspace/build/motion_control_lab --target mcl_step -j8
 ```
 
 Start a live, real-time replay:
 
 ```bash
-/workspace/build/motion_control_lab/mcl_servo_step replay \
+/workspace/build/motion_control_lab/mcl_step replay \
   --urdf /workspace/products/synrobot/modules/common/robot_description/psi_r1/urdf/Psi_R1_rev1.urdf \
   --input /workspace/fixtures/raw/motion_control-psi_r1-20260801-101533_0.mcap \
   --left-stream /mc/ik/target/left_pose \

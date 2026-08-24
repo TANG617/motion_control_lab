@@ -63,7 +63,7 @@ def main() -> int:
         str(free_port()),
         "--no-mcap",
     ]
-    if os.path.basename(executable) == "mcl_servo_step":
+    if os.path.basename(executable) == "mcl_step":
         command.insert(1, "teleop")
     option_index = 2 if len(command) > 1 and command[1] == "teleop" else 1
     if requested_solver != "default":

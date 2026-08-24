@@ -11,14 +11,14 @@ planned。
 | Canonical data | `data/canonical/`；MCAP/CSV 现在经相同 typed contracts 与 timeline 消费，正式 dataset promotion 仍 planned |
 | Definition format | `contracts/definitions/experiment.v1.schema.json` + 每个实验的 `definition.json` |
 | Definition validator | `tests/validate_contracts.py definition` |
-| Experiment executor | `e01_placo_smoke` 与可选 `e04_opensot_smoke` 执行同一 R1 左臂位置任务；E02 由 `mcl_servo_step replay` 执行 PSI R1 双臂 canonical replay |
+| Experiment executor | `e01_placo_smoke` 与可选 `e04_opensot_smoke` 执行同一 R1 左臂位置任务；E02 由 `mcl_step replay` 执行 PSI R1 双臂 canonical replay |
 | Execution adapter | `adapters/execution/` 中的 append-only artifact store、manifest writer 与通用 dependency provenance |
 | Physical source | `adapters/data/source/` 中平级的 `McapSource` / `CsvSource`；只处理物理格式 |
 | Typed decoder | `adapters/data/decoder/` 中的 registry、ROS2 CDR Pose/JointState 和 CSV mapping decoder |
 | Temporal projector | `adapters/data/temporal/` 中的 timestamp selection、严格时间校验、immutable Timeline、projection 与 ReplayClock |
 | Semantic projector | `adapters/data/projection/dual_arm_timeline.*`；只消费两个 `TypedStream<StampedPose>` |
 | Replay plan | `mcl_replay_plan`；预加载输入并输出 timeline trace/manifest，不运行 solver |
-| MCC interactive apps | `apps/single_arm_servo_step/`、`apps/servo_step/`、`apps/target_solve/` 各自拥有完整的普通 `KinematicsSolver` topology 和配置；`apps/grouped_servo_step/` 与 `apps/planned_grouped_servo_step/` 各自拥有完整 Red/Yellow topology |
+| MCC interactive apps | `apps/single_arm_step/`、`apps/step/`、`apps/target/` 各自拥有完整的普通 `KinematicsSolver` topology 和配置；`apps/hierarchical_step/` 与 `apps/planned_hierarchical_step/` 各自拥有完整 Red/Yellow topology |
 | Cartesian planning preview | `apps/cartesian_planning/` 读取版本化 JSON，调用 Core `CartesianPlanner`，输出 CSV/PNG 并循环发布 Foxglove；不加载 robot model 或调用 IK |
 | Input contracts | `motion_control_lab::input_contract` 定义 `MotionTargetFrame`、`InputStatus`、`SourceControl`、`TeleopIntent` 与归一化 `KeyEvent` |
 | Terminal / teleop | `terminal_frontend`、`keyboard_teleop`、`cartesian_teleop` 分别负责 raw terminal、intent 解释和 target 积分；与 TUI rendering 正交 |
@@ -68,7 +68,7 @@ E01/E04 使用同一个固定 R1 模型和按名称映射的关节状态，只�
 MCC 交互预览采用另一条非证据主链：
 
 ```text
-Single/Dual/Grouped app
+Single/Step/Target/Hierarchical app
         |-- app-local solver.*: MCC builder + typed task topology
         |-- optional app-local planning.*: CartesianPlanner / JointPlanner
         |-- app-local loop.*: MCC request + solver state
@@ -79,7 +79,7 @@ Single/Dual/Grouped app
         +-- solver-neutral/app-local projection -> RenderBatch -> Viz RenderSink
 ```
 
-Grouped 入口的计算数据流为：
+Hierarchical 入口的计算数据流为：
 
 ```text
 Yellow worker --soft proposal/coupling--> Red worker
@@ -96,10 +96,10 @@ Starting/Running/Fault 属于 Lab 外层，不进入 MCC。Lab 的 deadline poli
 `strict` 和用于非实时主机交互调试的 `monitor`；后者保留统计并跳过过期 release，但不会放宽
 rejected attempt 或 worker exception。
 
-当前两个 grouped app 的 Red 使用双手 scaled Hard position/orientation task。Yellow 使用 4 对
+当前两个 hierarchical app 的 Red 使用双手 scaled Hard position/orientation task。Yellow 使用 4 对
 app-local R1 link pair 的 Soft self-collision requirement（minimum/influence distance
 0.30/0.35 m，gain 2 s^-1，weight 100），当前不注册 posture task。Yellow→Red coupling weight
-为 10。raw grouped 的 Red 是 Hard position/velocity、Yellow 仅 Hard position；planned grouped
+为 10。raw hierarchical 的 Red 是 Hard position/velocity、Yellow 仅 Hard position；planned hierarchical
 额外为 Red 注册 PSI R1 acceleration limits，Yellow 仍仅 position。collision margin 是诊断，
 不构成硬安全授权。
 
@@ -134,7 +134,7 @@ frame，最后 projection。`fixed-period` 仅将第 `i` 帧标为 `i * period_n
 interpolation/resampling，也不会补齐缺失的左/右样本；unmatched 事实在 retime 前已经
 成为 error 或 diagnostics。
 
-`mcl_replay_plan` 与三个 ServoStep app 的 replay 子命令在启动 clock 前完整读取和解码输入。
+`mcl_replay_plan` 与三个 Step app 的 replay 子命令在启动 clock 前完整读取和解码输入。
 realtime 使用独立于 solver rate 的 projected target timeline；solver 消费 latest target，未消费
 的旧帧计入 dropped counter。TUI pause 只冻结 timeline，solver/planner 继续跟踪当前 goal；
 resume 重置 clock 原点以避免追赶暂停期间的 deadline。Viz 只消费 solver 输出，不推进 timeline

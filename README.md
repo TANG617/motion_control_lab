@@ -18,7 +18,7 @@ teleop、replay 的现行职责边界见
 仓库还提供可选的 IK 交互预览运行时。单臂入口直接使用普通 MCC `KinematicsSolver`；
 显式区分的双臂 ServoStep/TargetSolve 入口可以通过 `--solver mcc|placo` 选择实现，并在 MCC
 实现中通过 `--backend proxqp|eiquadprog` 选择 QP backend；各 app 拥有完整的 solver topology、
-任务和结果解释。grouped 双臂入口使用 MCC 独立 Red/Yellow worker。它们只复用 R1 固定参数、
+任务和结果解释。hierarchical 双臂入口使用 MCC 独立 Red/Yellow worker。它们只复用 R1 固定参数、
 TUI 与 wall-clock pacing；Lab-owned IK projection 把算法快照映射为通用
 `motion_control_viz::RenderBatch`，再交给 WebSocket、MCAP 或 Null transport。
 `mcl_baseline` 是独立的 PlaCo-only production-static 对照入口：它冻结生产
@@ -176,21 +176,21 @@ canonical dual-arm CSV 使用 `timestamp_ns` 以及 `left_frame_id,left_x,...,le
 }
 ```
 
-E02 现在直接使用普通 ServoStep app 的 replay 子命令；headless 与 TUI replay 使用同一套
+E02 现在直接使用普通 Step app 的 replay 子命令；headless 与 TUI replay 使用同一套
 solver/task 配置：
 
 ```bash
 cmake -S . -B build/replay-ik \
-  -DMCL_BUILD_SINGLE_ARM_SERVO_STEP=OFF \
-  -DMCL_BUILD_SERVO_STEP=ON \
-  -DMCL_BUILD_TARGET_SOLVE=OFF \
-  -DMCL_BUILD_GROUPED_SERVO_STEP=OFF \
-  -DMCL_BUILD_PLANNED_GROUPED_SERVO_STEP=OFF \
+  -DMCL_BUILD_SINGLE_ARM_STEP=OFF \
+  -DMCL_BUILD_STEP=ON \
+  -DMCL_BUILD_TARGET=OFF \
+  -DMCL_BUILD_HIERARCHICAL_STEP=OFF \
+  -DMCL_BUILD_PLANNED_HIERARCHICAL_STEP=OFF \
   -DCMAKE_PREFIX_PATH="/path/to/mcc-install;/path/to/eiq-install"
-cmake --build build/replay-ik --target mcl_servo_step -j8
+cmake --build build/replay-ik --target mcl_step -j8
 ```
 
-`mcl_servo_step replay` 支持 `batch|realtime`，并要求显式提供
+`mcl_step replay` 支持 `batch|realtime`，并要求显式提供
 `--target-period-ms`。第 `i` 帧的 projected time 固定为 `i * target_period`，不插值也不改变
 帧数；solver 周期由独立的 `--rate` 定义。MCAP 输入默认读取
 `/mc/ik/joint_states` 的第一帧，按 joint name 映射为初始
@@ -210,16 +210,16 @@ Space 暂停/继续，`.` 单帧推进。`--ui none` 只禁用渲染；replay �
 
 ```bash
 cmake -S . -B build/replay-ik-viz \
-  -DMCL_BUILD_SINGLE_ARM_SERVO_STEP=OFF \
-  -DMCL_BUILD_SERVO_STEP=ON \
-  -DMCL_BUILD_TARGET_SOLVE=OFF \
-  -DMCL_BUILD_GROUPED_SERVO_STEP=OFF \
-  -DMCL_BUILD_PLANNED_GROUPED_SERVO_STEP=OFF \
+  -DMCL_BUILD_SINGLE_ARM_STEP=OFF \
+  -DMCL_BUILD_STEP=ON \
+  -DMCL_BUILD_TARGET=OFF \
+  -DMCL_BUILD_HIERARCHICAL_STEP=OFF \
+  -DMCL_BUILD_PLANNED_HIERARCHICAL_STEP=OFF \
   -DCMAKE_PREFIX_PATH="/path/to/mcc-install;/path/to/eiq-install;/path/to/mcv-install"
-cmake --build build/replay-ik-viz --target mcl_servo_step -j8
+cmake --build build/replay-ik-viz --target mcl_step -j8
 ```
 
-运行 `mcl_servo_step replay --execution-mode realtime --ui tui ...`，Foxglove 连接
+运行 `mcl_step replay --execution-mode realtime --ui tui ...`，Foxglove 连接
 `ws://127.0.0.1:8765`。如需记录 visualization stream，传入 `--mcap <path>`；否则使用
 `--no-mcap`。该 MCAP 只是可选开发预览录制，不是正式实验 trace、manifest 或 artifact。
 完整 E02 命令见
@@ -320,69 +320,69 @@ cmake --build /tmp/mcv_build -j8
 cmake --install /tmp/mcv_build
 
 cmake -S . -B build/mcc-preview \
-  -DMCL_BUILD_SINGLE_ARM_SERVO_STEP=ON \
-  -DMCL_BUILD_SERVO_STEP=ON \
-  -DMCL_BUILD_TARGET_SOLVE=ON \
-  -DMCL_BUILD_GROUPED_SERVO_STEP=ON \
-  -DMCL_BUILD_PLANNED_GROUPED_SERVO_STEP=ON \
+  -DMCL_BUILD_SINGLE_ARM_STEP=ON \
+  -DMCL_BUILD_STEP=ON \
+  -DMCL_BUILD_TARGET=ON \
+  -DMCL_BUILD_HIERARCHICAL_STEP=ON \
+  -DMCL_BUILD_PLANNED_HIERARCHICAL_STEP=ON \
   -DCMAKE_PREFIX_PATH="/tmp/mcc_install;/tmp/eiq_install;/tmp/mcv_install"
 cmake --build build/mcc-preview \
-  --target mcl_single_arm_servo_step mcl_servo_step \
-    mcl_target_solve mcl_grouped_servo_step mcl_planned_grouped_servo_step -j8
+  --target mcl_single_arm_step mcl_step \
+    mcl_target mcl_hierarchical_step mcl_planned_hierarchical_step -j8
 ```
 
 每个入口可以独立配置。只构建单臂入口：
 
 ```bash
 cmake -S . -B build/single-arm \
-  -DMCL_BUILD_SINGLE_ARM_SERVO_STEP=ON \
+  -DMCL_BUILD_SINGLE_ARM_STEP=ON \
   -DCMAKE_PREFIX_PATH="/tmp/mcc_install;/tmp/eiq_install;/tmp/mcv_install"
-cmake --build build/single-arm --target mcl_single_arm_servo_step -j8
+cmake --build build/single-arm --target mcl_single_arm_step -j8
 ```
 
 只构建两个双臂入口：
 
 ```bash
 cmake -S . -B build/dual-arm \
-  -DMCL_BUILD_SERVO_STEP=ON \
-  -DMCL_BUILD_TARGET_SOLVE=ON \
+  -DMCL_BUILD_STEP=ON \
+  -DMCL_BUILD_TARGET=ON \
   -DCMAKE_PREFIX_PATH="/tmp/mcc_install;/tmp/eiq_install;/tmp/mcv_install"
 cmake --build build/dual-arm \
-  --target mcl_servo_step mcl_target_solve -j8
+  --target mcl_step mcl_target -j8
 ```
 
 从交互终端运行：
 
 ```bash
-./build/mcc-preview/mcl_single_arm_servo_step \
+./build/mcc-preview/mcl_single_arm_step \
   --urdf /path/to/Psi_R1_rev1.urdf --rate 20
-./build/mcc-preview/mcl_servo_step teleop \
+./build/mcc-preview/mcl_step teleop \
   --solver mcc --backend proxqp \
   --urdf /path/to/Psi_R1_rev1.urdf --rate 20 \
-  --mcap /new/run/path/servo-step-mcc-proxqp.mcap
-./build/mcc-preview/mcl_servo_step teleop \
+  --mcap /new/run/path/step-mcc-proxqp.mcap
+./build/mcc-preview/mcl_step teleop \
   --solver mcc --backend eiquadprog \
   --urdf /path/to/Psi_R1_rev1.urdf --rate 20 \
-  --mcap /new/run/path/servo-step-mcc-eiquadprog.mcap
-./build/mcc-preview/mcl_servo_step teleop \
+  --mcap /new/run/path/step-mcc-eiquadprog.mcap
+./build/mcc-preview/mcl_step teleop \
   --solver placo --urdf /path/to/Psi_R1_rev1.urdf --rate 20 \
-  --mcap /new/run/path/servo-step-placo.mcap
-./build/mcc-preview/mcl_target_solve \
+  --mcap /new/run/path/step-placo.mcap
+./build/mcc-preview/mcl_target \
   --solver mcc --backend proxqp \
   --urdf /path/to/Psi_R1_rev1.urdf --rate 20 \
-  --mcap /new/run/path/target-solve-mcc-proxqp.mcap
-./build/mcc-preview/mcl_target_solve \
+  --mcap /new/run/path/target-mcc-proxqp.mcap
+./build/mcc-preview/mcl_target \
   --solver mcc --backend eiquadprog \
   --urdf /path/to/Psi_R1_rev1.urdf --rate 20 \
-  --mcap /new/run/path/target-solve-mcc-eiquadprog.mcap
-./build/mcc-preview/mcl_target_solve \
+  --mcap /new/run/path/target-mcc-eiquadprog.mcap
+./build/mcc-preview/mcl_target \
   --solver placo --urdf /path/to/Psi_R1_rev1.urdf --rate 20 \
-  --mcap /new/run/path/target-solve-placo.mcap
-./build/mcc-preview/mcl_grouped_servo_step teleop \
+  --mcap /new/run/path/target-placo.mcap
+./build/mcc-preview/mcl_hierarchical_step teleop \
   --urdf /path/to/Psi_R1_rev1.urdf \
   --red-rate 1000 --yellow-rate 100 --ui-rate 20 \
   --deadline-policy monitor
-./build/mcc-preview/mcl_planned_grouped_servo_step teleop \
+./build/mcc-preview/mcl_planned_hierarchical_step teleop \
   --urdf /path/to/Psi_R1_rev1.urdf \
   --red-rate 1000 --yellow-rate 100 --ui none \
   --deadline-policy monitor
@@ -409,7 +409,7 @@ app-local flags 覆盖。ServoStep 每次只执行一个 QP update，`--rate` �
 `servo_period`/PlaCo `dt`，并启用 Hard joint-velocity limits。TargetSolve 不注册 velocity limits，
 增加默认权重 `1e-5` 的 initial-pose Soft joints task；默认最多迭代 10000 次，并使用
 100 ms soft budget、`1e-4` Cartesian tolerance 和 `1e-8` minimum-improvement 终止规则。
-这些实验参数由 `apps/target_solve/options.*` 解析；其 `--rate` 只控制交互求解和发布频率。
+这些实验参数由 `apps/target/options.*` 解析；其 `--rate` 只控制交互求解和发布频率。
 
 各求解路径复用相同 TUI 和五个 IK/FK Viz 通道。TUI 标题及 Solver 页明确显示
 `MCC/ProxQP`、`MCC/eiquadprog` 或 `PlaCo/eiquadprog`；对应的 visualization run ID 仍按
@@ -419,7 +419,7 @@ solver implementation 分别为
 error，便于分别
 运行两次后按同一口径观察。
 
-grouped 入口使用 app-local `RedYellow` profile，要求 `red-rate > yellow-rate > 0`，默认分别为
+hierarchical 入口使用 app-local `RedYellow` profile，要求 `red-rate > yellow-rate > 0`，默认分别为
 1000 Hz 和 100 Hz。每组 period 同时是该 worker 的 deadline。默认
 `--deadline-policy strict`：任一 rejected attempt、deadline miss 或 worker exception 都触发
 first-writer Fault、停止并 join 两个 worker、保留最后 accepted Red state、关闭 sink 并返回非零。
@@ -435,10 +435,10 @@ Yellow、Red 启动前会顺序预热一次；正式 run 中两者完全异步�
 Red 使用双手 Scaled position/orientation task：每只手的 position/orientation 默认共享一个
 `progress_weight=3` 的 scale，左右手则独立退化；TUI 会报告两路 scale 的
 full/degraded/stuck 状态。Red 默认使用 `1e-6` 的 ProxQP absolute tolerance 并显式关闭 warm
-start；Cartesian equality 与 limit 的默认 accepted hard-violation 上限为 `5e-4`。raw grouped 的 Red 注册
-position+velocity limits；planned grouped 还注册既定 PSI R1 acceleration limits。两者 Yellow
+start；Cartesian equality 与 limit 的默认 accepted hard-violation 上限为 `5e-4`。raw hierarchical 的 Red 注册
+position+velocity limits；planned hierarchical 还注册既定 PSI R1 acceleration limits。两者 Yellow
 都只注册 position limits。joint position limit 默认使用 `1e-2 rad` 内部 margin。这些数值、
-worker rates、deadline policy 与 collision 参数由每个 grouped app 自己的 `options.*` 暴露，
+worker rates、deadline policy 与 collision 参数由每个 hierarchical app 自己的 `options.*` 暴露，
 不会进入 scheduler 或共享配置对象。
 
 Yellow 当前使用 4 对 app-local R1 link pair 的 Soft self-collision velocity damping：minimum
@@ -471,7 +471,7 @@ app 从 R1 URDF 所在 `robot_description/psi_r1/urdf` 布局推导 mesh package
 app compiled defaults < script preset/environment < trailing explicit arguments
 ```
 
-两个 planned grouped app 的 `run_mcap_replay.sh` 可直接运行：默认回放
+两个 planned hierarchical app 的 `run_mcap_replay.sh` 可直接运行：默认回放
 `sliced_RW1AZHYCSEFT5_RW1AZHYCSEFT5260310002_20260731015829_0.mcap`，使用左右
 `/hal/tracker/htc/*/calib_target_pose` 和首帧 `/mc/ik/joint_states`，以 10 ms、nearest/5 ms、
 realtime、monitor、start-paused preset 启动。其 `run_keyboard.sh` 使用相同的 URDF、Red/Yellow
@@ -496,10 +496,10 @@ FK/IK。多个 `segments` 表示同一次请求中的并行同步 frame move，�
 
 ```bash
 cmake -S . -B build/cartesian-planning \
-  -DMCL_BUILD_SINGLE_ARM_SERVO_STEP=OFF \
-  -DMCL_BUILD_SERVO_STEP=OFF \
-  -DMCL_BUILD_TARGET_SOLVE=OFF \
-  -DMCL_BUILD_GROUPED_SERVO_STEP=OFF \
+  -DMCL_BUILD_SINGLE_ARM_STEP=OFF \
+  -DMCL_BUILD_STEP=OFF \
+  -DMCL_BUILD_TARGET=OFF \
+  -DMCL_BUILD_HIERARCHICAL_STEP=OFF \
   -DMCL_BUILD_CARTESIAN_PLANNING=ON \
   -DCMAKE_PREFIX_PATH="/path/to/mcc-install;/path/to/eiq-install;/path/to/mcv-install"
 cmake --build build/cartesian-planning --target mcl_cartesian_planning -j8
@@ -542,12 +542,12 @@ apps/cartesian_planning/  main/options/planning/loop；JSON MoveLine 规划、�
 apps/plot_core_planning/  main/options/planning；可选 Core planning API matplotlib smoke app
 apps/replay_plan/         main/options/loop；不运行 solver 的 timeline inspect/artifact 入口
 apps/baseline/            main/options/solver/loop；PlaCo production-static teleop/replay 对照基线
-apps/servo_step/          main/options/solver/loop；普通双臂 ServoStep teleop/replay
-apps/target_solve/        main/options/solver/loop；普通双臂 TargetSolve
-apps/single_arm_servo_step/ main/options/solver/loop；单臂 ServoStep
-apps/grouped_servo_step/  main/options/solver/loop；raw Red/Yellow ServoStep
-apps/planned_grouped_servo_step/ main/options/solver/planning/loop；在线 Cartesian replan
-apps/planned_grouped_step_otg/ main/options/solver/planning/loop；Cartesian replan + JointPlanner OTG
+apps/step/          main/options/solver/loop；普通双臂 ServoStep teleop/replay
+apps/target/        main/options/solver/loop；普通双臂 TargetSolve
+apps/single_arm_step/ main/options/solver/loop；单臂 ServoStep
+apps/hierarchical_step/  main/options/solver/loop；raw Red/Yellow ServoStep
+apps/planned_hierarchical_step/ main/options/solver/planning/loop；在线 Cartesian replan
+apps/planned_hierarchical_step_otg/ main/options/solver/planning/loop；Cartesian replan + JointPlanner OTG
 contracts/                definition、manifest、metric 与 visualization 合同
 data/raw/                 原始数据占位；不得静默改写
 data/canonical/           规范数据占位

@@ -6,14 +6,14 @@
 #include <string>
 #include <vector>
 
-#include "../apps/servo_step/solver.hpp"
+#include "../apps/step/solver.hpp"
 #include "placo/model/robot_wrapper.h"
 
 namespace mcl = motion_control_lab;
-using motion_control_lab::servo_step::MccBackend;
-using motion_control_lab::servo_step::MccServoSolver;
-using motion_control_lab::servo_step::PlacoServoSolver;
-using motion_control_lab::servo_step::ServoSolveResult;
+using motion_control_lab::step::MccBackend;
+using motion_control_lab::step::MccServoSolver;
+using motion_control_lab::step::PlacoServoSolver;
+using motion_control_lab::step::ServoSolveResult;
 
 namespace
 {
@@ -47,9 +47,9 @@ void validatePositionAndVelocityLimits(
     const auto position_limits = model.get_joint_limits(joint_name);
     require(
       result.positions[index] >= position_limits.first +
-          mcl::servo_step::AlgorithmOptions{}.joint_position_margin_rad - 1.0e-8 &&
+          mcl::step::AlgorithmOptions{}.joint_position_margin_rad - 1.0e-8 &&
         result.positions[index] <= position_limits.second -
-          mcl::servo_step::AlgorithmOptions{}.joint_position_margin_rad + 1.0e-8,
+          mcl::step::AlgorithmOptions{}.joint_position_margin_rad + 1.0e-8,
       joint_name + " violated its position limit margin");
     const int velocity_index = model.get_joint_v_offset(joint_name);
     require(velocity_index >= 0, joint_name + " has no velocity index");
@@ -120,7 +120,7 @@ int main(int argc, char ** argv)
     placo::model::RobotWrapper limit_model(
       urdf_path,
       placo::model::RobotWrapper::IGNORE_COLLISIONS | placo::model::RobotWrapper::IGNORE_GEOMETRY);
-    const mcl::servo_step::AlgorithmOptions algorithm;
+    const mcl::step::AlgorithmOptions algorithm;
     MccServoSolver mcc_proxqp_solver(
       urdf_path, rate_hz, robot, MccBackend::Proxqp, algorithm);
     MccServoSolver mcc_eiquadprog_solver(

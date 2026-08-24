@@ -14,12 +14,12 @@ Lab app 不直接操作 Foxglove SDK。solver-neutral `mcl_preview_projection` �
 或 Null sink。`--viz none` 以及 `MCL_ENABLE_FOXGLOVE_TRANSPORT=OFF` 不得改变求解、replay
 timeline 或 canonical artifact 行为。
 
-`mcl_planned_grouped_servo_step` 另外发布在线规划后实际提交给 Red 的 reference；其独立扩展
-合同见 [`foxglove_planned_grouped_servo_step_contract.md`](./foxglove_planned_grouped_servo_step_contract.md)。
+`mcl_planned_hierarchical_step` 另外发布在线规划后实际提交给 Red 的 reference；其独立扩展
+合同见 [`foxglove_planned_hierarchical_step_contract.md`](./foxglove_planned_hierarchical_step_contract.md)。
 
-`mcl_planned_grouped_step_otg` 将基础 joint/FK 通道固定为 accepted raw IK，并在同一个
+`mcl_planned_hierarchical_step_otg` 将基础 joint/FK 通道固定为 accepted raw IK，并在同一个
 RenderBatch 中发布 JointPlanner 执行状态；其独立扩展合同见
-[`foxglove_planned_grouped_step_otg_contract.md`](./foxglove_planned_grouped_step_otg_contract.md)。
+[`foxglove_planned_hierarchical_step_otg_contract.md`](./foxglove_planned_hierarchical_step_otg_contract.md)。
 
 ## 必需数据流
 

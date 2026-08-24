@@ -155,7 +155,7 @@ planned-grouped TUI presenter 根据 snapshot capability 决定是否增加 Join
 projection 和 clamp 页面；它只格式化数据，不 include MCC、不解释 MCC diagnostics。真正的
 FTXUI 渲染实现只存在一份，也不通过 callback、mode 或配置对象隐藏 app 差异。
 
-两个 planned-grouped app 的 `options.*` 直接嵌入 `PlannedGroupedTuiConfig`，loop 侧只保留
+两个 planned-hierarchical app 的 `options.*` 直接嵌入 `PlannedGroupedTuiConfig`，loop 侧只保留
 短调用；app 先完成 MCC diagnostics 到 solver-neutral snapshot 的解释：
 
 ```cpp
@@ -221,15 +221,18 @@ scheduler、terminal、TUI、Viz 和 artifact writer 由 app 选择；scaffoldin
 ```cpp
 int main(int argc, char** argv) {
   const Options options = parseOptions(argc, argv);
-  motion_control::core::KinematicsSolverBuilder builder;
+  const auto model = loadRobotModel(options);
   SolverHandles handles;
-  configureSolver(builder, handles, model, collision_model, robot, options);
-  motion_control::core::GroupedKinematicsSolver solver;
-  requireOk(builder.finalize(solver));
+  SolverRuntime runtime;
+  configureSolver(runtime, handles, model, collision_model, robot, options);
   motion_control::core::CartesianPlanner cartesian_planner;
-  return runLoop(options, robot, solver, handles, cartesian_planner);
+  return runLoop(options, robot, runtime, handles, cartesian_planner);
 }
 ```
+
+在需要多速率 reference 的 app 中，`SolverRuntime` 仍由该 app 自己定义：它持有单个
+actuator-facing `HierarchicalKinematicsSolver`、producer solver、runtime envelope 和
+`SnapshotBuffer<T>`。它不是共享的跨 app runtime facade。
 
 ### Build and directory scaffolding
 
@@ -332,22 +335,22 @@ override，也不因其他 app 的实验需求改变。
 
 ```mermaid
 flowchart LR
-  Servo[apps/servo_step]
-  Target[apps/target_solve]
-  Grouped[apps/grouped_servo_step]
-  Planned[apps/planned_grouped_servo_step]
-  OTG[apps/planned_grouped_step_otg]
+  Servo[apps/step]
+  Target[apps/target]
+  Hierarchical[apps/hierarchical_step]
+  Planned[apps/planned_hierarchical_step]
+  OTG[apps/planned_hierarchical_step_otg]
   Common[Shared component targets]
 
   Servo --> Common
   Target --> Common
-  Grouped --> Common
+  Hierarchical --> Common
   Planned --> Common
   OTG --> Common
 
   Servo -. no include or link .-> Target
-  Target -. no include or link .-> Grouped
-  Grouped -. no include or link .-> Planned
+  Target -. no include or link .-> Hierarchical
+  Hierarchical -. no include or link .-> Planned
   Planned -. no include or link .-> OTG
 ```
 
@@ -359,9 +362,9 @@ flowchart LR
 不增加统一 CLI。用户面对的是每个 app 自己的脚本，例如：
 
 ```text
-apps/planned_grouped_servo_step/scripts/run_keyboard.sh
-apps/planned_grouped_servo_step/scripts/run_mcap_replay.sh
-apps/planned_grouped_servo_step/scripts/run_csv_replay.sh
+apps/planned_hierarchical_step/scripts/run_keyboard.sh
+apps/planned_hierarchical_step/scripts/run_mcap_replay.sh
+apps/planned_hierarchical_step/scripts/run_csv_replay.sh
 ```
 
 脚本负责表达可读、可审查的实验 preset：
@@ -395,7 +398,7 @@ gain/weight/enforcement/mask、collision 参数、planning/OTG limits、worker r
 | App 类别 | 目标 source | 说明 |
 | --- | --- | --- |
 | single-arm ServoStep、TargetSolve | keyboard teleop | 保留各自 ordinary solver 语义 |
-| ServoStep、Grouped、Planned、OTG | keyboard teleop、MCAP replay、CSV replay | 三种输入最终进入同一 MotionTargetFrame contract |
+| Step、Hierarchical Step、Planned Hierarchical Step、Planned Hierarchical Step OTG | keyboard teleop、MCAP replay、CSV replay | 三种输入最终进入同一 MotionTargetFrame contract |
 | production-static baseline | keyboard teleop、MCAP replay、CSV replay | 算法与生产配置冻结 |
 | Cartesian planning | JSON request | 不伪装成 teleop/replay app |
 | replay-plan | headless MCAP/CSV | 只检查 timeline 和 artifact，不运行 solver |

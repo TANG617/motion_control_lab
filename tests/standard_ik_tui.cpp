@@ -116,7 +116,7 @@ mcl::IkDebugFrame makeFrame()
     solver.ik_solve_time_percentiles = {20, 20, 100, 0.30, 0.42, 0.50};
     solver.run_counters = mcl::SolverRunCounters{10, 9, 1};
     solver.grouped_attempt =
-      mcl::GroupedAttemptDebug{"none", 2, 10, 9, true, true, "active", 8, 77, 1000};
+      mcl::GroupedAttemptDebug{"none", 2, 10, 9, "active", 8, 77, 1000};
     solver.task_scales.push_back({"arm", true, 0.95, 4.0, false, false});
     solver.requirements.push_back(
       {"joint_velocity", "rad/s", "model", true, true, 0.001, 2.0});
