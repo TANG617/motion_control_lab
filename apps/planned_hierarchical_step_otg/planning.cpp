@@ -5,10 +5,28 @@
 #include <limits>
 #include <stdexcept>
 
-#include "options.hpp"
-
 namespace motion_control_lab::planned_hierarchical_step_otg {
 namespace {
+
+motion_control::core::TrajectorySynchronization
+toCoreSynchronization(PlanningSynchronization value) {
+  switch (value) {
+  case PlanningSynchronization::Time:
+    return motion_control::core::TrajectorySynchronization::Time;
+  case PlanningSynchronization::Phase:
+    return motion_control::core::TrajectorySynchronization::Phase;
+  }
+  throw std::logic_error("unknown planning synchronization");
+}
+
+motion_control::core::JointTrajectoryAlgorithm
+toCoreJointAlgorithm(JointPlanningAlgorithm value) {
+  switch (value) {
+  case JointPlanningAlgorithm::JerkLimited:
+    return motion_control::core::JointTrajectoryAlgorithm::JerkLimited;
+  }
+  throw std::logic_error("unknown joint planning algorithm");
+}
 
 void requireSize(const std::vector<double> &values, std::size_t expected,
                  const char *name) {
@@ -40,12 +58,12 @@ void requireLimits(const JointTargetLimits &limits, std::size_t count) {
 
 } // namespace
 
-JointTargetBuilder::JointTargetBuilder(JointTargetMode mode,
+JointTargetBuilder::JointTargetBuilder(const JointTargetOptions &options,
                                        double sample_period,
-                                       std::size_t joint_count,
-                                       double velocity_deadband)
-    : mode_(mode), sample_period_(sample_period), joint_count_(joint_count),
-      velocity_deadband_(velocity_deadband),
+                                       std::size_t joint_count)
+    : mode_(options.mode), sample_period_(sample_period),
+      joint_count_(joint_count),
+      velocity_deadband_(options.future_o1_velocity_deadband_rad_per_s),
       previous_target_velocity_(joint_count, 0.0) {
   if (!std::isfinite(sample_period_) || sample_period_ <= 0.0 ||
       joint_count_ == 0U || !std::isfinite(velocity_deadband_) ||
@@ -133,8 +151,9 @@ mapActiveIkToFull(const std::vector<double> &current_positions,
 
 JointTargetLimits
 makeJointTargetLimits(const motion_control::core::RobotModel &model,
-                      const R1RobotConfig &robot) {
-  if (robot.joint_names.size() != kR1JointCount) {
+                      const R1RobotConfig &robot,
+                      const JointStreamProfileOptions &profile) {
+  if (robot.joint_names.size() != profile.joint_names.size()) {
     throw std::runtime_error("R1 joint OTG profile requires exactly 20 joints");
   }
   JointTargetLimits result;
@@ -145,16 +164,17 @@ makeJointTargetLimits(const motion_control::core::RobotModel &model,
   result.max_jerk.reserve(robot.joint_names.size());
   const auto &runtime_limits = model.jointLimits();
   for (std::size_t index = 0U; index < robot.joint_names.size(); ++index) {
-    if (robot.joint_names[index] != kR1StreamJointNames[index]) {
+    if (robot.joint_names[index] != profile.joint_names[index]) {
       throw std::runtime_error(
           "runtime R1 joint order does not match stream profile at index " +
           std::to_string(index));
     }
     result.position_lower.push_back(runtime_limits[index].lower);
     result.position_upper.push_back(runtime_limits[index].upper);
-    result.max_velocity.push_back(kR1StreamMaxVelocityRadPerS[index]);
-    result.max_acceleration.push_back(kR1StreamMaxAccelerationRadPerS2[index]);
-    result.max_jerk.push_back(kR1StreamMaxJerkRadPerS3[index]);
+    result.max_velocity.push_back(profile.max_velocity_rad_per_s[index]);
+    result.max_acceleration.push_back(
+        profile.max_acceleration_rad_per_s2[index]);
+    result.max_jerk.push_back(profile.max_jerk_rad_per_s3[index]);
   }
   return result;
 }
@@ -244,53 +264,53 @@ bool ReplaySettlingCounter::update(bool input_consumed, bool cartesian_finished,
                                    double maximum_velocity_rad_per_s,
                                    double maximum_acceleration_rad_per_s2) {
   const bool settled = input_consumed && cartesian_finished &&
-                       left_position_error_m <= kReplaySettlingFkPositionM &&
+                       left_position_error_m <= options_.fk_position_m &&
                        left_orientation_error_rad <=
-                           kReplaySettlingFkOrientationRad &&
-                       right_position_error_m <= kReplaySettlingFkPositionM &&
+                           options_.fk_orientation_rad &&
+                       right_position_error_m <= options_.fk_position_m &&
                        right_orientation_error_rad <=
-                           kReplaySettlingFkOrientationRad &&
+                           options_.fk_orientation_rad &&
                        maximum_velocity_rad_per_s <=
-                           kReplaySettlingVelocityRadPerS &&
+                           options_.velocity_rad_per_s &&
                        maximum_acceleration_rad_per_s2 <=
-                           kReplaySettlingAccelerationRadPerS2;
+                           options_.acceleration_rad_per_s2;
   consecutive_cycles_ = settled ? consecutive_cycles_ + 1U : 0U;
-  return consecutive_cycles_ >= required_cycles_;
+  return consecutive_cycles_ >= options_.required_cycles;
 }
 
-const char *jointTargetModeName(JointTargetMode mode) {
-  switch (mode) {
-  case JointTargetMode::FutureO1Pv:
-    return "future-o1-pv";
-  case JointTargetMode::IkPv:
-    return "ik-pv";
-  }
-  return "unknown";
+motion_control::core::JointPlannerConfig
+makeJointPlannerConfig(const PlanningOptions &options) {
+  motion_control::core::JointPlannerConfig config;
+  config.algorithm = toCoreJointAlgorithm(options.joint_algorithm);
+  config.synchronization =
+      toCoreSynchronization(options.joint_synchronization);
+  return config;
 }
 
 motion_control::core::CartesianRetargetRequest makeRetargetRequest(
     const motion_control::core::Pose &left_goal,
     const motion_control::core::Pose &right_goal,
     const motion_control::core::CartesianTrajectorySample &accepted,
-    const R1RobotConfig &robot, const PlanningLimitOptions &limits,
+    const R1RobotConfig &robot, const PlanningOptions &options,
     double rate_hz) {
   namespace mcc = motion_control::core;
   mcc::CartesianRetargetRequest request;
   request.reference_frame_name = robot.base_frame;
   request.sample_period = 1.0 / rate_hz;
-  request.synchronization = mcc::TrajectorySynchronization::Time;
+  request.synchronization =
+      toCoreSynchronization(options.cartesian_synchronization);
   request.limits.max_linear_velocity =
-      Eigen::Vector3d::Constant(limits.max_linear_velocity_mps);
+      Eigen::Vector3d::Constant(options.max_linear_velocity_mps);
   request.limits.max_linear_acceleration =
-      Eigen::Vector3d::Constant(limits.max_linear_acceleration_mps2);
+      Eigen::Vector3d::Constant(options.max_linear_acceleration_mps2);
   request.limits.max_linear_jerk =
-      Eigen::Vector3d::Constant(limits.max_linear_jerk_mps3);
+      Eigen::Vector3d::Constant(options.max_linear_jerk_mps3);
   request.limits.max_rotation_vector_velocity =
-      Eigen::Vector3d::Constant(limits.max_angular_velocity_rps);
+      Eigen::Vector3d::Constant(options.max_angular_velocity_rps);
   request.limits.max_rotation_vector_acceleration =
-      Eigen::Vector3d::Constant(limits.max_angular_acceleration_rps2);
+      Eigen::Vector3d::Constant(options.max_angular_acceleration_rps2);
   request.limits.max_rotation_vector_jerk =
-      Eigen::Vector3d::Constant(limits.max_angular_jerk_rps3);
+      Eigen::Vector3d::Constant(options.max_angular_jerk_rps3);
   request.segments = {{robot.left_end_effector_frame,
                        accepted.frames.at(0).pose, accepted.frames.at(0).twist,
                        accepted.frames.at(0).acceleration, left_goal},

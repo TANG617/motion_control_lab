@@ -128,8 +128,11 @@ private:
 };
 
 void requireOk(const mcc::Status &status, const std::string &context);
-mcc::JointNames activeJointNames(const R1RobotConfig &robot);
-std::vector<Eigen::Index> activeJointFullIndices(const R1RobotConfig &robot);
+mcc::JointNames activeJointNames(const R1RobotConfig &robot,
+                                 const RobotOptions &options);
+std::vector<Eigen::Index>
+activeJointFullIndices(const R1RobotConfig &robot,
+                       const RobotOptions &options);
 std::shared_ptr<const mcc::RobotModel>
 loadRobotModel(const R1RobotConfig &robot, const Options &options);
 std::shared_ptr<const mcc::SelfCollisionModel>

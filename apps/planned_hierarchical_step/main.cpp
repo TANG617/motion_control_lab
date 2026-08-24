@@ -24,8 +24,10 @@ int run(int argc, char **argv, std::string &normal_exit_detail) {
 
   const auto model = app::loadRobotModel(robot, options);
   const auto collision_model = app::loadCollisionModel(model, options);
-  const auto active_joint_names = app::activeJointNames(robot);
-  const auto active_joint_full_indices = app::activeJointFullIndices(robot);
+  const auto active_joint_names =
+      app::activeJointNames(robot, options.interactive.robot);
+  const auto active_joint_full_indices =
+      app::activeJointFullIndices(robot, options.interactive.robot);
 
   app::SolverHandles handles;
   app::SolverRuntime runtime;

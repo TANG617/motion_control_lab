@@ -39,31 +39,42 @@ void clampTriplet(SpatialVector &values, std::size_t offset,
   }
 }
 
+motion_control::core::TrajectorySynchronization
+toCoreSynchronization(PlanningSynchronization synchronization) {
+  switch (synchronization) {
+  case PlanningSynchronization::Time:
+    return motion_control::core::TrajectorySynchronization::Time;
+  case PlanningSynchronization::Phase:
+    return motion_control::core::TrajectorySynchronization::Phase;
+  }
+  throw std::logic_error("unknown planning synchronization");
+}
+
 } // namespace
 
 motion_control::core::CartesianRetargetRequest makeRetargetRequest(
     const motion_control::core::Pose &left_goal,
     const motion_control::core::Pose &right_goal,
     const motion_control::core::CartesianTrajectorySample &accepted,
-    const R1RobotConfig &robot, const PlanningLimitOptions &limits,
+    const R1RobotConfig &robot, const PlanningOptions &options,
     double rate_hz) {
   namespace mcc = motion_control::core;
   mcc::CartesianRetargetRequest request;
   request.reference_frame_name = robot.base_frame;
   request.sample_period = 1.0 / rate_hz;
-  request.synchronization = mcc::TrajectorySynchronization::Time;
+  request.synchronization = toCoreSynchronization(options.synchronization);
   request.limits.max_linear_velocity =
-      Eigen::Vector3d::Constant(limits.max_linear_velocity_mps);
+      Eigen::Vector3d::Constant(options.max_linear_velocity_mps);
   request.limits.max_linear_acceleration =
-      Eigen::Vector3d::Constant(limits.max_linear_acceleration_mps2);
+      Eigen::Vector3d::Constant(options.max_linear_acceleration_mps2);
   request.limits.max_linear_jerk =
-      Eigen::Vector3d::Constant(limits.max_linear_jerk_mps3);
+      Eigen::Vector3d::Constant(options.max_linear_jerk_mps3);
   request.limits.max_rotation_vector_velocity =
-      Eigen::Vector3d::Constant(limits.max_angular_velocity_rps);
+      Eigen::Vector3d::Constant(options.max_angular_velocity_rps);
   request.limits.max_rotation_vector_acceleration =
-      Eigen::Vector3d::Constant(limits.max_angular_acceleration_rps2);
+      Eigen::Vector3d::Constant(options.max_angular_acceleration_rps2);
   request.limits.max_rotation_vector_jerk =
-      Eigen::Vector3d::Constant(limits.max_angular_jerk_rps3);
+      Eigen::Vector3d::Constant(options.max_angular_jerk_rps3);
   request.segments = {{robot.left_end_effector_frame,
                        accepted.frames.at(0).pose, accepted.frames.at(0).twist,
                        accepted.frames.at(0).acceleration, left_goal},

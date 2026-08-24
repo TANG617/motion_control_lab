@@ -133,6 +133,23 @@ int main()
           {"Tertiary", false, false, "not-run", "", 0.0, 0, false},
           {"Terminal", true, true, "optimal", "PROXQP_SOLVED", 0.18, 1,
            false}};
+      solver.qp_passes.at(0).solve_time_percentiles =
+          {120, 120, 4096, 0.31, 0.41, 0.51};
+      solver.qp_passes.at(1).solve_time_percentiles =
+          {120, 120, 4096, 0.29, 0.39, 0.49};
+      solver.qp_passes.at(3).solve_time_percentiles =
+          {120, 120, 4096, 0.28, 0.38, 0.48};
+      auto &primary = solver.qp_passes.at(0);
+      primary.succeeded = false;
+      primary.status = "maximum-iterations";
+      primary.native_status = "PROXQP_MAX_ITER_REACHED";
+      primary.objective_value = -12.5;
+      primary.primal_residual = 7.5e-4;
+      primary.dual_residual = 2.5e-3;
+      primary.last_iterate_available = true;
+      primary.constraint_violations.push_back(
+          {"task-equation", "-", "upper", "left-position", "y", "m/s",
+           1.0e-3, -2.5e-4, 2.5e-4, 7.5e-4});
     }
     solver.grouped_attempt =
         mcl::GroupedAttemptDebug{"none", 2, 10, 9, "active", 8, 77, 1000};
@@ -272,13 +289,38 @@ int main()
       section(page(document, "Solver and Quadratic Programming"),
               "Hierarchical QP pass timing")
           .tables.at(0);
-  require(passes.columns.size() == 8U && passes.rows.size() == 4U,
+  require(passes.columns.size() == 12U && passes.rows.size() == 4U,
           "hierarchical pass timing sheet shape mismatch");
   require(passes.rows.at(0).at(1) == "Primary" &&
               passes.rows.at(0).at(3) == "0.2100" &&
+              passes.rows.at(0).at(4) == "0.3100" &&
+              passes.rows.at(0).at(5) == "0.4100" &&
+              passes.rows.at(0).at(6) == "0.5100" &&
+              passes.rows.at(0).at(7) == "120" &&
               passes.rows.at(2).at(2) == "not attempted" &&
+              passes.rows.at(2).at(4) == "-" &&
               passes.rows.at(3).at(1) == "Terminal",
           "hierarchical pass timing values were not preserved");
+  const auto &failed_pass =
+      section(page(document, "Solver and Quadratic Programming"),
+              "Failed QP pass numerical evidence")
+          .tables.at(0);
+  require(failed_pass.columns.size() == 8U && failed_pass.rows.size() == 1U &&
+              failed_pass.rows.at(0).at(1) == "Primary" &&
+              failed_pass.rows.at(0).at(2) == "0.000750000" &&
+              failed_pass.rows.at(0).at(4) == "yes",
+          "failed pass numerical evidence was not preserved");
+  const auto &failed_constraints =
+      section(page(document, "Solver and Quadratic Programming"),
+              "Failed QP last-iterate constraint evidence (diagnostic only)")
+          .tables.at(0);
+  require(failed_constraints.columns.size() == 12U &&
+              failed_constraints.rows.size() == 1U &&
+              failed_constraints.rows.at(0).at(2) == "left-position" &&
+              failed_constraints.rows.at(0).at(3) == "y" &&
+              failed_constraints.rows.at(0).at(4) == "0.000750000" &&
+              failed_constraints.rows.at(0).at(6) == "task-equation",
+          "failed last-iterate constraint evidence was not preserved");
   const auto & execution =
       section(page(document, "Joint State"), "Executed joint state").tables.at(0);
   require(execution.rows.size() == 20U && execution.rows.back().front() == "joint_19",

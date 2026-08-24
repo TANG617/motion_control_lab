@@ -24,19 +24,19 @@ int run(int argc, char **argv, std::string &normal_exit_detail) {
 
   const auto model = app::loadRobotModel(robot, options);
   const auto collision_model = app::loadCollisionModel(model, options);
-  const auto joint_limits = app::makeJointTargetLimits(*model, robot);
-  const auto active_joint_names = app::activeJointNames(robot);
-  const auto active_joint_full_indices = app::activeJointFullIndices(robot);
+  const auto joint_limits = app::makeJointTargetLimits(
+      *model, robot, options.interactive.robot.joint_stream);
+  const auto active_joint_names =
+      app::activeJointNames(robot, options.interactive.robot);
+  const auto active_joint_full_indices =
+      app::activeJointFullIndices(robot, options.interactive.robot);
 
   app::SolverHandles handles;
   app::SolverRuntime runtime;
   app::configureSolver(runtime, handles, model, active_joint_names,
                        collision_model, robot, options);
   mcc::CartesianPlanner cartesian_planner;
-  mcc::JointPlannerConfig joint_planner_config;
-  joint_planner_config.algorithm = mcc::JointTrajectoryAlgorithm::JerkLimited;
-  joint_planner_config.synchronization = mcc::TrajectorySynchronization::Phase;
-  mcc::JointPlanner joint_planner(joint_planner_config);
+  mcc::JointPlanner joint_planner(app::makeJointPlannerConfig(options.planning));
 
   return app::runLoop(std::move(options), robot, runtime, handles,
                       cartesian_planner, joint_planner, joint_limits,

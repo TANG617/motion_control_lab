@@ -1,5 +1,6 @@
 #include "../planning.hpp"
 
+#include <array>
 #include <cmath>
 #include <cstdlib>
 #include <iostream>
@@ -23,7 +24,8 @@ void requireNear(double actual, double expected, const std::string &message,
 }
 
 void testFutureO1StartupFormulaAffineAndDeadband() {
-  app::JointTargetBuilder builder(app::JointTargetMode::FutureO1Pv, 0.001, 2U);
+  const app::JointTargetOptions options;
+  app::JointTargetBuilder builder(options, 0.001, 2U);
   const std::vector<double> unused_velocity{8.0, -8.0};
   auto target = builder.preview({1.0, -2.0}, unused_velocity);
   require(target.future_o1_startup && target.positions[0] == 1.0 &&
@@ -54,7 +56,9 @@ void testFutureO1StartupFormulaAffineAndDeadband() {
 }
 
 void testIkPvPassThroughAndTransactionalHistory() {
-  app::JointTargetBuilder direct(app::JointTargetMode::IkPv, 0.001, 2U);
+  app::JointTargetOptions direct_options;
+  direct_options.mode = app::JointTargetMode::IkPv;
+  app::JointTargetBuilder direct(direct_options, 0.001, 2U);
   const auto target = direct.preview({1.0, 2.0}, {3.0, 4.0});
   require(target.positions == std::vector<double>({1.0, 2.0}) &&
               target.velocities == std::vector<double>({3.0, 4.0}) &&
@@ -62,7 +66,8 @@ void testIkPvPassThroughAndTransactionalHistory() {
               !target.future_o1_startup,
           "IK-PV target was not passed through");
 
-  app::JointTargetBuilder future(app::JointTargetMode::FutureO1Pv, 0.001, 1U);
+  const app::JointTargetOptions future_options;
+  app::JointTargetBuilder future(future_options, 0.001, 1U);
   (void)future.preview({1.0}, {0.0});
   require(future.acceptedSampleCount() == 0U,
           "preview committed Future-O1 history");
@@ -147,6 +152,9 @@ void testConfiguredLimitProjection() {
 }
 
 void testR1ProfileOrderAndReplaySettling() {
+  const app::Options options;
+  const auto &profile = options.interactive.robot.joint_stream;
+  const auto &settling_options = options.replay_settling;
   const std::vector<std::string> expected_names{
       "head_yaw_joint",    "head_pitch_joint",  "torso_yaw_joint",
       "torso_pitch_joint", "knee_pitch_joint",  "ankle_pitch_joint",
@@ -156,47 +164,50 @@ void testR1ProfileOrderAndReplaySettling() {
       "right_arm_joint3",  "right_arm_joint4",  "right_arm_joint5",
       "right_arm_joint6",  "right_arm_joint7"};
   for (std::size_t index = 0U; index < expected_names.size(); ++index) {
-    require(app::kR1StreamJointNames[index] == expected_names[index],
+    require(profile.joint_names[index] == expected_names[index],
             "R1 stream profile joint order mismatch");
   }
-  require(app::kR1StreamMaxVelocityRadPerS[6] == 5.05 &&
-              app::kR1StreamMaxAccelerationRadPerS2[10] == 16.2,
+  constexpr std::array<double, 20> expected_accelerations{
+      9.0,  9.0,  9.0,  6.0,   6.0,   6.0,   15.15, 15.15, 18.63, 18.72,
+      24.3, 24.3, 24.3, 15.15, 15.15, 18.63, 18.72, 24.3,  24.3,  24.3};
+  require(profile.max_velocity_rad_per_s[6] == 5.05 &&
+              profile.max_acceleration_rad_per_s2 == expected_accelerations,
           "R1 stream profile order/value mismatch");
-  for (const double maximum_jerk : app::kR1StreamMaxJerkRadPerS3) {
+  for (const double maximum_jerk : profile.max_jerk_rad_per_s3) {
     require(maximum_jerk == 3200.0, "OTG jerk override mismatch");
   }
 
-  app::ReplaySettlingCounter settling;
+  app::ReplaySettlingCounter settling(settling_options);
   for (std::size_t cycle = 0U;
-       cycle + 1U < app::kReplayRequiredSettledCycles; ++cycle) {
+       cycle + 1U < settling_options.required_cycles; ++cycle) {
     require(!settling.update(
-                true, true, app::kReplaySettlingFkPositionM,
-                app::kReplaySettlingFkOrientationRad,
-                app::kReplaySettlingFkPositionM,
-                app::kReplaySettlingFkOrientationRad,
-                app::kReplaySettlingVelocityRadPerS,
-                app::kReplaySettlingAccelerationRadPerS2),
+                true, true, settling_options.fk_position_m,
+                settling_options.fk_orientation_rad,
+                settling_options.fk_position_m,
+                settling_options.fk_orientation_rad,
+                settling_options.velocity_rad_per_s,
+                settling_options.acceleration_rad_per_s2),
             "replay settled too early");
   }
   require(settling.update(
-              true, true, app::kReplaySettlingFkPositionM,
-              app::kReplaySettlingFkOrientationRad,
-              app::kReplaySettlingFkPositionM,
-              app::kReplaySettlingFkOrientationRad,
-              app::kReplaySettlingVelocityRadPerS,
-              app::kReplaySettlingAccelerationRadPerS2),
+              true, true, settling_options.fk_position_m,
+              settling_options.fk_orientation_rad,
+              settling_options.fk_position_m,
+              settling_options.fk_orientation_rad,
+              settling_options.velocity_rad_per_s,
+              settling_options.acceleration_rad_per_s2),
           "replay did not settle after the required stable window");
   require(!settling.update(true, true,
-                           app::kReplaySettlingFkPositionM * 1.1, 0.0, 0.0,
+                           settling_options.fk_position_m * 1.1, 0.0, 0.0,
                            0.0, 0.0, 0.0) &&
               settling.consecutiveCycles() == 0U,
           "settling counter did not reset on violation");
   require(!settling.update(true, true, 0.0, 0.0, 0.0, 0.0,
-                           app::kReplaySettlingVelocityRadPerS * 1.1, 0.0),
+                           settling_options.velocity_rad_per_s * 1.1, 0.0),
           "velocity above the settling threshold was accepted");
   require(!settling.update(
               true, true, 0.0, 0.0, 0.0, 0.0, 0.0,
-              app::kReplaySettlingAccelerationRadPerS2 * 1.1),
+              settling_options.acceleration_rad_per_s2 * 1.1),
           "acceleration above the settling threshold was accepted");
 }
 

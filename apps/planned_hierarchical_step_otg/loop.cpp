@@ -146,6 +146,83 @@ const char *hierarchicalPassName(mcc::HierarchicalSolvePass value) {
   return "unknown";
 }
 
+const char *hierarchicalConstraintKindName(
+    mcc::HierarchicalConstraintKind value) {
+  switch (value) {
+  case mcc::HierarchicalConstraintKind::TaskEquation:
+    return "task-equation";
+  case mcc::HierarchicalConstraintKind::JointBound:
+    return "joint-bound";
+  case mcc::HierarchicalConstraintKind::TaskScaleBound:
+    return "scale-bound";
+  }
+  return "unknown";
+}
+
+const char *hierarchicalBoundSourceName(mcc::HierarchicalBoundSource value) {
+  switch (value) {
+  case mcc::HierarchicalBoundSource::None:
+    return "-";
+  case mcc::HierarchicalBoundSource::JointPosition:
+    return "joint-position";
+  case mcc::HierarchicalBoundSource::JointPositionBraking:
+    return "position-braking";
+  case mcc::HierarchicalBoundSource::JointVelocity:
+    return "joint-velocity";
+  case mcc::HierarchicalBoundSource::JointAcceleration:
+    return "joint-acceleration";
+  case mcc::HierarchicalBoundSource::TaskScale:
+    return "task-scale";
+  }
+  return "unknown";
+}
+
+const char *hierarchicalBoundSideName(mcc::HierarchicalBoundSide value) {
+  switch (value) {
+  case mcc::HierarchicalBoundSide::Lower:
+    return "lower";
+  case mcc::HierarchicalBoundSide::Upper:
+    return "upper";
+  }
+  return "unknown";
+}
+
+const char *hierarchicalViolationUnit(
+    const mcc::HierarchicalConstraintViolation &violation) {
+  if (violation.kind == mcc::HierarchicalConstraintKind::TaskScaleBound) {
+    return "1";
+  }
+  if (violation.kind == mcc::HierarchicalConstraintKind::JointBound ||
+      violation.task_kind != mcc::HierarchicalTaskKind::Position) {
+    return "rad/s";
+  }
+  return "m/s";
+}
+
+using QpPassTimePercentiles = std::array<mcl::RollingPercentiles, 4>;
+
+void recordQpPassTimes(QpPassTimePercentiles &percentiles,
+                       const SolverDiagnostics &diagnostics) {
+  for (std::size_t index = 0; index < diagnostics.hierarchy.passes.size();
+       ++index) {
+    const auto &pass = diagnostics.hierarchy.passes[index];
+    if (pass.attempted) {
+      percentiles[index].record(pass.solve_time_ms);
+    }
+  }
+}
+
+void updateQpPassTimePercentiles(
+    mcl::SolverDebug &output,
+    const QpPassTimePercentiles &percentiles) {
+  const std::size_t count =
+      std::min(output.qp_passes.size(), percentiles.size());
+  for (std::size_t index = 0; index < count; ++index) {
+    output.qp_passes[index].solve_time_percentiles =
+        percentiles[index].snapshot();
+  }
+}
+
 const char *hierarchicalRejectionReasonName(SolverRejectionReason value) {
   switch (value) {
   case SolverRejectionReason::None:
@@ -197,9 +274,9 @@ void updateSolverDebug(mcl::SolverDebug &output,
     output.qp_status = qpStatusName(last_pass->backend_status);
     output.native_status = last_pass->native_status;
     output.has_qp_diagnostics = true;
-    output.objective_value = 0.0;
-    output.primal_residual = 0.0;
-    output.dual_residual = 0.0;
+    output.objective_value = last_pass->objective_value;
+    output.primal_residual = last_pass->primal_residual;
+    output.dual_residual = last_pass->dual_residual;
     output.maximum_hard_violation = diagnostics.maximum_hard_violation;
     output.qp_solve_time_ms = diagnostics.qp_solve_time_ms;
     output.qp_iterations = diagnostics.iterations;
@@ -214,6 +291,22 @@ void updateSolverDebug(mcl::SolverDebug &output,
           {hierarchicalPassName(pass.pass), pass.attempted, pass.succeeded,
            qpStatusName(pass.backend_status), pass.native_status,
            pass.solve_time_ms, pass.iterations, pass.warm_start_used});
+      auto &pass_output = output.qp_passes.back();
+      pass_output.objective_value = pass.objective_value;
+      pass_output.primal_residual = pass.primal_residual;
+      pass_output.dual_residual = pass.dual_residual;
+      pass_output.last_iterate_available = pass.last_iterate_available;
+      pass_output.constraint_violations.reserve(
+          pass.constraint_violations.size());
+      for (const auto &violation : pass.constraint_violations) {
+        pass_output.constraint_violations.push_back(
+            {hierarchicalConstraintKindName(violation.kind),
+             hierarchicalBoundSourceName(violation.bound_source),
+             hierarchicalBoundSideName(violation.bound_side),
+             violation.source_name, violation.component_name,
+             hierarchicalViolationUnit(violation), violation.value,
+             violation.lower, violation.upper, violation.violation});
+      }
     }
     output.task_scales.resize(diagnostics.hierarchy.task_scales.size());
     for (std::size_t index = 0;
@@ -392,8 +485,7 @@ const char *retargetClampComponentName(
 }
 
 const char *compactJointName(std::size_t index) {
-  constexpr std::array<const char *,
-                       mcl::planned_hierarchical_step_otg::kR1JointCount>
+  constexpr std::array<const char *, 20>
       kNames{"HY", "HP", "TY", "TP", "KP", "AP", "L1", "L2", "L3", "L4",
              "L5", "L6", "L7", "R1", "R2", "R3", "R4", "R5", "R6", "R7"};
   return kNames.at(index);
@@ -725,6 +817,39 @@ std::string rejectedAttemptDetail(const mcc::Status &status,
              << scale.active
              << ",weighted_progress_scale=" << scale.weighted_progress_scale
              << '}';
+    }
+    output << "] failed_pass_evidence=[";
+    bool first_failed_pass = true;
+    for (const auto &pass : diagnostics.hierarchy.passes) {
+      if (!pass.attempted || pass.succeeded) {
+        continue;
+      }
+      if (!first_failed_pass) {
+        output << ',';
+      }
+      first_failed_pass = false;
+      output << "{pass=" << hierarchicalPassName(pass.pass)
+             << ",objective=" << pass.objective_value
+             << ",primal_residual=" << pass.primal_residual
+             << ",dual_residual=" << pass.dual_residual
+             << ",last_iterate=" << std::boolalpha
+             << pass.last_iterate_available
+             << ",observed_violations=" << pass.constraint_violations.size();
+      if (!pass.constraint_violations.empty()) {
+        const auto &violation = pass.constraint_violations.front();
+        output << ",largest={kind="
+               << hierarchicalConstraintKindName(violation.kind)
+               << ",bound_source="
+               << hierarchicalBoundSourceName(violation.bound_source)
+               << ",source=\"" << violation.source_name
+               << "\",component=\"" << violation.component_name
+               << "\",side=" << hierarchicalBoundSideName(violation.bound_side)
+               << ",unit=" << hierarchicalViolationUnit(violation)
+               << ",value=" << violation.value << ",lower=" << violation.lower
+               << ",upper=" << violation.upper
+               << ",violation=" << violation.violation << '}';
+      }
+      output << '}';
     }
     output << ']';
     return output.str();
@@ -1129,6 +1254,7 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
   mcl::PeriodicWorkerDiagnostics yellow_worker_diagnostics;
   mcl::RollingPercentiles red_solve_time_percentiles;
   mcl::RollingPercentiles yellow_solve_time_percentiles;
+  QpPassTimePercentiles red_qp_pass_time_percentiles;
   WorkerThreads workers(stop_controller);
   std::mutex replay_trace_mutex;
   std::ostringstream replay_trace;
@@ -1137,26 +1263,28 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
   std::atomic<std::uint64_t> replay_last_consumed_revision{0};
   std::atomic<std::size_t> replay_settled_cycle_count{0U};
   std::atomic_bool replay_settled{false};
-  replay_trace
-      << "attempt,source_revision,original_logical_timestamp_ns,"
-         "source_time_from_start_ns,"
-         "projected_timestamp_ns,left_header_stamp_ns,left_log_time_"
-         "ns,left_publish_time_ns,"
-         "right_header_stamp_ns,right_log_time_ns,right_publish_time_"
-         "ns,accepted,failure_layer,solver_status,joint_target_mode,"
-         "solve_time_ms,maximum_hard_violation,goal_left_xyz,"
-         "reference_left_xyz,"
-         "reference_left_twist,reference_left_acceleration,raw_fk_left_pose,"
-         "raw_fk_right_pose,otg_fk_left_pose,otg_fk_right_pose,"
-         "raw_ik_positions,raw_ik_velocities,"
-         "raw_target_positions,raw_target_velocities,raw_target_accelerations,"
-         "projected_target_positions,projected_target_velocities,"
-         "projected_target_accelerations,otg_positions,otg_velocities,"
-         "otg_accelerations,otg_jerks,future_o1_startup,"
-         "joint_planner_state,joint_trajectory_duration_s,"
-         "joint_plan_time_ms,joint_step_time_ms,projection_events,"
-         "projection_event_count,projection_cycle_count,deadline_miss_count,"
-         "skipped_release_count,replay_settled_cycles\n";
+  if (planned_options.replay_trace_enabled) {
+    replay_trace
+        << "attempt,source_revision,original_logical_timestamp_ns,"
+           "source_time_from_start_ns,"
+           "projected_timestamp_ns,left_header_stamp_ns,left_log_time_"
+           "ns,left_publish_time_ns,"
+           "right_header_stamp_ns,right_log_time_ns,right_publish_time_"
+           "ns,accepted,failure_layer,solver_status,joint_target_mode,"
+           "solve_time_ms,maximum_hard_violation,goal_left_xyz,"
+           "reference_left_xyz,"
+           "reference_left_twist,reference_left_acceleration,raw_fk_left_pose,"
+           "raw_fk_right_pose,otg_fk_left_pose,otg_fk_right_pose,"
+           "raw_ik_positions,raw_ik_velocities,"
+           "raw_target_positions,raw_target_velocities,raw_target_accelerations,"
+           "projected_target_positions,projected_target_velocities,"
+           "projected_target_accelerations,otg_positions,otg_velocities,"
+           "otg_accelerations,otg_jerks,future_o1_startup,"
+           "joint_planner_state,joint_trajectory_duration_s,"
+           "joint_plan_time_ms,joint_step_time_ms,projection_events,"
+           "projection_event_count,projection_cycle_count,deadline_miss_count,"
+           "skipped_release_count,replay_settled_cycles\n";
+  }
 
   visualization_sink->open();
   mcl::installRuntimeSignalHandlers();
@@ -1231,9 +1359,10 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
     std::uint64_t planned_goal_revision = 0;
 
     mcl::planned_hierarchical_step_otg::JointTargetBuilder joint_target_builder(
-        planned_options.joint_target_mode, 1.0 / options.red_rate_hz,
+        planned_options.joint_target, 1.0 / options.red_rate_hz,
         joint_names.size());
-    mcl::planned_hierarchical_step_otg::ReplaySettlingCounter replay_settling;
+    mcl::planned_hierarchical_step_otg::ReplaySettlingCounter replay_settling(
+        planned_options.replay_settling);
 
     const auto makeReplayRow = [&](std::uint64_t attempt_revision) {
       std::vector<std::string> row(48U);
@@ -1260,7 +1389,7 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
       row[10] =
           replay::optionalTimestamp(source.value.right.time.publish_time_ns);
       row[14] = mcl::planned_hierarchical_step_otg::jointTargetModeName(
-          planned_options.joint_target_mode);
+          planned_options.joint_target.mode);
       return row;
     };
     const auto recordFailure = [&](const std::string &layer,
@@ -1269,6 +1398,9 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
         return;
       }
       ++replay_rejected_solve_count;
+      if (!planned_options.replay_trace_enabled) {
+        return;
+      }
       auto row = makeReplayRow(target.revision);
       row[11] = "false";
       row[12] = layer;
@@ -1366,6 +1498,7 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
           const auto ik_status =
               solver.solveRed(request, solution, diagnostics);
           red_solve_time_percentiles.record(diagnostics.solve_time_ms);
+          recordQpPassTimes(red_qp_pass_time_percentiles, diagnostics);
           const bool ik_accepted = ik_status.ok();
           if (!ik_accepted) {
             attempt.state =
@@ -1580,49 +1713,51 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
                 replay_settling.consecutiveCycles());
             replay_settled.store(settled);
 
-            auto row = makeReplayRow(diagnostics.attempt_revision);
-            row[11] = "true";
-            row[12] = "";
-            row[13] = "ok";
-            row[15] = std::to_string(diagnostics.solve_time_ms);
-            row[16] = std::to_string(diagnostics.maximum_hard_violation);
-            row[17] = traceEigenVector(target.left.translation());
-            row[18] = traceEigenVector(reference.left.translation());
-            row[19] = traceEigenVector(staged_for_attempt.frames.at(0).twist);
-            row[20] =
-                traceEigenVector(staged_for_attempt.frames.at(0).acceleration);
-            row[21] = tracePose(raw_left_pose);
-            row[22] = tracePose(raw_right_pose);
-            row[23] = tracePose(executed_left_pose);
-            row[24] = tracePose(executed_right_pose);
-            row[25] = traceEigenVector(output.raw_ik_positions);
-            row[26] = traceEigenVector(output.raw_ik_velocities);
-            row[27] = traceStdVector(raw_target.positions);
-            row[28] = traceStdVector(raw_target.velocities);
-            row[29] = traceStdVector(raw_target.accelerations);
-            row[30] = traceStdVector(projected_target.positions);
-            row[31] = traceStdVector(projected_target.velocities);
-            row[32] = traceStdVector(projected_target.accelerations);
-            row[33] = traceEigenVector(otg_state.positions);
-            row[34] = traceEigenVector(otg_state.velocities);
-            row[35] = traceEigenVector(otg_state.accelerations);
-            row[36] = traceEigenVector(otg_state.jerks);
-            row[37] = raw_target.future_o1_startup ? "true" : "false";
-            row[38] = plannerStateName(joint_step_diagnostics.state);
-            row[39] = std::to_string(joint_plan_diagnostics.duration);
-            row[40] =
-                std::to_string(joint_plan_diagnostics.calculation_time_ms);
-            row[41] =
-                std::to_string(joint_step_diagnostics.calculation_time_ms);
-            row[42] = traceProjectionEvents(projection, joint_names);
-            row[43] = std::to_string(output.projection_event_count);
-            row[44] = std::to_string(output.projection_cycle_count);
-            const auto worker_stats = red_worker_diagnostics.snapshot();
-            row[45] = std::to_string(worker_stats.deadline_miss_count);
-            row[46] = std::to_string(worker_stats.skipped_release_count);
-            row[47] = std::to_string(replay_settling.consecutiveCycles());
-            std::lock_guard<std::mutex> lock(replay_trace_mutex);
-            appendCsvRow(replay_trace, row);
+            if (planned_options.replay_trace_enabled) {
+              auto row = makeReplayRow(diagnostics.attempt_revision);
+              row[11] = "true";
+              row[12] = "";
+              row[13] = "ok";
+              row[15] = std::to_string(diagnostics.solve_time_ms);
+              row[16] = std::to_string(diagnostics.maximum_hard_violation);
+              row[17] = traceEigenVector(target.left.translation());
+              row[18] = traceEigenVector(reference.left.translation());
+              row[19] = traceEigenVector(staged_for_attempt.frames.at(0).twist);
+              row[20] =
+                  traceEigenVector(staged_for_attempt.frames.at(0).acceleration);
+              row[21] = tracePose(raw_left_pose);
+              row[22] = tracePose(raw_right_pose);
+              row[23] = tracePose(executed_left_pose);
+              row[24] = tracePose(executed_right_pose);
+              row[25] = traceEigenVector(output.raw_ik_positions);
+              row[26] = traceEigenVector(output.raw_ik_velocities);
+              row[27] = traceStdVector(raw_target.positions);
+              row[28] = traceStdVector(raw_target.velocities);
+              row[29] = traceStdVector(raw_target.accelerations);
+              row[30] = traceStdVector(projected_target.positions);
+              row[31] = traceStdVector(projected_target.velocities);
+              row[32] = traceStdVector(projected_target.accelerations);
+              row[33] = traceEigenVector(otg_state.positions);
+              row[34] = traceEigenVector(otg_state.velocities);
+              row[35] = traceEigenVector(otg_state.accelerations);
+              row[36] = traceEigenVector(otg_state.jerks);
+              row[37] = raw_target.future_o1_startup ? "true" : "false";
+              row[38] = plannerStateName(joint_step_diagnostics.state);
+              row[39] = std::to_string(joint_plan_diagnostics.duration);
+              row[40] =
+                  std::to_string(joint_plan_diagnostics.calculation_time_ms);
+              row[41] =
+                  std::to_string(joint_step_diagnostics.calculation_time_ms);
+              row[42] = traceProjectionEvents(projection, joint_names);
+              row[43] = std::to_string(output.projection_event_count);
+              row[44] = std::to_string(output.projection_cycle_count);
+              const auto worker_stats = red_worker_diagnostics.snapshot();
+              row[45] = std::to_string(worker_stats.deadline_miss_count);
+              row[46] = std::to_string(worker_stats.skipped_release_count);
+              row[47] = std::to_string(replay_settling.consecutiveCycles());
+              std::lock_guard<std::mutex> lock(replay_trace_mutex);
+              appendCsvRow(replay_trace, row);
+            }
           }
 
           const double total_solver_time_ms =
@@ -1663,6 +1798,8 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
   frame.solvers = {initial_output.solver_debug, initial_yellow_solver_debug};
   frame.solvers[0].ik_solve_time_percentiles =
       red_solve_time_percentiles.snapshot();
+  updateQpPassTimePercentiles(frame.solvers[0],
+                              red_qp_pass_time_percentiles);
   frame.solvers[1].ik_solve_time_percentiles =
       yellow_solve_time_percentiles.snapshot();
   frame.cpu_affinities = {mcl::makeCpuAffinityDebug(ui_affinity_binding),
@@ -1674,7 +1811,7 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
                               ? "mcap replay"
                               : "keyboard teleop";
   tui_debug.target_mode = mcl::planned_hierarchical_step_otg::jointTargetModeName(
-      planned_options.joint_target_mode);
+      planned_options.joint_target.mode);
   tui_debug.feedback_topology = "split IK reference / OTG execution";
   tui_debug.cartesian_limits = {
       planned_options.planning.max_linear_velocity_mps,
@@ -1810,6 +1947,8 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
                        latest_yellow_solver_debug};
       frame.solvers[0].ik_solve_time_percentiles =
           red_solve_time_percentiles.snapshot();
+      updateQpPassTimePercentiles(frame.solvers[0],
+                                  red_qp_pass_time_percentiles);
       frame.solvers[1].ik_solve_time_percentiles =
           yellow_solve_time_percentiles.snapshot();
       frame.cpu_affinities = {
@@ -1891,7 +2030,7 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
       frame.ik_status +=
           " joint_otg=" +
           std::string{mcl::planned_hierarchical_step_otg::jointTargetModeName(
-              planned_options.joint_target_mode)} +
+              planned_options.joint_target.mode)} +
           " feedback=split-ik-reference/otg-execution" + " state=" +
           plannerStateName(latest_output.joint_step_diagnostics.state) +
           " plan_ms=" +
@@ -1903,7 +2042,11 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
           " projection_events=" +
           std::to_string(latest_output.projection_event_count);
       frame.status +=
-          " | JointPlanner Phase per-tick plan+first-step duration_s=" +
+          " | JointPlanner " +
+          std::string{
+              mcl::planned_hierarchical_step_otg::planningSynchronizationName(
+                  planned_options.planning.joint_synchronization)} +
+          " per-tick plan+first-step duration_s=" +
           std::to_string(latest_output.joint_plan_diagnostics.duration) +
           " startup=" +
           (latest_output.future_o1_startup ? std::string{"true"} : "false") +
@@ -2109,9 +2252,11 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
   const auto red_stats = red_worker_diagnostics.snapshot();
   if (planned_options.replay.has_value()) {
     const auto trace_path = planned_options.replay->output_dir / "trace.csv";
-    {
+    std::string trace_sha256;
+    if (planned_options.replay_trace_enabled) {
       std::lock_guard<std::mutex> lock(replay_trace_mutex);
       replay::writeTextFile(trace_path, replay_trace.str());
+      trace_sha256 = mcl::sha256_file(trace_path);
     }
     replay::ReplayExecutionMetadata execution;
     execution.app = kProgramId;
@@ -2151,17 +2296,27 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
          std::to_string(planned_options.planning.max_angular_velocity_rps)},
         {"joint_target_mode",
          mcl::planned_hierarchical_step_otg::jointTargetModeName(
-             planned_options.joint_target_mode)},
+             planned_options.joint_target.mode)},
+        {"replay_trace",
+         planned_options.replay_trace_enabled ? "on" : "off"},
     };
     auto manifest =
         replay::makeReplayManifest(*planned_options.replay, *loaded_replay,
-                                   execution, mcl::sha256_file(trace_path));
+                                   execution, trace_sha256);
+    if (!planned_options.replay_trace_enabled) {
+      manifest["artifacts"].removeMember("trace.csv");
+    }
     auto &joint_otg = manifest["joint_otg"];
     joint_otg["target_mode"] =
         mcl::planned_hierarchical_step_otg::jointTargetModeName(
-            planned_options.joint_target_mode);
+            planned_options.joint_target.mode);
     joint_otg["sample_period_s"] = 1.0 / options.red_rate_hz;
-    joint_otg["synchronization"] = "Phase";
+    joint_otg["algorithm"] =
+        mcl::planned_hierarchical_step_otg::jointPlanningAlgorithmName(
+            planned_options.planning.joint_algorithm);
+    joint_otg["synchronization"] =
+        mcl::planned_hierarchical_step_otg::planningSynchronizationName(
+            planned_options.planning.joint_synchronization);
     joint_otg["execution_semantics"] =
         "per Red tick JointPlanner::plan plus first JointPlanner::step sample; "
         "not persistent "
@@ -2173,16 +2328,17 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
     joint_otg["future_o1_startup"] =
         "first two accepted live samples use latest P and zero V";
     joint_otg["future_o1_velocity_deadband_rad_per_s"] =
-        mcl::planned_hierarchical_step_otg::kFutureO1VelocityDeadbandRadPerS;
+        planned_options.joint_target.future_o1_velocity_deadband_rad_per_s;
     joint_otg["profile_source_revision"] =
-        mcl::planned_hierarchical_step_otg::kR1StreamProfileRevision;
+        options.robot.joint_stream.source_revision;
     joint_otg["profile_source_path"] =
-        "products/synrobot/modules/control/motion_control/config/robots/"
-        "psi_r1.yaml";
+        options.robot.joint_stream.source_path;
     joint_otg["profile_source_sha256"] =
-        mcl::planned_hierarchical_step_otg::kR1StreamProfileSha256;
-    joint_otg["profile_overrides"]["max_jerk_rad_per_s3"] = 3200.0;
-    joint_otg["profile_overrides"]["reason"] = "OTG Lab fixed jerk override";
+        options.robot.joint_stream.source_sha256;
+    joint_otg["profile_overrides"]["max_jerk_rad_per_s3"] =
+        options.robot.joint_stream.max_jerk_rad_per_s3.front();
+    joint_otg["profile_overrides"]["reason"] =
+        options.robot.joint_stream.jerk_override_reason;
     joint_otg["position_limits_source"] = "runtime-loaded R1 URDF model";
     joint_otg["projection_event_count"] =
         Json::UInt64(latest_output.projection_event_count);
@@ -2191,15 +2347,15 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
     joint_otg["replay_settled_cycles"] =
         Json::UInt64(replay_settled_cycle_count.load());
     joint_otg["replay_required_settled_cycles"] =
-        Json::UInt64(kReplayRequiredSettledCycles);
+        Json::UInt64(planned_options.replay_settling.required_cycles);
     joint_otg["replay_completion_thresholds"]["fk_position_m"] =
-        kReplaySettlingFkPositionM;
+        planned_options.replay_settling.fk_position_m;
     joint_otg["replay_completion_thresholds"]["fk_orientation_rad"] =
-        kReplaySettlingFkOrientationRad;
+        planned_options.replay_settling.fk_orientation_rad;
     joint_otg["replay_completion_thresholds"]["velocity_rad_per_s"] =
-        kReplaySettlingVelocityRadPerS;
+        planned_options.replay_settling.velocity_rad_per_s;
     joint_otg["replay_completion_thresholds"]["acceleration_rad_per_s2"] =
-        kReplaySettlingAccelerationRadPerS2;
+        planned_options.replay_settling.acceleration_rad_per_s2;
     joint_otg["deadline_miss_count"] =
         Json::UInt64(red_stats.deadline_miss_count);
     joint_otg["skipped_release_count"] =
@@ -2214,12 +2370,11 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
       joint_otg["position_upper"].append(
           joint_otg_limits.position_upper[index]);
       joint_otg["max_velocity_rad_per_s"].append(
-          mcl::planned_hierarchical_step_otg::kR1StreamMaxVelocityRadPerS[index]);
+          options.robot.joint_stream.max_velocity_rad_per_s[index]);
       joint_otg["max_acceleration_rad_per_s2"].append(
-          mcl::planned_hierarchical_step_otg::kR1StreamMaxAccelerationRadPerS2
-              [index]);
+          options.robot.joint_stream.max_acceleration_rad_per_s2[index]);
       joint_otg["max_jerk_rad_per_s3"].append(
-          mcl::planned_hierarchical_step_otg::kR1StreamMaxJerkRadPerS3[index]);
+          options.robot.joint_stream.max_jerk_rad_per_s3[index]);
     }
     replay::writeTextFile(planned_options.replay->output_dir / "manifest.json",
                           jsonText(manifest));

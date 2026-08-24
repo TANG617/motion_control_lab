@@ -102,6 +102,11 @@ void validate(const HierarchicalOptions &options) {
   }
 }
 
+std::string collisionMeshSearchRoot(const std::filesystem::path &urdf_path) {
+  const auto canonical_urdf = std::filesystem::weakly_canonical(urdf_path);
+  return canonical_urdf.parent_path().parent_path().parent_path().string();
+}
+
 } // namespace
 
 void printHierarchicalUsage(const char *program) {
@@ -167,7 +172,7 @@ void printHierarchicalUsage(const char *program) {
 
 void printPlannedUsage(const char *program, SourceMode source_mode) {
   printHierarchicalUsage(program);
-  const PlanningLimitOptions defaults;
+  const PlanningOptions defaults;
   std::cout << "\nOnline Cartesian replan limits (per "
                "reference-frame/rotation-vector axis):\n"
             << "  --max-linear-velocity-mps <value>       (default: "
@@ -291,6 +296,8 @@ HierarchicalOptions parseHierarchicalOptions(int argc, char **argv) {
     }
   }
   validate(options);
+  options.robot.collision_mesh_search_paths = {
+      collisionMeshSearchRoot(options.urdf_path)};
   return options;
 }
 

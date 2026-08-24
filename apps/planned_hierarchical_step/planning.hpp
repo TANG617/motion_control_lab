@@ -40,7 +40,7 @@ motion_control::core::CartesianRetargetRequest makeRetargetRequest(
     const motion_control::core::Pose &left_goal,
     const motion_control::core::Pose &right_goal,
     const motion_control::core::CartesianTrajectorySample &accepted,
-    const R1RobotConfig &robot, const PlanningLimitOptions &limits,
+    const R1RobotConfig &robot, const PlanningOptions &options,
     double rate_hz);
 
 RetargetClampDiagnostics clampRetargetCurrentState(

@@ -17,7 +17,16 @@ int main() {
   const auto defaults = app::parseHierarchicalOptions(3, defaults_argv);
   if (defaults.red_rate_hz != 1000.0 || defaults.yellow_rate_hz != 100.0 ||
       defaults.ui_rate_hz != 100.0 ||
-      defaults.deadline_policy != motion_control_lab::DeadlinePolicy::Strict) {
+      defaults.deadline_policy != motion_control_lab::DeadlinePolicy::Strict ||
+      defaults.solver.cartesian_preservation_tolerance != 5.0e-4 ||
+      defaults.solver.scale_preservation_tolerance != 1.0e-4 ||
+      defaults.solver.posture_preservation_tolerance != 1.0e-5 ||
+      defaults.solver.yellow_maximum_iterations != 1 ||
+      defaults.robot.inactive_joint_names.size() != 2U ||
+      defaults.robot.joint_stream.joint_names.size() != 20U ||
+      defaults.robot.joint_stream.max_acceleration_rad_per_s2[10] != 24.3 ||
+      defaults.robot.self_collision_link_pairs.size() != 4U ||
+      defaults.robot.collision_mesh_search_paths.size() != 1U) {
     return EXIT_FAILURE;
   }
 
@@ -43,9 +52,44 @@ int main() {
   char mode[] = "ik-pv";
   char *planned_argv[]{program, teleop, urdf_option, urdf, mode_option, mode};
   const auto planned = app::parseOptions(6, planned_argv);
-  if (planned.joint_target_mode != app::JointTargetMode::IkPv ||
+  if (planned.joint_target.mode != app::JointTargetMode::IkPv ||
       planned.interactive.red_rate_hz != 1000.0 ||
-      planned.interactive.yellow_rate_hz != 100.0) {
+      planned.interactive.yellow_rate_hz != 100.0 ||
+      planned.planning.cartesian_synchronization !=
+          app::PlanningSynchronization::Time ||
+      planned.planning.joint_synchronization !=
+          app::PlanningSynchronization::Phase) {
+    return EXIT_FAILURE;
+  }
+
+  char replay[] = "replay";
+  char input_option[] = "--input";
+  char input[] = "/tmp/input.mcap";
+  char left_stream_option[] = "--left-stream";
+  char left_stream[] = "/left";
+  char right_stream_option[] = "--right-stream";
+  char right_stream[] = "/right";
+  char target_period_option[] = "--target-period-ms";
+  char target_period[] = "10";
+  char replay_trace_option[] = "--replay-trace";
+  char replay_trace_off[] = "off";
+  char *replay_argv[]{program,
+                      replay,
+                      urdf_option,
+                      urdf,
+                      input_option,
+                      input,
+                      left_stream_option,
+                      left_stream,
+                      right_stream_option,
+                      right_stream,
+                      target_period_option,
+                      target_period,
+                      replay_trace_option,
+                      replay_trace_off};
+  const auto replay_options = app::parseOptions(14, replay_argv);
+  if (replay_options.source_mode != app::SourceMode::Replay ||
+      replay_options.replay_trace_enabled) {
     return EXIT_FAILURE;
   }
 
@@ -79,6 +123,7 @@ int main() {
   return help.str().find("default: 1000") != std::string::npos &&
                  help.str().find("default: 100") != std::string::npos &&
                  help.str().find("--start-paused") != std::string::npos &&
+                 help.str().find("--replay-trace") != std::string::npos &&
                  help.str().find("--joint-target-mode") != std::string::npos
              ? EXIT_SUCCESS
              : EXIT_FAILURE;

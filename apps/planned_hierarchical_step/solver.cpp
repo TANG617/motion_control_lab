@@ -1,42 +1,24 @@
 #include "solver.hpp"
 
 #include <algorithm>
-#include <array>
-#include <filesystem>
 #include <stdexcept>
-#include <string_view>
 
 namespace motion_control_lab::planned_hierarchical_step {
 namespace {
 
-constexpr double kCartesianPreservationTolerance = 5.0e-4;
-constexpr double kScalePreservationTolerance = 1.0e-4;
-constexpr double kPosturePreservationTolerance = 1.0e-5;
-constexpr std::array<double, 20> kRedMaximumJointAccelerationsRadPerS2{
-    6.0,  6.0,  6.0,  4.0,   4.0,   4.0,   10.10, 10.10, 12.42, 12.48,
-    16.2, 16.2, 16.2, 10.10, 10.10, 12.42, 12.48, 16.2,  16.2,  16.2};
-constexpr std::array<std::string_view, 2> kWaistJointNames{"knee_pitch_joint",
-                                                           "ankle_pitch_joint"};
-
-bool isWaistJoint(const std::string &name) {
-  return std::find(kWaistJointNames.begin(), kWaistJointNames.end(), name) !=
-         kWaistJointNames.end();
-}
-
-std::filesystem::path
-collisionMeshSearchRoot(const std::filesystem::path &urdf_path) {
-  const auto canonical_urdf = std::filesystem::weakly_canonical(urdf_path);
-  return canonical_urdf.parent_path().parent_path().parent_path();
+bool isInactiveJoint(const std::string &name, const RobotOptions &options) {
+  return std::find(options.inactive_joint_names.begin(),
+                   options.inactive_joint_names.end(),
+                   name) != options.inactive_joint_names.end();
 }
 
 mcc::SelfCollisionModelDescription
-collisionModelDescription(const std::filesystem::path &urdf_path) {
+collisionModelDescription(const RobotOptions &options) {
   mcc::SelfCollisionModelDescription description;
-  description.link_pairs = {{"left_arm_link4", "body_link4"},
-                            {"right_arm_link4", "body_link4"},
-                            {"left_arm_link7", "right_arm_link4"},
-                            {"right_arm_link7", "left_arm_link4"}};
-  description.mesh_search_paths = {collisionMeshSearchRoot(urdf_path).string()};
+  for (const auto &pair : options.self_collision_link_pairs) {
+    description.link_pairs.push_back({pair.first_link, pair.second_link});
+  }
+  description.mesh_search_paths = options.collision_mesh_search_paths;
   return description;
 }
 
@@ -45,7 +27,7 @@ mcc::KinematicsSolverConfig makeYellowConfig(const Options &options) {
   mcc::KinematicsSolverConfig config;
   config.mode = mcc::IkSolveMode::ServoStep;
   config.servo_period = 1.0 / app.yellow_rate_hz;
-  config.maximum_iterations = 1;
+  config.maximum_iterations = app.solver.yellow_maximum_iterations;
   config.soft_solve_time_budget_ms = 1000.0 / app.yellow_rate_hz;
   config.joint_limit_policy =
       mcc::KinematicsJointLimitPolicy::ExplicitRequirements;
@@ -53,8 +35,10 @@ mcc::KinematicsSolverConfig makeYellowConfig(const Options &options) {
   config.qp.regularization = app.solver.regularization;
   config.position_tolerance_m = app.solver.position_tolerance_m;
   config.orientation_tolerance_rad = app.solver.orientation_tolerance_rad;
-  config.minimum_position_improvement_m = 1.0e-8;
-  config.minimum_orientation_improvement_rad = 1.0e-8;
+  config.minimum_position_improvement_m =
+      app.solver.minimum_position_improvement_m;
+  config.minimum_orientation_improvement_rad =
+      app.solver.minimum_orientation_improvement_rad;
   config.maximum_accepted_hard_violation =
       app.solver.maximum_accepted_hard_violation;
   return config;
@@ -69,7 +53,7 @@ mcc::HierarchicalKinematicsSolverConfig makeRedConfig(const Options &options) {
   config.proxqp.absolute_tolerance = app.solver.red_proxqp_absolute_tolerance;
   config.proxqp.primal_infeasibility_tolerance =
       app.solver.red_proxqp_primal_infeasibility_tolerance;
-  config.proxqp.warm_start_enabled = false;
+  config.proxqp.warm_start_enabled = app.solver.red_proxqp_warm_start_enabled;
   config.maximum_accepted_hard_violation =
       app.solver.maximum_accepted_hard_violation;
   return config;
@@ -83,12 +67,12 @@ addCartesianTasks(mcc::HierarchicalKinematicsSolverBuilder &builder,
   scale.progress_weight = options.cartesian_progress_weight;
   scale.name = "red-left-cartesian-progress";
   requireOk(builder.addTaskScaleGroup(mcc::PriorityLevel::Primary, scale,
-                                      kScalePreservationTolerance,
+                                      options.scale_preservation_tolerance,
                                       handles.left_scale),
             "register " + scale.name);
   scale.name = "red-right-cartesian-progress";
   requireOk(builder.addTaskScaleGroup(mcc::PriorityLevel::Primary, scale,
-                                      kScalePreservationTolerance,
+                                      options.scale_preservation_tolerance,
                                       handles.right_scale),
             "register " + scale.name);
 
@@ -99,7 +83,8 @@ addCartesianTasks(mcc::HierarchicalKinematicsSolverBuilder &builder,
   requireOk(builder.addPositionTask(
                 mcc::PriorityLevel::Primary, robot.left_end_effector_frame,
                 position,
-                Eigen::Vector3d::Constant(kCartesianPreservationTolerance),
+                Eigen::Vector3d::Constant(
+                    options.cartesian_preservation_tolerance),
                 handles.left_position),
             "register " + position.name);
   position.name = "red-right-position";
@@ -108,7 +93,8 @@ addCartesianTasks(mcc::HierarchicalKinematicsSolverBuilder &builder,
   requireOk(builder.addPositionTask(
                 mcc::PriorityLevel::Primary, robot.right_end_effector_frame,
                 position,
-                Eigen::Vector3d::Constant(kCartesianPreservationTolerance),
+                Eigen::Vector3d::Constant(
+                    options.cartesian_preservation_tolerance),
                 handles.right_position),
             "register " + position.name);
 
@@ -119,7 +105,8 @@ addCartesianTasks(mcc::HierarchicalKinematicsSolverBuilder &builder,
   requireOk(builder.addOrientationTask(
                 mcc::PriorityLevel::Primary, robot.left_end_effector_frame,
                 orientation,
-                Eigen::Vector3d::Constant(kCartesianPreservationTolerance),
+                Eigen::Vector3d::Constant(
+                    options.cartesian_preservation_tolerance),
                 handles.left_orientation),
             "register " + orientation.name);
   orientation.name = "red-right-orientation";
@@ -128,7 +115,8 @@ addCartesianTasks(mcc::HierarchicalKinematicsSolverBuilder &builder,
   requireOk(builder.addOrientationTask(
                 mcc::PriorityLevel::Primary, robot.right_end_effector_frame,
                 orientation,
-                Eigen::Vector3d::Constant(kCartesianPreservationTolerance),
+                Eigen::Vector3d::Constant(
+                    options.cartesian_preservation_tolerance),
                 handles.right_orientation),
             "register " + orientation.name);
   return handles;
@@ -138,7 +126,8 @@ void addRedLimits(mcc::HierarchicalKinematicsSolverBuilder &builder,
                   const SolverOptions &options) {
   mcc::JointPositionLimitConfig position;
   position.margin = options.joint_position_margin_rad;
-  position.braking_velocity_envelope_enabled = true;
+  position.braking_velocity_envelope_enabled =
+      options.joint_position_braking_velocity_envelope_enabled;
   position.enforcement =
       mcc::HardEnforcement{options.maximum_accepted_hard_violation};
   mcc::JointPositionLimitHandle position_handle;
@@ -196,20 +185,23 @@ void requireOk(const mcc::Status &status, const std::string &) {
   }
 }
 
-mcc::JointNames activeJointNames(const R1RobotConfig &robot) {
+mcc::JointNames activeJointNames(const R1RobotConfig &robot,
+                                 const RobotOptions &options) {
   mcc::JointNames result;
   for (const auto &name : robot.joint_names) {
-    if (!isWaistJoint(name)) {
+    if (!isInactiveJoint(name, options)) {
       result.push_back(name);
     }
   }
   return result;
 }
 
-std::vector<Eigen::Index> activeJointFullIndices(const R1RobotConfig &robot) {
+std::vector<Eigen::Index>
+activeJointFullIndices(const R1RobotConfig &robot,
+                       const RobotOptions &options) {
   std::vector<Eigen::Index> result;
   for (std::size_t index = 0; index < robot.joint_names.size(); ++index) {
-    if (!isWaistJoint(robot.joint_names[index])) {
+    if (!isInactiveJoint(robot.joint_names[index], options)) {
       result.push_back(static_cast<Eigen::Index>(index));
     }
   }
@@ -231,7 +223,8 @@ loadRobotModel(const R1RobotConfig &robot, const Options &options) {
   for (std::size_t index = 0; index < description.joint_limits.size();
        ++index) {
     description.joint_limits[index].acceleration =
-        kRedMaximumJointAccelerationsRadPerS2.at(index);
+        options.interactive.robot.maximum_joint_accelerations_rad_per_s2.at(
+            index);
   }
   std::shared_ptr<const mcc::RobotModel> model;
   requireOk(mcc::RobotModel::load(description, model), "load robot model");
@@ -243,7 +236,7 @@ loadCollisionModel(const std::shared_ptr<const mcc::RobotModel> &model,
                    const Options &options) {
   std::shared_ptr<const mcc::SelfCollisionModel> collision_model;
   requireOk(mcc::SelfCollisionModel::load(
-                model, collisionModelDescription(options.interactive.urdf_path),
+                model, collisionModelDescription(options.interactive.robot),
                 collision_model),
             "load PSI R1 self-collision model");
   return collision_model;
@@ -272,7 +265,7 @@ void configureSolver(
                 mcc::PriorityLevel::Secondary, coupling,
                 Eigen::VectorXd::Constant(
                     static_cast<Eigen::Index>(active_joint_names.size()),
-                    kPosturePreservationTolerance),
+                    solver_options.posture_preservation_tolerance),
                 handles.red_yellow_posture),
             "register Secondary Yellow posture preference");
   addRedLimits(red_builder, solver_options);

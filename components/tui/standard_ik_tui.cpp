@@ -436,6 +436,8 @@ TuiPage makeSolverPage(const IkDebugFrame & frame)
   std::vector<std::vector<std::string>> summary_rows;
   std::vector<std::vector<std::string>> timing_rows;
   std::vector<std::vector<std::string>> pass_rows;
+  std::vector<std::vector<std::string>> failed_pass_rows;
+  std::vector<std::vector<std::string>> failed_constraint_rows;
   std::vector<std::vector<std::string>> percentile_rows;
   std::vector<std::vector<std::string>> diagnostic_rows;
   std::vector<std::vector<std::string>> counter_rows;
@@ -456,8 +458,38 @@ TuiPage makeSolverPage(const IkDebugFrame & frame)
                                 pass.succeeded ? "succeeded" : "failed";
       pass_rows.push_back(
         {solver.label, pass.label, state, fixed(pass.solve_time_ms, 4),
+         pass.solve_time_percentiles.window_sample_count == 0U ? "-" :
+           fixed(pass.solve_time_percentiles.p90, 4),
+         pass.solve_time_percentiles.window_sample_count == 0U ? "-" :
+           fixed(pass.solve_time_percentiles.p95, 4),
+         pass.solve_time_percentiles.window_sample_count == 0U ? "-" :
+           fixed(pass.solve_time_percentiles.p99, 4),
+         std::to_string(pass.solve_time_percentiles.window_sample_count),
          std::to_string(pass.iterations), yesNo(pass.warm_start_used), pass.status,
          pass.native_status});
+      if (pass.attempted && !pass.succeeded) {
+        failed_pass_rows.push_back(
+          {solver.label, pass.label, fixed(pass.primal_residual, 9),
+           fixed(pass.dual_residual, 9), yesNo(pass.last_iterate_available),
+           fixed(pass.objective_value, 9), pass.status, pass.native_status});
+        if (!pass.last_iterate_available) {
+          failed_constraint_rows.push_back(
+            {solver.label, pass.label, "unavailable", "-", "-", "-", "no-last-iterate", "-",
+             "-", "-", "-", "-"});
+        } else if (pass.constraint_violations.empty()) {
+          failed_constraint_rows.push_back(
+            {solver.label, pass.label, "none observed", "-", "0", "-", "checked rows/bounds",
+             "-", "-", "-", "-", "-"});
+        } else {
+          for (const auto & violation : pass.constraint_violations) {
+            failed_constraint_rows.push_back(
+              {solver.label, pass.label, violation.source, violation.component,
+               fixed(violation.violation, 9), violation.unit, violation.kind,
+               violation.bound_source, violation.side, fixed(violation.value, 9),
+               fixed(violation.lower, 9), fixed(violation.upper, 9)});
+          }
+        }
+      }
     }
     percentile_rows.push_back(
       {solver.label, std::to_string(solver.ik_solve_time_percentiles.window_sample_count),
@@ -522,9 +554,25 @@ TuiPage makeSolverPage(const IkDebugFrame & frame)
     page.sections.push_back(sheet(
       "Hierarchical QP pass timing",
       {textColumn("Solver"), textColumn("Pass"), textColumn("State"),
-       numberColumn("Time [ms]"), numberColumn("Iter"), textColumn("Warm"),
-       textColumn("Status"), textColumn("Native status")},
+       numberColumn("Time [ms]"), numberColumn("90%"), numberColumn("95%"),
+       numberColumn("99%"), numberColumn("Samples"), numberColumn("Iter"),
+       textColumn("Warm"), textColumn("Status"), textColumn("Native status")},
       std::move(pass_rows)));
+  }
+  if (!failed_pass_rows.empty()) {
+    page.sections.push_back(sheet(
+      "Failed QP pass numerical evidence",
+      {textColumn("Solver"), textColumn("Pass"), numberColumn("Primal residual"),
+       numberColumn("Dual residual"), textColumn("Last iterate"), numberColumn("Objective"),
+       textColumn("Status"), textColumn("Native status")},
+      std::move(failed_pass_rows)));
+    page.sections.push_back(sheet(
+      "Failed QP last-iterate constraint evidence (diagnostic only)",
+      {textColumn("Solver"), textColumn("Pass"), textColumn("Source"),
+       textColumn("Component"), numberColumn("Violation"), textColumn("Unit"),
+       textColumn("Kind"), textColumn("Bound source"), textColumn("Side"),
+       numberColumn("Value"), numberColumn("Lower"), numberColumn("Upper")},
+      std::move(failed_constraint_rows)));
   }
   page.sections.push_back(sheet(
     "Solver summary",

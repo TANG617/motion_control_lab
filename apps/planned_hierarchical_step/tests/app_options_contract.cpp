@@ -16,7 +16,15 @@ int main() {
   const auto defaults = app::parseHierarchicalOptions(3, defaults_argv);
   if (defaults.red_rate_hz != 100.0 || defaults.yellow_rate_hz != 20.0 ||
       defaults.ui_rate_hz != 100.0 ||
-      defaults.deadline_policy != motion_control_lab::DeadlinePolicy::Strict) {
+      defaults.deadline_policy != motion_control_lab::DeadlinePolicy::Strict ||
+      defaults.solver.cartesian_preservation_tolerance != 5.0e-4 ||
+      defaults.solver.scale_preservation_tolerance != 1.0e-4 ||
+      defaults.solver.posture_preservation_tolerance != 1.0e-5 ||
+      defaults.solver.yellow_maximum_iterations != 1 ||
+      defaults.robot.inactive_joint_names.size() != 2U ||
+      defaults.robot.maximum_joint_accelerations_rad_per_s2.size() != 20U ||
+      defaults.robot.self_collision_link_pairs.size() != 4U ||
+      defaults.robot.collision_mesh_search_paths.size() != 1U) {
     return EXIT_FAILURE;
   }
 

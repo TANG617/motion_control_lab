@@ -89,6 +89,20 @@ struct SolverRunCounters
   std::uint64_t rejected{0};
 };
 
+struct QpConstraintViolationDebug
+{
+  std::string kind;
+  std::string bound_source;
+  std::string side;
+  std::string source;
+  std::string component;
+  std::string unit;
+  double value{0.0};
+  double lower{0.0};
+  double upper{0.0};
+  double violation{0.0};
+};
+
 struct QpPassDebug
 {
   std::string label;
@@ -99,6 +113,12 @@ struct QpPassDebug
   double solve_time_ms{0.0};
   int iterations{0};
   bool warm_start_used{false};
+  RollingPercentilesSnapshot solve_time_percentiles;
+  double objective_value{0.0};
+  double primal_residual{0.0};
+  double dual_residual{0.0};
+  bool last_iterate_available{false};
+  std::vector<QpConstraintViolationDebug> constraint_violations;
 };
 
 struct SolverDebug

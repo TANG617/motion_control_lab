@@ -1,7 +1,5 @@
 #include "options.hpp"
 
-#include "planning.hpp"
-
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
@@ -104,6 +102,11 @@ void validate(const HierarchicalOptions &options) {
   }
 }
 
+std::string collisionMeshSearchRoot(const std::filesystem::path &urdf_path) {
+  const auto canonical_urdf = std::filesystem::weakly_canonical(urdf_path);
+  return canonical_urdf.parent_path().parent_path().parent_path().string();
+}
+
 } // namespace
 
 void printHierarchicalUsage(const char *program) {
@@ -169,27 +172,29 @@ void printHierarchicalUsage(const char *program) {
 
 void printPlannedUsage(const char *program, SourceMode source_mode) {
   printHierarchicalUsage(program);
-  const PlanningLimitOptions defaults;
+  const Options defaults;
   std::cout << "\nOnline Cartesian replan limits (per "
                "reference-frame/rotation-vector axis):\n"
             << "  --max-linear-velocity-mps <value>       (default: "
-            << defaults.max_linear_velocity_mps << ")\n"
+            << defaults.planning.max_linear_velocity_mps << ")\n"
             << "  --max-linear-acceleration-mps2 <value>  (default: "
-            << defaults.max_linear_acceleration_mps2 << ")\n"
+            << defaults.planning.max_linear_acceleration_mps2 << ")\n"
             << "  --max-linear-jerk-mps3 <value>          (default: "
-            << defaults.max_linear_jerk_mps3 << ")\n"
+            << defaults.planning.max_linear_jerk_mps3 << ")\n"
             << "  --max-angular-velocity-rps <value>      (default: "
-            << defaults.max_angular_velocity_rps << ")\n"
+            << defaults.planning.max_angular_velocity_rps << ")\n"
             << "  --max-angular-acceleration-rps2 <value> (default: "
-            << defaults.max_angular_acceleration_rps2 << ")\n"
+            << defaults.planning.max_angular_acceleration_rps2 << ")\n"
             << "  --max-angular-jerk-rps3 <value>         (default: "
-            << defaults.max_angular_jerk_rps3 << ")\n"
+            << defaults.planning.max_angular_jerk_rps3 << ")\n"
             << "  --joint-target-mode <future-o1-pv|ik-pv> (default: "
-               "future-o1-pv)\n";
+            << jointTargetModeName(defaults.joint_target.mode) << ")\n";
   if (source_mode == SourceMode::Replay) {
     std::cout << "\nReplay startup:\n"
               << "  --start-paused  Hold the replay at timeline zero until "
-                 "space is pressed\n";
+                 "space is pressed\n"
+              << "  --replay-trace <on|off> Write detailed per-Red-tick "
+                 "trace.csv (default: on)\n";
   }
 }
 
@@ -295,6 +300,8 @@ HierarchicalOptions parseHierarchicalOptions(int argc, char **argv) {
     }
   }
   validate(options);
+  options.robot.collision_mesh_search_paths = {
+      collisionMeshSearchRoot(options.urdf_path)};
   return options;
 }
 
@@ -349,12 +356,24 @@ Options parseOptions(int argc, char **argv) {
         throw std::runtime_error("--start-paused is only valid with replay");
       }
       result.start_paused = true;
+    } else if (argument == "--replay-trace") {
+      if (result.source_mode != SourceMode::Replay) {
+        throw std::runtime_error("--replay-trace is only valid with replay");
+      }
+      const auto value = requireValue(index, argc, argv, argument);
+      if (value == "on") {
+        result.replay_trace_enabled = true;
+      } else if (value == "off") {
+        result.replay_trace_enabled = false;
+      } else {
+        throw std::runtime_error("--replay-trace must be either 'on' or 'off'");
+      }
     } else if (argument == "--joint-target-mode") {
       const auto value = requireValue(index, argc, argv, argument);
       if (value == "future-o1-pv") {
-        result.joint_target_mode = JointTargetMode::FutureO1Pv;
+        result.joint_target.mode = JointTargetMode::FutureO1Pv;
       } else if (value == "ik-pv") {
-        result.joint_target_mode = JointTargetMode::IkPv;
+        result.joint_target.mode = JointTargetMode::IkPv;
       } else {
         throw std::runtime_error(
             "--joint-target-mode must be either 'future-o1-pv' or 'ik-pv'");

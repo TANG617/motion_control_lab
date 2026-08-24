@@ -31,17 +31,18 @@ exec "${lab_root}/scripts/launch_app.sh" "${binary}" replay --urdf "${urdf}" \
   --execution-mode "${MCL_EXECUTION_MODE:-realtime}" \
   --playback-rate "${MCL_PLAYBACK_RATE:-1}" \
   --red-rate "${MCL_RED_RATE_HZ:-1000}" \
-  --yellow-rate "${MCL_YELLOW_RATE_HZ:-100}" \
+  --yellow-rate "${MCL_YELLOW_RATE_HZ:-500}" \
   --deadline-policy "${MCL_DEADLINE_POLICY:-monitor}" \
   --joint-target-mode "${MCL_JOINT_TARGET_MODE:-future-o1-pv}" \
-  --max-linear-velocity-mps "${MCL_MAX_LINEAR_VELOCITY_MPS:-0.9}" \
-  --max-linear-acceleration-mps2 "${MCL_MAX_LINEAR_ACCELERATION_MPS2:-5.0}" \
-  --max-linear-jerk-mps3 "${MCL_MAX_LINEAR_JERK_MPS3:-80.0}" \
+  --max-linear-velocity-mps "${MCL_MAX_LINEAR_VELOCITY_MPS:-3.0}" \
+  --max-linear-acceleration-mps2 "${MCL_MAX_LINEAR_ACCELERATION_MPS2:-20.0}" \
+  --max-linear-jerk-mps3 "${MCL_MAX_LINEAR_JERK_MPS3:-400.0}" \
   --max-angular-velocity-rps "${MCL_MAX_ANGULAR_VELOCITY_RPS:-3.0}" \
   --max-angular-acceleration-rps2 "${MCL_MAX_ANGULAR_ACCELERATION_RPS2:-20.0}" \
-  --max-angular-jerk-rps3 "${MCL_MAX_ANGULAR_JERK_RPS3:-150.0}" \
+  --max-angular-jerk-rps3 "${MCL_MAX_ANGULAR_JERK_RPS3:-300.0}" \
   --ui "${MCL_UI:-tui}" \
   --terminal-input "${MCL_TERMINAL_INPUT:-on}" \
+  --replay-trace "${MCL_REPLAY_TRACE:-on}" \
   --viz "${MCL_VIZ:-foxglove}" \
   --host "${MCL_VIZ_HOST:-127.0.0.1}" \
   --port "${MCL_VIZ_PORT:-8765}" \

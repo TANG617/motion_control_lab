@@ -119,6 +119,43 @@ mcc::CartesianRetargetRequest makeRequest()
   return request;
 }
 
+void testRetargetRequestConsumesPlanningOptions()
+{
+  const auto & robot = motion_control_lab::r1RobotConfig();
+  mcc::CartesianTrajectorySample accepted;
+  accepted.frames.resize(2U);
+  accepted.frames[0].pose.translation() = Eigen::Vector3d{0.1, 0.2, 0.3};
+  accepted.frames[1].pose.translation() = Eigen::Vector3d{-0.1, -0.2, 0.4};
+
+  planned::PlanningOptions options;
+  options.max_linear_velocity_mps = 0.31;
+  options.max_linear_acceleration_mps2 = 0.62;
+  options.max_linear_jerk_mps3 = 1.24;
+  options.max_angular_velocity_rps = 0.45;
+  options.max_angular_acceleration_rps2 = 0.90;
+  options.max_angular_jerk_rps3 = 1.80;
+  options.synchronization = planned::PlanningSynchronization::Phase;
+
+  const auto left_goal = mcc::Pose::Identity();
+  const auto right_goal = mcc::Pose::Identity();
+  const auto request = planned::makeRetargetRequest(
+    left_goal, right_goal, accepted, robot, options, 50.0);
+
+  require(request.reference_frame_name == robot.base_frame, "wrong planning reference frame");
+  require(request.sample_period == 0.02, "planning rate was not applied");
+  require(
+    request.synchronization == mcc::TrajectorySynchronization::Phase,
+    "planning synchronization was not applied");
+  require(
+    request.limits.max_linear_velocity == Eigen::Vector3d::Constant(0.31) &&
+      request.limits.max_linear_acceleration == Eigen::Vector3d::Constant(0.62) &&
+      request.limits.max_linear_jerk == Eigen::Vector3d::Constant(1.24) &&
+      request.limits.max_rotation_vector_velocity == Eigen::Vector3d::Constant(0.45) &&
+      request.limits.max_rotation_vector_acceleration == Eigen::Vector3d::Constant(0.90) &&
+      request.limits.max_rotation_vector_jerk == Eigen::Vector3d::Constant(1.80),
+    "planning limits were not applied");
+}
+
 void testInRangeRequestIsBitwiseUnchanged()
 {
   auto request = makeRequest();
@@ -386,6 +423,7 @@ void testClampedRequestPlansWithinAllDerivativeLimits()
 int main()
 {
   try {
+    testRetargetRequestConsumesPlanningOptions();
     testInRangeRequestIsBitwiseUnchanged();
     testAllPvaGroupsClampAcrossBothArms();
     testClampedRequestPlansWithinAllDerivativeLimits();
