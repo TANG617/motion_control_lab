@@ -39,7 +39,7 @@ APP_SOURCE_FILES = {
     "cartesian_planning": {"main.cpp", "options.cpp", "options.hpp", "planning.cpp", "planning.hpp", "loop.cpp", "loop.hpp"},
     "hierarchical_step": {"main.cpp", "options.cpp", "options.hpp", "solver.cpp", "solver.hpp", "loop.cpp", "loop.hpp"},
     "planned_hierarchical_step": {"main.cpp", "options.cpp", "options.hpp", "solver.cpp", "solver.hpp", "planning.cpp", "planning.hpp", "loop.cpp", "loop.hpp"},
-    "planned_hierarchical_step_otg": {"main.cpp", "options.cpp", "options.hpp", "solver.cpp", "solver.hpp", "planning.cpp", "planning.hpp", "loop.cpp", "loop.hpp"},
+    "planned_hierarchical_step_otg": {"main.cpp", "options.cpp", "options.hpp", "solver.cpp", "solver.hpp", "planning.cpp", "planning.hpp", "telemetry.cpp", "telemetry.hpp", "loop.cpp", "loop.hpp"},
     "plot_core_planning": {"main.cpp", "options.cpp", "options.hpp", "planning.cpp", "planning.hpp"},
     "replay_plan": {"main.cpp", "options.cpp", "options.hpp", "loop.cpp", "loop.hpp"},
     "step": {"main.cpp", "options.cpp", "options.hpp", "solver.cpp", "solver.hpp", "loop.cpp", "loop.hpp"},

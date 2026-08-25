@@ -14,10 +14,12 @@ namespace motion_control_lab
 struct ArmVisualizationChannels
 {
   std::string joint_states;
-  std::string left_target;
-  std::string right_target;
-  std::string left_forward_kinematics;
-  std::string right_forward_kinematics;
+  std::string left_input;
+  std::string right_input;
+  std::string left_goal;
+  std::string right_goal;
+  std::string left_ik;
+  std::string right_ik;
 };
 
 ArmVisualizationChannels foxgloveIkVisualizationChannels();

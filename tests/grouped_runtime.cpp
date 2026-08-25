@@ -96,6 +96,9 @@ bool testRejectedAttemptFault()
   mcl::WorkerStopController stop;
   mcl::GroupedFaultState fault;
   mcl::PeriodicWorkerDiagnostics diagnostics;
+  bool observer_called = false;
+  mcl::PeriodicIterationTiming observed_timing;
+  mcl::PeriodicWorkerStatistics observed_statistics;
   mcl::runPeriodicWorker(
     {mcl::WorkerGroup::Green, 1000.0, mcl::DeadlinePolicy::Monitor},
     stop,
@@ -104,12 +107,21 @@ bool testRejectedAttemptFault()
     [](double, std::int64_t) {
       return mcl::WorkerIterationResult{
         mcl::WorkerIterationOutcome::FatalRejected, 7, 0.1, "rejected"};
+    },
+    [&](const mcl::WorkerIterationResult & result,
+        const mcl::PeriodicIterationTiming & timing,
+        const mcl::PeriodicWorkerStatistics & statistics) {
+      observer_called = result.revision == 7;
+      observed_timing = timing;
+      observed_statistics = statistics;
     });
   const auto snapshot = fault.snapshot();
   const auto statistics = diagnostics.snapshot();
   return stop.stopRequested() && snapshot.has_value() &&
          snapshot->failure == mcl::WorkerFailureKind::RejectedAttempt &&
-         snapshot->revision == 7 && statistics.iteration_count == 1;
+         snapshot->revision == 7 && statistics.iteration_count == 1 &&
+         observer_called && observed_timing.deadline_ms == 1.0 &&
+         observed_statistics.iteration_count == 1;
 }
 
 bool testRecoverableRejectionWaitsAndContinues()

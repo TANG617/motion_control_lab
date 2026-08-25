@@ -143,9 +143,10 @@ set(MCL_GENERATED_CONTRACT_DIR
 set(MCL_CONTRACT_GENERATOR
     "${MCL_VISUALIZATION_CONTRACT_DIR}/generate_contract_header.py")
 set(MCL_VISUALIZATION_CONTRACT_JSONS
-    "${MCL_VISUALIZATION_CONTRACT_DIR}/foxglove_ik.v1.json"
-    "${MCL_VISUALIZATION_CONTRACT_DIR}/foxglove_planned_hierarchical_step.v1.json"
-    "${MCL_VISUALIZATION_CONTRACT_DIR}/foxglove_planned_hierarchical_step_otg.v1.json")
+    "${MCL_VISUALIZATION_CONTRACT_DIR}/mcl_state.v1.json"
+    "${MCL_VISUALIZATION_CONTRACT_DIR}/mcl_planning.v1.json"
+    "${MCL_VISUALIZATION_CONTRACT_DIR}/mcl_execution.v1.json"
+    "${MCL_VISUALIZATION_CONTRACT_DIR}/mcl_telemetry.v1.json")
 
 set(MCL_CHANNEL_SPEC_HEADER
     "${MCL_GENERATED_CONTRACT_DIR}/channel_spec.hpp")
@@ -176,13 +177,13 @@ function(mcl_generate_visualization_contract BASENAME NAMESPACE)
 endfunction()
 
 mcl_generate_visualization_contract(
-  foxglove_ik motion_control_lab::contracts::foxglove_ik_v1)
+  mcl_state motion_control_lab::contracts::mcl_state_v1)
 mcl_generate_visualization_contract(
-  foxglove_planned_hierarchical_step
-  motion_control_lab::contracts::foxglove_planned_hierarchical_step_v1)
+  mcl_planning motion_control_lab::contracts::mcl_planning_v1)
 mcl_generate_visualization_contract(
-  foxglove_planned_hierarchical_step_otg
-  motion_control_lab::contracts::foxglove_planned_hierarchical_step_otg_v1)
+  mcl_execution motion_control_lab::contracts::mcl_execution_v1)
+mcl_generate_visualization_contract(
+  mcl_telemetry motion_control_lab::contracts::mcl_telemetry_v1)
 
 add_custom_target(
   mcl_visualization_contract_headers
@@ -204,6 +205,26 @@ target_include_directories(
   mcl_visualization_contracts
   INTERFACE "$<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/generated>"
 )
+
+if(MCL_BUILD_PLANNED_HIERARCHICAL_STEP_OTG)
+  find_package(Protobuf REQUIRED)
+  set(MCL_TELEMETRY_PROTO
+      "${CMAKE_CURRENT_SOURCE_DIR}/contracts/telemetry/mcl_telemetry_v1.proto")
+  protobuf_generate_cpp(
+    MCL_TELEMETRY_PROTO_SOURCES MCL_TELEMETRY_PROTO_HEADERS
+    "${MCL_TELEMETRY_PROTO}"
+  )
+  add_library(
+    mcl_telemetry_proto STATIC
+    ${MCL_TELEMETRY_PROTO_SOURCES} ${MCL_TELEMETRY_PROTO_HEADERS}
+  )
+  add_library(motion_control_lab::telemetry_proto ALIAS mcl_telemetry_proto)
+  target_include_directories(
+    mcl_telemetry_proto
+    PUBLIC "$<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>"
+  )
+  target_link_libraries(mcl_telemetry_proto PUBLIC protobuf::libprotobuf)
+endif()
 
 if(MCL_BUILD_E04_OPENSOT_SMOKE)
   include(cmake/OpenSoTExternal.cmake)

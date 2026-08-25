@@ -36,7 +36,7 @@
 #include "components/visualization/preview_projection.hpp"
 #include "components/visualization/preview_transport.hpp"
 #include "contracts/presentation/ik_app_snapshot.hpp"
-#include "contracts/visualization/foxglove_planned_hierarchical_step_v1.hpp"
+#include "contracts/visualization/mcl_planning_v1.hpp"
 #include "loop.hpp"
 #include "motion_control_lab/run_artifacts.hpp"
 #include "motion_control_lab/sha256.hpp"
@@ -729,7 +729,7 @@ void appendPlanningRequestPoses(motion_control::viz::RenderBatch &frame,
                                 const std::string &reference_frame,
                                 const Eigen::Isometry3d &left_pose,
                                 const Eigen::Isometry3d &right_pose) {
-  namespace contract = contracts::foxglove_planned_hierarchical_step_v1;
+  namespace contract = contracts::mcl_planning_v1;
   const auto sample = [&](const char *channel, const Eigen::Isometry3d &pose) {
     const Eigen::Quaterniond orientation(pose.linear());
     motion_control::viz::PoseSample result;
@@ -742,9 +742,9 @@ void appendPlanningRequestPoses(motion_control::viz::RenderBatch &frame,
     return result;
   };
   frame.poses.reserve(frame.poses.size() + 2U);
-  frame.poses.push_back(sample(contract::kLeftPlanningRequestTopic, left_pose));
+  frame.poses.push_back(sample(contract::kLeftCartesianReferenceTopic, left_pose));
   frame.poses.push_back(
-      sample(contract::kRightPlanningRequestTopic, right_pose));
+      sample(contract::kRightCartesianReferenceTopic, right_pose));
 }
 
 int runLoop(Options planned_options, const R1RobotConfig &robot,
@@ -1258,6 +1258,13 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
       {options.ui_rate_hz, options.duration_s});
   TargetSnapshot published_target = initial_target;
   TargetSnapshot last_command_target = initial_target;
+  std::vector<mcl::ArmTarget> latest_input_targets = armTargets(initial_target);
+  if (planned_options.source_mode == SourceMode::Replay) {
+    const auto & source = replay_source->sourceFrame();
+    latest_input_targets = {
+      {mcl::ArmSide::Left, source.value.left.pose},
+      {mcl::ArmSide::Right, source.value.right.pose}};
+  }
   RedOutputSnapshot latest_output = initial_output;
   RedAttemptSnapshot latest_red_attempt = initial_red_attempt;
   mcl::SelfCollisionDebug latest_collision_debug = initial_collision_debug;
@@ -1377,6 +1384,9 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
       input.setPaused(replay_source->paused(), replay_source->status().detail);
       if (advance.frame_changed) {
         const auto &source = replay_source->sourceFrame();
+        latest_input_targets = {
+            {mcl::ArmSide::Left, source.value.left.pose},
+            {mcl::ArmSide::Right, source.value.right.pose}};
         published_target.revision = source.sequence + 1U;
         published_target.left =
             source.value.left.pose * robot.left_tcp_offset.inverse();
@@ -1397,10 +1407,12 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
           !sameTargetPoses(last_command_target, input.targets())) {
         published_target =
             targetSnapshot(input.targets(), published_target.revision + 1);
+        latest_input_targets = input.targets();
         last_command_target = published_target;
         target_to_red.publish(published_target);
       }
 
+      frame.input_targets = latest_input_targets;
       frame.targets = armTargets(latest_output.accepted_target);
       frame.forward_kinematics = {
           {mcl::ArmSide::Left, latest_output.left_pose},

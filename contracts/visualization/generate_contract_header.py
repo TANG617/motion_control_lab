@@ -14,7 +14,14 @@ CHANNEL_KINDS = {
     "foxglove.PoseInFrame": "PoseInFrame",
     "foxglove.JointStates": "JointStates",
     "foxglove.SceneUpdate": "SceneUpdate",
+    "foxglove.Log": "Log",
 }
+
+
+def _channel_kind(schema: str) -> str:
+    if schema.startswith("mcl.telemetry.v1."):
+        return "EncodedMessage"
+    return CHANNEL_KINDS.get(schema, "")
 
 
 def _require_string(value: Any, field: str, path: Path) -> str:
@@ -49,8 +56,8 @@ def load_contract(path: Path) -> dict[str, Any]:
         required = channel.get("required")
         if not isinstance(required, bool):
             raise ValueError(f"{path}: {prefix}.required must be a boolean")
-        if schema not in CHANNEL_KINDS:
-            allowed = ", ".join(sorted(CHANNEL_KINDS))
+        if not _channel_kind(schema):
+            allowed = ", ".join(sorted(CHANNEL_KINDS)) + ", mcl.telemetry.v1.*"
             raise ValueError(
                 f"{path}: {prefix}.foxglove_schema {schema!r} is unsupported; "
                 f"allowed schemas: {allowed}"
@@ -90,12 +97,15 @@ enum class ChannelKind
   PoseInFrame,
   JointStates,
   SceneUpdate,
+  Log,
+  EncodedMessage,
 };
 
 struct ChannelSpec
 {
   std::string_view topic;
   std::string_view role;
+  std::string_view schema;
   ChannelKind kind;
   bool required;
 };
@@ -128,7 +138,8 @@ def contract_header(document: dict[str, Any], namespace: str) -> str:
         required = "true" if channel["required"] else "false"
         specs.append(
             "  ChannelSpec{" + identifier + f', "{channel["role"]}", '
-            f'ChannelKind::{CHANNEL_KINDS[channel["foxglove_schema"]]}, {required}' + "}"
+            f'"{channel["foxglove_schema"]}", '
+            f'ChannelKind::{_channel_kind(channel["foxglove_schema"])}, {required}' + "}"
         )
     constants_text = "\n".join(constants)
     specs_text = ",\n".join(specs)

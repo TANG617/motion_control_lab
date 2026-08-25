@@ -210,6 +210,7 @@ int runLoop(const AppOptions &options, const R1RobotConfig &robot,
   std::size_t publish_count = 0;
 
   IkDebugFrame latest_frame;
+  latest_frame.input_targets = input.targets();
   latest_frame.targets = input.targets();
   latest_frame.forward_kinematics = {{ArmSide::Left, initial_left_fk},
                                      {ArmSide::Right, initial_right_fk}};
@@ -257,6 +258,7 @@ int runLoop(const AppOptions &options, const R1RobotConfig &robot,
       positions = toStdVector(solution.joint_positions);
       velocities = toStdVector(solution.joint_velocities);
 
+      latest_frame.input_targets = input.targets();
       latest_frame.targets = input.targets();
       latest_frame.forward_kinematics = {
           {ArmSide::Left, currentTargetPose(ArmSide::Left)},

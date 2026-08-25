@@ -1,6 +1,6 @@
 #include "components/visualization/preview_projection.hpp"
 
-#include "contracts/visualization/foxglove_ik_v1.hpp"
+#include "contracts/visualization/mcl_state_v1.hpp"
 
 #include <Eigen/Geometry>
 
@@ -14,13 +14,15 @@ namespace motion_control_lab
 
 ArmVisualizationChannels foxgloveIkVisualizationChannels()
 {
-  namespace contract = contracts::foxglove_ik_v1;
+  namespace contract = contracts::mcl_state_v1;
   return {
-    contract::kIkOutputJointStateTopic,
-    contract::kLeftInputTargetTopic,
-    contract::kRightInputTargetTopic,
-    contract::kLeftFkOutputTopic,
-    contract::kRightFkOutputTopic};
+    contract::kJointIkTopic,
+    contract::kLeftCartesianInputTopic,
+    contract::kRightCartesianInputTopic,
+    contract::kLeftCartesianGoalTopic,
+    contract::kRightCartesianGoalTopic,
+    contract::kLeftCartesianIkTopic,
+    contract::kRightCartesianIkTopic};
 }
 
 const std::string & frameForSide(const R1RobotConfig & robot, ArmSide side)
@@ -38,9 +40,9 @@ InteractiveIkPresentation makeArmPresentation(
   presentation.base_frame_id = robot.base_frame;
   presentation.joint_state_channel = channels.joint_states;
   presentation.arms = {
-    {ArmSide::Left, channels.left_target, channels.left_forward_kinematics,
+    {ArmSide::Left, channels.left_input, channels.left_goal, channels.left_ik,
       robot.left_arm_joint_indices},
-    {ArmSide::Right, channels.right_target, channels.right_forward_kinematics,
+    {ArmSide::Right, channels.right_input, channels.right_goal, channels.right_ik,
       robot.right_arm_joint_indices}};
   return presentation;
 }
@@ -53,8 +55,26 @@ motion_control::viz::RenderBatch makeIkRenderBatch(
   namespace mcv = motion_control::viz;
   mcv::RenderBatch batch;
   batch.timestamp_ns = timestamp_ns;
-  batch.poses.reserve(presentation.arms.size() * 2U);
+  batch.poses.reserve(presentation.arms.size() * 3U);
   for (const auto & arm : presentation.arms) {
+    const auto input = std::find_if(
+      frame.input_targets.begin(), frame.input_targets.end(),
+      [&arm](const ArmTarget & value) { return value.side == arm.side; });
+    if (input == frame.input_targets.end()) {
+      throw std::runtime_error(
+        std::string{"render batch is missing the "} + armSideName(arm.side) + " input");
+    }
+    const Eigen::Quaterniond input_orientation(input->target_pose.linear());
+    mcv::PoseSample input_pose;
+    input_pose.channel = arm.input_channel;
+    input_pose.frame_id = presentation.base_frame_id;
+    input_pose.pose.position_m = {
+      input->target_pose.translation().x(), input->target_pose.translation().y(),
+      input->target_pose.translation().z()};
+    input_pose.pose.orientation_xyzw = {
+      input_orientation.x(), input_orientation.y(), input_orientation.z(), input_orientation.w()};
+    batch.poses.push_back(std::move(input_pose));
+
     const auto target = std::find_if(
       frame.targets.begin(), frame.targets.end(),
       [&arm](const ArmTarget & value) { return value.side == arm.side; });
@@ -64,7 +84,7 @@ motion_control::viz::RenderBatch makeIkRenderBatch(
     }
     const Eigen::Quaterniond orientation(target->target_pose.linear());
     mcv::PoseSample pose;
-    pose.channel = arm.target_channel;
+    pose.channel = arm.goal_channel;
     pose.frame_id = presentation.base_frame_id;
     pose.pose.position_m = {
       target->target_pose.translation().x(), target->target_pose.translation().y(),
@@ -82,7 +102,7 @@ motion_control::viz::RenderBatch makeIkRenderBatch(
     }
     const Eigen::Quaterniond fk_orientation(fk->pose.linear());
     mcv::PoseSample fk_pose;
-    fk_pose.channel = arm.forward_kinematics_channel;
+    fk_pose.channel = arm.ik_channel;
     fk_pose.frame_id = presentation.base_frame_id;
     fk_pose.pose.position_m = {
       fk->pose.translation().x(), fk->pose.translation().y(), fk->pose.translation().z()};

@@ -37,13 +37,17 @@
 #include "components/visualization/preview_projection.hpp"
 #include "components/visualization/preview_transport.hpp"
 #include "contracts/presentation/ik_app_snapshot.hpp"
-#include "contracts/visualization/foxglove_planned_hierarchical_step_otg_v1.hpp"
+#include "contracts/visualization/mcl_execution_v1.hpp"
+#include "contracts/visualization/mcl_planning_v1.hpp"
+#include "contracts/visualization/mcl_state_v1.hpp"
+#include "contracts/visualization/mcl_telemetry_v1.hpp"
 #include "loop.hpp"
 #include "motion_control_lab/run_artifacts.hpp"
 #include "motion_control_lab/sha256.hpp"
 #include "options.hpp"
 #include "planning.hpp"
 #include "solver.hpp"
+#include "telemetry.hpp"
 
 namespace motion_control_lab::planned_hierarchical_step_otg {
 namespace {
@@ -60,6 +64,15 @@ constexpr const char *kTitle = "Motion Control Planned Hierarchical Step OTG";
 constexpr std::array<unsigned int, 1> kUiCpuAffinity{5};
 constexpr std::array<unsigned int, 1> kRedCpuAffinity{6};
 constexpr std::array<unsigned int, 1> kYellowCpuAffinity{7};
+
+std::uint64_t workerTicksForReplayDuration(std::int64_t duration_ns,
+                                           double rate_hz) {
+  const long double ticks =
+      static_cast<long double>(duration_ns) * rate_hz / 1.0e9L;
+  return static_cast<std::uint64_t>(
+      std::max<long double>(1.0L, std::ceil(ticks)));
+}
+
 const char *resultDispositionName(mcc::ResultDisposition value) {
   return mcc::isAccepted(value) ? "accepted" : "rejected";
 }
@@ -398,6 +411,8 @@ const mcl::ArmTarget &requireTarget(const std::vector<mcl::ArmTarget> &targets,
 
 struct TargetSnapshot {
   std::uint64_t revision{0};
+  std::optional<std::size_t> replay_source_index;
+  bool replay_joint_hold{false};
   mcc::Pose left{mcc::Pose::Identity()};
   mcc::Pose right{mcc::Pose::Identity()};
 };
@@ -419,6 +434,8 @@ struct TaskScaleSnapshot {
 };
 
 struct RedOutputSnapshot {
+  std::uint64_t event_timestamp_ns{0};
+  std::uint64_t run_time_ns{0};
   std::uint64_t revision{0};
   TargetSnapshot accepted_target;
   TargetSnapshot source_goal;
@@ -459,6 +476,8 @@ enum class RedAttemptState {
 };
 
 struct RedAttemptSnapshot {
+  std::uint64_t event_timestamp_ns{0};
+  std::uint64_t run_time_ns{0};
   RedAttemptState state{RedAttemptState::Accepted};
   TargetSnapshot target;
   TargetSnapshot attempted_reference;
@@ -635,6 +654,399 @@ std::pair<double, double> poseError(const mcc::Pose &target,
   return {
       (target.translation() - actual.translation()).norm(),
       Eigen::AngleAxisd(target.linear() * actual.linear().transpose()).angle()};
+}
+
+namespace proto = telemetry_proto;
+
+int priorityNumber(mcc::PriorityLevel priority) {
+  return static_cast<int>(priority) + 1;
+}
+
+int passNumber(mcc::HierarchicalSolvePass pass) {
+  return static_cast<int>(pass) + 1;
+}
+
+const char *hierarchicalTaskKindName(mcc::HierarchicalTaskKind kind) {
+  switch (kind) {
+  case mcc::HierarchicalTaskKind::Position:
+    return "position";
+  case mcc::HierarchicalTaskKind::Orientation:
+    return "orientation";
+  case mcc::HierarchicalTaskKind::Posture:
+    return "posture";
+  }
+  return "unknown";
+}
+
+const char *hierarchicalTaskTargetUnit(mcc::HierarchicalTaskKind kind) {
+  return kind == mcc::HierarchicalTaskKind::Position ? "m" : "rad";
+}
+
+const char *hierarchicalTaskResidualUnit(mcc::HierarchicalTaskKind kind) {
+  return kind == mcc::HierarchicalTaskKind::Position ? "m/s" : "rad/s";
+}
+
+double hierarchicalTaskTolerance(
+    mcc::HierarchicalTaskKind kind, const SolverOptions &options) {
+  return kind == mcc::HierarchicalTaskKind::Posture
+             ? options.posture_preservation_tolerance
+             : options.cartesian_preservation_tolerance;
+}
+
+proto::AttemptOutcome attemptOutcome(mcl::WorkerIterationOutcome outcome) {
+  switch (outcome) {
+  case mcl::WorkerIterationOutcome::Accepted:
+    return proto::ACCEPTED;
+  case mcl::WorkerIterationOutcome::Idle:
+    return proto::IDLE;
+  case mcl::WorkerIterationOutcome::RecoverableRejected:
+    return proto::RECOVERABLE_REJECTED;
+  case mcl::WorkerIterationOutcome::FatalRejected:
+    return proto::FATAL_REJECTED;
+  }
+  return proto::UNSPECIFIED;
+}
+
+template <typename Message>
+TelemetryRecord telemetryRecord(EventStamp stamp, const char *topic,
+                                Message message) {
+  return TelemetryRecord::encoded(
+      stamp, topic, std::make_unique<Message>(std::move(message)));
+}
+
+proto::SolverTelemetry makeSolverTelemetry(
+    const proto::SampleContext &context, const char *solver_kind,
+    const SolverDiagnostics &diagnostics, const mcl::SolverDebug &debug,
+    const SolverOptions &options) {
+  proto::SolverTelemetry message;
+  *message.mutable_context() = context;
+  message.set_solver_kind(solver_kind);
+  message.set_backend(debug.backend);
+  message.set_joint_limit_policy(debug.joint_limit_policy);
+  message.set_status(debug.disposition);
+  message.set_native_status(debug.native_status);
+  message.set_solve_time_ms(diagnostics.solve_time_ms);
+  message.set_maximum_hard_violation(diagnostics.maximum_hard_violation);
+
+  if (diagnostics.hierarchical) {
+    if (diagnostics.hierarchy.highest_completed_priority.has_value()) {
+      message.set_highest_completed_priority(
+          priorityNumber(*diagnostics.hierarchy.highest_completed_priority));
+    }
+    if (diagnostics.hierarchy.same_tick_fallback_level.has_value()) {
+      message.set_fallback_priority(
+          priorityNumber(*diagnostics.hierarchy.same_tick_fallback_level));
+    }
+    for (const auto &source : diagnostics.hierarchy.passes) {
+      auto *pass = message.add_passes();
+      pass->set_label(hierarchicalPassName(source.pass));
+      pass->set_priority(source.pass == mcc::HierarchicalSolvePass::Terminal
+                             ? 0
+                             : passNumber(source.pass));
+      pass->set_pass(passNumber(source.pass));
+      pass->set_attempted(source.attempted);
+      pass->set_succeeded(source.succeeded);
+      pass->set_status(qpStatusName(source.backend_status));
+      pass->set_native_status(source.native_status);
+      pass->set_solve_time_ms(source.solve_time_ms);
+      pass->set_iterations(source.iterations);
+      pass->set_warm_start_used(source.warm_start_used);
+      pass->set_objective_value(source.objective_value);
+      pass->set_primal_residual(source.primal_residual);
+      pass->set_dual_residual(source.dual_residual);
+      double maximum_violation = 0.0;
+      for (const auto &violation : source.constraint_violations) {
+        auto *output = pass->add_constraint_violations();
+        output->set_label(
+            violation.source_name + "." + violation.component_name + "." +
+            hierarchicalBoundSideName(violation.bound_side));
+        output->set_kind(hierarchicalConstraintKindName(violation.kind));
+        output->set_bound_source(
+            hierarchicalBoundSourceName(violation.bound_source));
+        output->set_side(hierarchicalBoundSideName(violation.bound_side));
+        output->set_source(violation.source_name);
+        output->set_component(violation.component_name);
+        output->set_unit(hierarchicalViolationUnit(violation));
+        output->set_value(violation.value);
+        output->set_lower(violation.lower);
+        output->set_upper(violation.upper);
+        output->set_violation(violation.violation);
+        maximum_violation = std::max(maximum_violation, violation.violation);
+      }
+      pass->set_maximum_constraint_violation(maximum_violation);
+    }
+    for (const auto &source : diagnostics.hierarchy.tasks) {
+      auto *task = message.add_tasks();
+      task->set_name(source.name);
+      task->set_kind(hierarchicalTaskKindName(source.kind));
+      task->set_priority(priorityNumber(source.priority));
+      task->set_enabled(source.enabled);
+      task->set_target_error(source.target_error_norm);
+      task->set_target_error_unit(hierarchicalTaskTargetUnit(source.kind));
+      for (Eigen::Index index = 0; index < source.residual_optimum.size(); ++index) {
+        auto *component = task->add_components();
+        component->set_label(source.name + "[" + std::to_string(index) + "]");
+        component->set_residual_optimum(source.residual_optimum[index]);
+        if (index < source.actual_preservation_drift.size()) {
+          component->set_preservation_drift(
+              source.actual_preservation_drift[index]);
+        }
+        component->set_preservation_tolerance(
+            hierarchicalTaskTolerance(source.kind, options));
+        component->set_residual_unit(hierarchicalTaskResidualUnit(source.kind));
+      }
+    }
+    for (const auto &source : diagnostics.hierarchy.task_scales) {
+      auto *scale = message.add_task_scales();
+      scale->set_label(source.name);
+      scale->set_priority(priorityNumber(source.priority));
+      scale->set_active(source.active);
+      scale->set_scale(source.weighted_progress_scale);
+      scale->set_preservation_drift(source.actual_preservation_drift);
+      scale->set_degraded(source.degraded);
+      scale->set_stuck(source.stuck);
+    }
+  } else {
+    auto *pass = message.add_passes();
+    pass->set_label("solve");
+    pass->set_attempted(true);
+    pass->set_succeeded(debug.disposition == "accepted");
+    pass->set_status(debug.qp_status);
+    pass->set_native_status(debug.native_status);
+    pass->set_solve_time_ms(debug.qp_solve_time_ms);
+    pass->set_iterations(debug.qp_iterations);
+    pass->set_warm_start_used(debug.warm_start_used);
+    pass->set_objective_value(debug.objective_value);
+    pass->set_primal_residual(debug.primal_residual);
+    pass->set_dual_residual(debug.dual_residual);
+    pass->set_maximum_constraint_violation(debug.maximum_hard_violation);
+    for (const auto &source : debug.task_scales) {
+      auto *scale = message.add_task_scales();
+      scale->set_label(source.name);
+      scale->set_active(source.active);
+      scale->set_scale(source.scale);
+      scale->set_cost(source.cost);
+      scale->set_degraded(source.degraded);
+      scale->set_stuck(source.stuck);
+    }
+    for (const auto &source : debug.requirements) {
+      auto *requirement = message.add_requirements();
+      requirement->set_label(source.name);
+      requirement->set_unit(source.unit);
+      requirement->set_source(source.source);
+      requirement->set_enabled(source.enabled);
+      requirement->set_active(source.active);
+      requirement->set_maximum_violation(source.maximum_violation);
+      requirement->set_cost(source.cost);
+    }
+  }
+  return message;
+}
+
+proto::CouplingTelemetry makeCouplingTelemetry(
+    const proto::SampleContext &context, const SolverDiagnostics &diagnostics,
+    const EventStamp &stamp) {
+  proto::CouplingTelemetry message;
+  *message.mutable_context() = context;
+  message.set_producer("avoidance");
+  message.set_consumer("ik");
+  message.set_state(couplingStateName(diagnostics.coupling_state));
+  message.set_source_attempt_revision(diagnostics.attempt_revision);
+  message.set_source_value_revision(diagnostics.value_revision);
+  message.set_consumed_value_revision(
+      diagnostics.consumed_source_value_revision);
+  const auto captured_time = diagnostics.captured_state_time_nanoseconds;
+  if (captured_time >= 0 && stamp.run_time_ns >= static_cast<std::uint64_t>(captured_time)) {
+    message.set_source_age_ms(
+        static_cast<double>(stamp.run_time_ns - static_cast<std::uint64_t>(captured_time)) /
+        1.0e6);
+  }
+  message.set_captured_state_sequence(diagnostics.captured_state_sequence);
+  return message;
+}
+
+proto::WorkerTelemetry makeWorkerTelemetry(
+    const proto::SampleContext &context, const char *role, double rate_hz,
+    const mcl::PeriodicIterationTiming &timing,
+    const mcl::PeriodicWorkerStatistics &statistics) {
+  proto::WorkerTelemetry message;
+  *message.mutable_context() = context;
+  message.set_worker_role(role);
+  message.set_configured_rate_hz(rate_hz);
+  message.set_deadline_ms(timing.deadline_ms);
+  message.set_release_lateness_ms(timing.release_lateness_ms);
+  message.set_execution_ms(timing.execution_ms);
+  message.set_solver_ms(statistics.latest_solver_ms);
+  message.set_non_solver_ms(statistics.latest_non_solver_execution_ms);
+  message.set_release_to_finish_ms(timing.release_to_finish_ms);
+  message.set_overrun_ms(timing.overrun_ms);
+  message.set_iteration_count(statistics.iteration_count);
+  message.set_deadline_miss_count(statistics.deadline_miss_count);
+  message.set_skipped_release_count(statistics.skipped_release_count);
+  message.set_recoverable_rejection_count(
+      statistics.recoverable_rejection_count);
+  message.set_fatal_rejection_count(
+      context.outcome() == proto::FATAL_REJECTED ? 1U : 0U);
+  return message;
+}
+
+void setVector3(proto::Vector3 &output, const Eigen::Vector3d &value) {
+  output.set_x(value.x());
+  output.set_y(value.y());
+  output.set_z(value.z());
+}
+
+void setCartesianError(proto::CartesianError &output,
+                       const mcc::Pose &target, const mcc::Pose &actual) {
+  const Eigen::Vector3d position = target.translation() - actual.translation();
+  const Eigen::AngleAxisd rotation(target.linear() * actual.linear().transpose());
+  const Eigen::Vector3d rotation_vector = rotation.axis() * rotation.angle();
+  setVector3(*output.mutable_position_m(), position);
+  setVector3(*output.mutable_rotation_vector_rad(), rotation_vector);
+  output.set_position_norm_m(position.norm());
+  output.set_rotation_norm_rad(rotation.angle());
+}
+
+proto::CartesianTracking makeCartesianTracking(
+    const proto::SampleContext &context, const TargetSnapshot &goal,
+    const TargetSnapshot &reference,
+    const mcc::CartesianTrajectorySample &planner_sample,
+    const mcc::Pose &raw_left, const mcc::Pose &raw_right,
+    const mcc::Pose &executed_left, const mcc::Pose &executed_right) {
+  proto::CartesianTracking message;
+  *message.mutable_context() = context;
+  const auto append = [&](const char *side, const mcc::Pose &arm_goal,
+                          const mcc::Pose &arm_reference,
+                          const mcc::Pose &raw, const mcc::Pose &executed,
+                          std::size_t frame_index) {
+    auto *arm = message.add_arms();
+    arm->set_side(side);
+    setCartesianError(*arm->mutable_goal_to_reference(), arm_goal, arm_reference);
+    setCartesianError(*arm->mutable_reference_to_ik(), arm_reference, raw);
+    setCartesianError(*arm->mutable_reference_to_execution(), arm_reference, executed);
+    setCartesianError(*arm->mutable_ik_to_execution(), raw, executed);
+    if (frame_index < planner_sample.frames.size()) {
+      const auto &frame = planner_sample.frames[frame_index];
+      setVector3(*arm->mutable_reference_linear_velocity_mps(),
+                 frame.twist.head<3>());
+      setVector3(*arm->mutable_reference_angular_velocity_radps(),
+                 frame.twist.tail<3>());
+      setVector3(*arm->mutable_reference_linear_acceleration_mps2(),
+                 frame.acceleration.head<3>());
+      setVector3(*arm->mutable_reference_angular_acceleration_radps2(),
+                 frame.acceleration.tail<3>());
+    }
+  };
+  append("left", goal.left, reference.left, raw_left, executed_left, 0U);
+  append("right", goal.right, reference.right, raw_right, executed_right, 1U);
+  return message;
+}
+
+proto::JointTracking makeJointTracking(
+    const proto::SampleContext &context,
+    const std::vector<std::string> &joint_names,
+    const RedOutputSnapshot &output,
+    const JointTargetLimits &limits) {
+  proto::JointTracking message;
+  *message.mutable_context() = context;
+  std::vector<std::vector<proto::ProjectionKind>> projection_kinds(joint_names.size());
+  for (const auto &event : output.projection.events) {
+    proto::ProjectionKind kind = proto::PROJECTION_KIND_UNSPECIFIED;
+    switch (event.component) {
+    case ProjectionComponent::VelocityLimit:
+      kind = proto::PROJECTION_KIND_VELOCITY_LIMIT;
+      break;
+    case ProjectionComponent::AccelerationLimit:
+      kind = proto::PROJECTION_KIND_ACCELERATION_LIMIT;
+      break;
+    case ProjectionComponent::JerkStoppingEnvelope:
+      kind = proto::PROJECTION_KIND_JERK_STOPPING_ENVELOPE;
+      break;
+    }
+    projection_kinds.at(event.joint_index).push_back(kind);
+  }
+  for (std::size_t index = 0U; index < joint_names.size(); ++index) {
+    auto *joint = message.add_joints();
+    joint->set_name(joint_names[index]);
+    joint->set_ik_position_rad(output.raw_ik_positions[index]);
+    joint->set_ik_velocity_radps(output.raw_ik_velocities[index]);
+    joint->set_raw_target_position_rad(output.raw_joint_target.positions.at(index));
+    joint->set_raw_target_velocity_radps(output.raw_joint_target.velocities.at(index));
+    joint->set_raw_target_acceleration_radps2(
+        output.raw_joint_target.accelerations.at(index));
+    joint->set_projected_target_position_rad(
+        output.projected_joint_target.positions.at(index));
+    joint->set_projected_target_velocity_radps(
+        output.projected_joint_target.velocities.at(index));
+    joint->set_projected_target_acceleration_radps2(
+        output.projected_joint_target.accelerations.at(index));
+    joint->set_execution_position_rad(output.state.positions[index]);
+    joint->set_execution_velocity_radps(output.state.velocities[index]);
+    joint->set_execution_acceleration_radps2(output.state.accelerations[index]);
+    joint->set_execution_jerk_radps3(output.state.jerks[index]);
+    joint->set_position_lower_rad(limits.position_lower.at(index));
+    joint->set_position_upper_rad(limits.position_upper.at(index));
+    joint->set_velocity_limit_radps(limits.max_velocity.at(index));
+    joint->set_acceleration_limit_radps2(limits.max_acceleration.at(index));
+    joint->set_jerk_limit_radps3(limits.max_jerk.at(index));
+    joint->set_velocity_utilization(
+        std::abs(output.state.velocities[index]) / limits.max_velocity.at(index));
+    joint->set_acceleration_utilization(
+        std::abs(output.state.accelerations[index]) /
+        limits.max_acceleration.at(index));
+    joint->set_jerk_utilization(
+        std::abs(output.state.jerks[index]) / limits.max_jerk.at(index));
+    joint->set_position_margin_rad(std::min(
+        output.state.positions[index] - limits.position_lower.at(index),
+        limits.position_upper.at(index) - output.state.positions[index]));
+    for (const auto kind : projection_kinds[index]) {
+      joint->add_projection_kinds(kind);
+    }
+  }
+  return message;
+}
+
+proto::PlannerTelemetry makePlannerTelemetry(
+    const proto::SampleContext &context, const char *kind,
+    const char *algorithm, const char *synchronization,
+    const char *operation, const mcc::PlanningDiagnostics &diagnostics,
+    double sample_time_s) {
+  proto::PlannerTelemetry message;
+  *message.mutable_context() = context;
+  message.set_planner_kind(kind);
+  message.set_algorithm(algorithm);
+  message.set_synchronization(synchronization);
+  message.set_state(plannerStateName(diagnostics.state));
+  message.set_operation(operation);
+  message.set_duration_s(diagnostics.duration);
+  message.set_sample_time_s(sample_time_s);
+  message.set_sample_count(diagnostics.sample_count);
+  message.set_calculation_time_ms(diagnostics.calculation_time_ms);
+  return message;
+}
+
+proto::CollisionTelemetry makeCollisionTelemetry(
+    const proto::SampleContext &context,
+    const mcl::SelfCollisionDebug &collision) {
+  proto::CollisionTelemetry message;
+  *message.mutable_context() = context;
+  message.set_minimum_distance_m(collision.minimum_distance_m);
+  message.set_influence_distance_m(collision.influence_distance_m);
+  message.set_minimum_before_m(collision.minimum_distance_before_m);
+  message.set_minimum_after_m(collision.minimum_distance_after_m);
+  message.set_margin_shortfall_m(collision.margin_shortfall_m);
+  for (const auto &source : collision.pairs) {
+    auto *pair = message.add_pairs();
+    pair->set_label(source.first_link + "--" + source.second_link);
+    pair->set_first_link(source.first_link);
+    pair->set_second_link(source.second_link);
+    pair->set_distance_before_m(source.distance_before_m);
+    pair->set_distance_after_m(source.distance_after_m);
+    pair->set_margin_shortfall_m(std::max(
+        0.0, collision.minimum_distance_m - source.distance_after_m));
+    pair->set_active(source.active);
+  }
+  return message;
 }
 
 template <typename Derived>
@@ -1018,12 +1430,12 @@ void appendPlanningRequestPoses(motion_control::viz::RenderBatch &frame,
                                 const std::string &reference_frame,
                                 const Eigen::Isometry3d &left_pose,
                                 const Eigen::Isometry3d &right_pose) {
-  namespace contract = contracts::foxglove_planned_hierarchical_step_otg_v1;
+  namespace contract = contracts::mcl_planning_v1;
   frame.poses.reserve(frame.poses.size() + 2U);
   frame.poses.push_back(makeVisualizationPose(
-      contract::kLeftPlanningRequestTopic, reference_frame, left_pose));
+      contract::kLeftCartesianReferenceTopic, reference_frame, left_pose));
   frame.poses.push_back(makeVisualizationPose(
-      contract::kRightPlanningRequestTopic, reference_frame, right_pose));
+      contract::kRightCartesianReferenceTopic, reference_frame, right_pose));
 }
 
 void appendOtgExecution(motion_control::viz::RenderBatch &batch,
@@ -1033,13 +1445,13 @@ void appendOtgExecution(motion_control::viz::RenderBatch &batch,
                         const std::string &reference_frame,
                         const Eigen::Isometry3d &left_pose,
                         const Eigen::Isometry3d &right_pose) {
-  namespace contract = contracts::foxglove_planned_hierarchical_step_otg_v1;
+  namespace contract = contracts::mcl_execution_v1;
   batch.joint_states.push_back(motion_control::viz::JointStateSample{
-      contract::kJointOtgExecutionStateTopic, joint_names, positions,
+      contract::kJointExecutionTopic, joint_names, positions,
       velocities});
-  batch.poses.push_back(makeVisualizationPose(contract::kLeftOtgFkTopic,
+  batch.poses.push_back(makeVisualizationPose(contract::kLeftCartesianExecutionTopic,
                                               reference_frame, left_pose));
-  batch.poses.push_back(makeVisualizationPose(contract::kRightOtgFkTopic,
+  batch.poses.push_back(makeVisualizationPose(contract::kRightCartesianExecutionTopic,
                                               reference_frame, right_pose));
 }
 
@@ -1109,14 +1521,22 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
       requirePose(initial_fk.poses, robot.left_end_effector_frame).pose;
   warmup_target.right =
       requirePose(initial_fk.poses, robot.right_end_effector_frame).pose;
-  TargetSnapshot initial_target = warmup_target;
-  initial_target.revision = 1;
+  TargetSnapshot first_replay_target = warmup_target;
   if (loaded_replay.has_value()) {
     const auto &first = replay_source->sourceFrame();
-    initial_target.left =
+    first_replay_target.replay_source_index = replay_source->sourceIndex();
+    first_replay_target.left =
         first.value.left.pose * robot.left_tcp_offset.inverse();
-    initial_target.right =
+    first_replay_target.right =
         first.value.right.pose * robot.right_tcp_offset.inverse();
+  }
+  TargetSnapshot initial_target =
+      loaded_replay.has_value() && planned_options.start_paused
+          ? warmup_target
+          : first_replay_target;
+  initial_target.revision = 1;
+  if (loaded_replay.has_value() && planned_options.start_paused) {
+    initial_target.replay_joint_hold = true;
   }
 
   RedOutputSnapshot initial_output;
@@ -1247,6 +1667,17 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
   }
   auto visualization_sink =
       mcl::createPreviewSink(options.visualization, kProgramId);
+  const bool telemetry_enabled = options.visualization.enabled;
+  std::unique_ptr<RunClock> telemetry_clock;
+  std::unique_ptr<TelemetryEncoder> telemetry_encoder;
+  std::unique_ptr<WorkerTelemetryQueue> red_telemetry;
+  std::unique_ptr<WorkerTelemetryQueue> yellow_telemetry;
+  if (telemetry_enabled) {
+    telemetry_clock = std::make_unique<RunClock>();
+    telemetry_encoder = std::make_unique<TelemetryEncoder>();
+    red_telemetry = std::make_unique<WorkerTelemetryQueue>();
+    yellow_telemetry = std::make_unique<WorkerTelemetryQueue>();
+  }
 
   mcl::WorkerStopController stop_controller;
   mcl::GroupedFaultState fault;
@@ -1302,11 +1733,41 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
         initial_collision_diagnostics;
     mcl::SelfCollisionDebug collision_debug = initial_collision_debug;
     mcl::SolverDebug solver_debug = initial_yellow_solver_debug;
+    EventStamp telemetry_stamp;
+    proto::SampleContext telemetry_context;
+    mcl::PeriodicIterationObserver telemetry_observer;
+    bool deadline_miss_active = false;
+    if (telemetry_enabled) {
+      telemetry_observer = [&](const mcl::WorkerIterationResult &result,
+                               const mcl::PeriodicIterationTiming &timing,
+                               const mcl::PeriodicWorkerStatistics &statistics) {
+        auto context = telemetry_context;
+        context.set_outcome(attemptOutcome(result.outcome));
+        context.set_committed(result.outcome == mcl::WorkerIterationOutcome::Accepted);
+        yellow_telemetry->tryPush(telemetryRecord(
+            telemetry_stamp, contracts::mcl_telemetry_v1::kAvoidanceWorkerTopic,
+            makeWorkerTelemetry(context, "avoidance", options.yellow_rate_hz,
+                                timing, statistics)));
+        const bool deadline_missed = timing.overrun_ms > 0.0;
+        if (deadline_missed && !deadline_miss_active) {
+          yellow_telemetry->tryPush(TelemetryRecord::log(
+              telemetry_stamp, contracts::mcl_telemetry_v1::kEventsTopic,
+              motion_control::viz::LogLevel::Warning,
+              "avoidance-deadline-miss",
+              "avoidance worker overrun_ms=" +
+                  std::to_string(timing.overrun_ms)));
+        }
+        deadline_miss_active = deadline_missed;
+      };
+    }
     mcl::runPeriodicWorker(
         {mcl::WorkerGroup::Yellow, options.yellow_rate_hz,
          options.deadline_policy},
         stop_controller, fault, yellow_worker_diagnostics,
         [&](double, std::int64_t) {
+          if (telemetry_enabled) {
+            telemetry_stamp = telemetry_clock->sample();
+          }
           state_to_yellow.readLatest(state);
           request.captured_state = capturedState(state);
           const auto status =
@@ -1326,13 +1787,39 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
                             accepted ? mcc::ResultDisposition::Accepted
                                      : mcc::ResultDisposition::Rejected);
           yellow_solver_to_ui.publish(solver_debug);
+          if (telemetry_enabled) {
+            telemetry_context = makeSampleContext(
+                telemetry_stamp,
+                accepted ? proto::ACCEPTED
+                         : proto::FATAL_REJECTED,
+                accepted, diagnostics.run_generation, 0U,
+                diagnostics.attempt_revision, diagnostics.value_revision);
+            yellow_telemetry->tryPush(telemetryRecord(
+                telemetry_stamp,
+                contracts::mcl_telemetry_v1::kAvoidanceSolverTopic,
+                makeSolverTelemetry(telemetry_context, "avoidance",
+                                    diagnostics, solver_debug,
+                                    options.solver)));
+            if (accepted) {
+              yellow_telemetry->tryPush(telemetryRecord(
+                  telemetry_stamp,
+                  contracts::mcl_telemetry_v1::kCollisionTopic,
+                  makeCollisionTelemetry(telemetry_context, collision_debug)));
+            } else {
+              yellow_telemetry->tryPush(TelemetryRecord::log(
+                  telemetry_stamp, contracts::mcl_telemetry_v1::kEventsTopic,
+                  motion_control::viz::LogLevel::Error, "avoidance-rejection",
+                  rejectedAttemptDetail(status, diagnostics)));
+            }
+          }
           return mcl::WorkerIterationResult{
               accepted ? mcl::WorkerIterationOutcome::Accepted
                        : mcl::WorkerIterationOutcome::FatalRejected,
               diagnostics.attempt_revision, diagnostics.solve_time_ms,
               accepted ? std::string{}
                        : rejectedAttemptDetail(status, diagnostics)};
-        });
+        },
+        telemetry_observer);
   });
 
   workers.red = std::thread([&]() {
@@ -1363,17 +1850,47 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
         joint_names.size());
     mcl::planned_hierarchical_step_otg::ReplaySettlingCounter replay_settling(
         planned_options.replay_settling);
+    EventStamp telemetry_stamp;
+    proto::SampleContext telemetry_context;
+    mcl::PeriodicIterationObserver telemetry_observer;
+    bool deadline_miss_active = false;
+    if (telemetry_enabled) {
+      telemetry_observer = [&](const mcl::WorkerIterationResult &result,
+                               const mcl::PeriodicIterationTiming &timing,
+                               const mcl::PeriodicWorkerStatistics &statistics) {
+        auto context = telemetry_context;
+        context.set_outcome(attemptOutcome(result.outcome));
+        context.set_committed(result.outcome == mcl::WorkerIterationOutcome::Accepted);
+        red_telemetry->tryPush(telemetryRecord(
+            telemetry_stamp, contracts::mcl_telemetry_v1::kControlWorkerTopic,
+            makeWorkerTelemetry(context, "control", options.red_rate_hz,
+                                timing, statistics)));
+        const bool deadline_missed = timing.overrun_ms > 0.0;
+        if (deadline_missed && !deadline_miss_active) {
+          red_telemetry->tryPush(TelemetryRecord::log(
+              telemetry_stamp, contracts::mcl_telemetry_v1::kEventsTopic,
+              motion_control::viz::LogLevel::Warning,
+              "control-deadline-miss",
+              "control worker overrun_ms=" +
+                  std::to_string(timing.overrun_ms)));
+        }
+        deadline_miss_active = deadline_missed;
+      };
+    }
 
     const auto makeReplayRow = [&](std::uint64_t attempt_revision) {
       std::vector<std::string> row(48U);
-      if (!loaded_replay.has_value()) {
+      row[0] = std::to_string(attempt_revision);
+      row[14] = mcl::planned_hierarchical_step_otg::jointTargetModeName(
+          planned_options.joint_target.mode);
+      if (!loaded_replay.has_value() ||
+          !target.replay_source_index.has_value()) {
         return row;
       }
-      const std::size_t source_index = std::min<std::size_t>(
-          target.revision > 0U ? target.revision - 1U : 0U,
+      const std::size_t source_index = std::min(
+          *target.replay_source_index,
           loaded_replay->timeline.timeline.size() - 1U);
       const auto &source = loaded_replay->timeline.timeline.at(source_index);
-      row[0] = std::to_string(attempt_revision);
       row[1] = std::to_string(source.sequence);
       row[2] = std::to_string(source.original_logical_time_ns);
       row[3] = std::to_string(source.source_time_from_start_ns);
@@ -1388,12 +1905,15 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
       row[9] = replay::optionalTimestamp(source.value.right.time.log_time_ns);
       row[10] =
           replay::optionalTimestamp(source.value.right.time.publish_time_ns);
-      row[14] = mcl::planned_hierarchical_step_otg::jointTargetModeName(
-          planned_options.joint_target.mode);
       return row;
     };
     const auto recordFailure = [&](const std::string &layer,
                                    const std::string &detail) {
+      if (telemetry_enabled) {
+        red_telemetry->tryPush(TelemetryRecord::log(
+            telemetry_stamp, contracts::mcl_telemetry_v1::kEventsTopic,
+            motion_control::viz::LogLevel::Error, layer, detail));
+      }
       if (!loaded_replay.has_value()) {
         return;
       }
@@ -1424,8 +1944,19 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
         {mcl::WorkerGroup::Red, options.red_rate_hz, options.deadline_policy},
         stop_controller, fault, red_worker_diagnostics,
         [&](double, std::int64_t sample_time_ns) {
+          if (telemetry_enabled) {
+            telemetry_stamp = telemetry_clock->sample();
+            attempt.event_timestamp_ns = telemetry_stamp.timestamp_ns;
+            attempt.run_time_ns = telemetry_stamp.run_time_ns;
+          }
           if (target_to_red.readLatest(target) && loaded_replay.has_value()) {
             replay_last_consumed_revision.store(target.revision);
+          }
+          if (telemetry_enabled) {
+            telemetry_context = makeSampleContext(
+                telemetry_stamp, proto::IDLE, false, 2U,
+                target.revision, diagnostics.attempt_revision,
+                diagnostics.value_revision);
           }
           if (rejected_target_revision.has_value() &&
               target.revision == *rejected_target_revision) {
@@ -1445,6 +1976,28 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
             attempt.retarget_clamp_target_revision = target.revision;
             const auto planning_status = cartesian_planner.replan(
                 retarget_request, planning_diagnostics);
+            if (telemetry_enabled) {
+              auto planner_context = telemetry_context;
+              planner_context.set_outcome(
+                  planning_status.ok() ? proto::ACCEPTED
+                                       : proto::FATAL_REJECTED);
+              red_telemetry->tryPush(telemetryRecord(
+                  telemetry_stamp,
+                  contracts::mcl_telemetry_v1::kCartesianPlannerTopic,
+                  makePlannerTelemetry(
+                      planner_context, "cartesian", "jerk_limited",
+                      planningSynchronizationName(
+                          planned_options.planning.cartesian_synchronization),
+                      "replan", planning_diagnostics,
+                      accepted_planner_sample.time_from_start)));
+              if (attempt.retarget_clamp.clamped()) {
+                red_telemetry->tryPush(TelemetryRecord::log(
+                    telemetry_stamp,
+                    contracts::mcl_telemetry_v1::kEventsTopic,
+                    motion_control::viz::LogLevel::Warning,
+                    "cartesian-projection", retargetClampDetail(attempt)));
+              }
+            }
             if (!planning_status.ok()) {
               attempt.state =
                   planned_options.source_mode == SourceMode::Teleop &&
@@ -1458,6 +2011,12 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
               red_attempt_to_ui.publish(attempt);
               if (attempt.state == RedAttemptState::RecoverableRejected) {
                 rejected_target_revision = target.revision;
+              }
+              if (telemetry_enabled) {
+                telemetry_context.set_outcome(
+                    attempt.state == RedAttemptState::RecoverableRejected
+                        ? proto::RECOVERABLE_REJECTED
+                        : proto::FATAL_REJECTED);
               }
               return mcl::WorkerIterationResult{
                   attempt.state == RedAttemptState::RecoverableRejected
@@ -1473,6 +2032,22 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
             mcc::CartesianTrajectorySample next_sample;
             const auto planning_status =
                 cartesian_planner.step(next_sample, planning_diagnostics);
+            if (telemetry_enabled) {
+              auto planner_context = telemetry_context;
+              planner_context.set_outcome(
+                  planning_status.ok() ? proto::ACCEPTED
+                                       : proto::FATAL_REJECTED);
+              red_telemetry->tryPush(telemetryRecord(
+                  telemetry_stamp,
+                  contracts::mcl_telemetry_v1::kCartesianPlannerTopic,
+                  makePlannerTelemetry(
+                      planner_context, "cartesian", "jerk_limited",
+                      planningSynchronizationName(
+                          planned_options.planning.cartesian_synchronization),
+                      "step", planning_diagnostics,
+                      planning_status.ok() ? next_sample.time_from_start
+                                           : accepted_planner_sample.time_from_start)));
+            }
             if (!planning_status.ok()) {
               attempt.state = RedAttemptState::FatalRejected;
               attempt.target = target;
@@ -1480,6 +2055,10 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
                   "Cartesian planner step failed: " + planning_status.message;
               recordFailure("cartesian-step", attempt.detail);
               red_attempt_to_ui.publish(attempt);
+              if (telemetry_enabled) {
+                telemetry_context.set_outcome(
+                    proto::FATAL_REJECTED);
+              }
               return mcl::WorkerIterationResult{
                   mcl::WorkerIterationOutcome::FatalRejected, target.revision,
                   planning_diagnostics.calculation_time_ms, attempt.detail};
@@ -1500,6 +2079,14 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
           red_solve_time_percentiles.record(diagnostics.solve_time_ms);
           recordQpPassTimes(red_qp_pass_time_percentiles, diagnostics);
           const bool ik_accepted = ik_status.ok();
+          if (telemetry_enabled) {
+            telemetry_context = makeSampleContext(
+                telemetry_stamp,
+                ik_accepted ? proto::ACCEPTED
+                            : proto::FATAL_REJECTED,
+                false, diagnostics.run_generation, target.revision,
+                diagnostics.attempt_revision, diagnostics.value_revision);
+          }
           if (!ik_accepted) {
             attempt.state =
                 planned_options.source_mode == SourceMode::Teleop &&
@@ -1510,6 +2097,31 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
             updateSolverDebug(attempt.solver_debug, diagnostics,
                               mcc::ResultDisposition::Rejected);
             attempt.detail = rejectedAttemptDetail(ik_status, diagnostics);
+            if (telemetry_enabled) {
+              telemetry_context.set_outcome(
+                  attempt.state == RedAttemptState::RecoverableRejected
+                      ? proto::RECOVERABLE_REJECTED
+                      : proto::FATAL_REJECTED);
+              red_telemetry->tryPush(telemetryRecord(
+                  telemetry_stamp,
+                  contracts::mcl_telemetry_v1::kIkSolverTopic,
+                  makeSolverTelemetry(telemetry_context, "hierarchical_ik",
+                                      diagnostics, attempt.solver_debug,
+                                      options.solver)));
+              red_telemetry->tryPush(telemetryRecord(
+                  telemetry_stamp,
+                  contracts::mcl_telemetry_v1::kAvoidanceToIkCouplingTopic,
+                  makeCouplingTelemetry(telemetry_context, diagnostics,
+                                        telemetry_stamp)));
+              red_telemetry->tryPush(telemetryRecord(
+                  telemetry_stamp,
+                  contracts::mcl_telemetry_v1::kCartesianTrackingTopic,
+                  makeCartesianTracking(
+                      telemetry_context, target, reference,
+                      staged_for_attempt, output.raw_left_pose,
+                      output.raw_right_pose, output.left_pose,
+                      output.right_pose)));
+            }
             red_attempt_to_ui.publish(attempt);
             if (attempt.state == RedAttemptState::RecoverableRejected) {
               rejected_target_revision = target.revision;
@@ -1523,6 +2135,43 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
                 attempt.detail};
           }
 
+          updateSolverDebug(attempt.solver_debug, diagnostics,
+                            solution.kinematics_solution.disposition);
+          const auto raw_left_pose =
+              requirePose(solution.kinematics_solution.solved_poses,
+                          robot.left_end_effector_frame)
+                  .pose;
+          const auto raw_right_pose =
+              requirePose(solution.kinematics_solution.solved_poses,
+                          robot.right_end_effector_frame)
+                  .pose;
+          const auto publishIkEvidence = [&]() {
+            if (!telemetry_enabled) {
+              return;
+            }
+            red_telemetry->tryPush(telemetryRecord(
+                telemetry_stamp,
+                contracts::mcl_telemetry_v1::kIkSolverTopic,
+                makeSolverTelemetry(telemetry_context, "hierarchical_ik",
+                                    diagnostics, attempt.solver_debug,
+                                    options.solver)));
+            red_telemetry->tryPush(telemetryRecord(
+                telemetry_stamp,
+                contracts::mcl_telemetry_v1::kAvoidanceToIkCouplingTopic,
+                makeCouplingTelemetry(telemetry_context, diagnostics,
+                                      telemetry_stamp)));
+          };
+          if (telemetry_enabled) {
+            if (diagnostics.hierarchy.same_tick_fallback_level.has_value()) {
+              red_telemetry->tryPush(TelemetryRecord::log(
+                  telemetry_stamp, contracts::mcl_telemetry_v1::kEventsTopic,
+                  motion_control::viz::LogLevel::Warning, "ik-fallback",
+                  "hierarchical IK used same-tick fallback priority " +
+                      std::to_string(priorityNumber(
+                          *diagnostics.hierarchy.same_tick_fallback_level))));
+            }
+          }
+
           const auto mapped_raw_ik =
               mcl::planned_hierarchical_step_otg::mapActiveIkToFull(
                   toStdVector(ik_state.positions), active_joint_full_indices,
@@ -1531,9 +2180,25 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
           const auto raw_target = joint_target_builder.preview(
               mapped_raw_ik.positions, mapped_raw_ik.velocities);
           mcl::planned_hierarchical_step_otg::ProjectionDiagnostics projection;
-          const auto projected_target =
+          auto projected_target =
               mcl::planned_hierarchical_step_otg::projectConfiguredLimits(
                   raw_target, joint_otg_limits, projection);
+          if (target.replay_joint_hold) {
+            // Synthetic replay frames keep the IK state machine running while
+            // the executed joints remain at the q0 used to construct FK(q0).
+            projected_target.positions = toStdVector(otg_state.positions);
+            projected_target.velocities.assign(joint_names.size(), 0.0);
+            projected_target.accelerations.assign(joint_names.size(), 0.0);
+            projection = {};
+          }
+          if (telemetry_enabled && projection.projected()) {
+            red_telemetry->tryPush(TelemetryRecord::log(
+                telemetry_stamp, contracts::mcl_telemetry_v1::kEventsTopic,
+                motion_control::viz::LogLevel::Warning,
+                "joint-target-projection",
+                "projected " + std::to_string(projection.events.size()) +
+                    " joint target components"));
+          }
 
           mcc::JointTrajectoryRequest joint_request;
           joint_request.joint_names = joint_names;
@@ -1562,6 +2227,26 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
                 "JointPlanner plan failed: " + joint_status.message;
             recordFailure("joint-plan", attempt.detail);
             red_attempt_to_ui.publish(attempt);
+            if (telemetry_enabled) {
+              telemetry_context.set_outcome(
+                  proto::FATAL_REJECTED);
+              publishIkEvidence();
+              red_telemetry->tryPush(telemetryRecord(
+                  telemetry_stamp,
+                  contracts::mcl_telemetry_v1::kJointPlannerTopic,
+                  makePlannerTelemetry(
+                      telemetry_context, "joint", "jerk_limited",
+                      planningSynchronizationName(
+                          planned_options.planning.joint_synchronization),
+                      "plan", joint_plan_diagnostics, 0.0)));
+              red_telemetry->tryPush(telemetryRecord(
+                  telemetry_stamp,
+                  contracts::mcl_telemetry_v1::kCartesianTrackingTopic,
+                  makeCartesianTracking(
+                      telemetry_context, target, reference,
+                      staged_for_attempt, raw_left_pose, raw_right_pose,
+                      output.left_pose, output.right_pose)));
+            }
             return mcl::WorkerIterationResult{
                 mcl::WorkerIterationOutcome::FatalRejected,
                 diagnostics.attempt_revision,
@@ -1580,6 +2265,26 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
                 "JointPlanner step failed: " + joint_status.message;
             recordFailure("joint-step", attempt.detail);
             red_attempt_to_ui.publish(attempt);
+            if (telemetry_enabled) {
+              telemetry_context.set_outcome(
+                  proto::FATAL_REJECTED);
+              publishIkEvidence();
+              red_telemetry->tryPush(telemetryRecord(
+                  telemetry_stamp,
+                  contracts::mcl_telemetry_v1::kJointPlannerTopic,
+                  makePlannerTelemetry(
+                      telemetry_context, "joint", "jerk_limited",
+                      planningSynchronizationName(
+                          planned_options.planning.joint_synchronization),
+                      "step", joint_step_diagnostics, 0.0)));
+              red_telemetry->tryPush(telemetryRecord(
+                  telemetry_stamp,
+                  contracts::mcl_telemetry_v1::kCartesianTrackingTopic,
+                  makeCartesianTracking(
+                      telemetry_context, target, reference,
+                      staged_for_attempt, raw_left_pose, raw_right_pose,
+                      output.left_pose, output.right_pose)));
+            }
             return mcl::WorkerIterationResult{
                 mcl::WorkerIterationOutcome::FatalRejected,
                 diagnostics.attempt_revision,
@@ -1595,7 +2300,10 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
           candidate_ik_state.accelerations.setZero();
           candidate_ik_state.jerks.setZero();
           ++candidate_ik_state.sequence;
-          candidate_ik_state.monotonic_time_nanoseconds = sample_time_ns;
+          candidate_ik_state.monotonic_time_nanoseconds =
+              telemetry_enabled
+                  ? static_cast<std::int64_t>(telemetry_stamp.run_time_ns)
+                  : sample_time_ns;
 
           StateSnapshot candidate_otg_state = otg_state;
           candidate_otg_state.positions = toEigen(joint_sample.positions);
@@ -1604,7 +2312,10 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
               toEigen(joint_sample.accelerations);
           candidate_otg_state.jerks = toEigen(joint_sample.jerks);
           ++candidate_otg_state.sequence;
-          candidate_otg_state.monotonic_time_nanoseconds = sample_time_ns;
+          candidate_otg_state.monotonic_time_nanoseconds =
+              telemetry_enabled
+                  ? static_cast<std::int64_t>(telemetry_stamp.run_time_ns)
+                  : sample_time_ns;
           mcc::ForwardKinematicsRequest executed_fk_request;
           executed_fk_request.state = robotState(candidate_otg_state);
           executed_fk_request.frame_names = {robot.left_end_effector_frame,
@@ -1621,6 +2332,18 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
                 "OTG execution-state FK failed: " + fk_status.message;
             recordFailure("otg-fk", attempt.detail);
             red_attempt_to_ui.publish(attempt);
+            if (telemetry_enabled) {
+              telemetry_context.set_outcome(
+                  proto::FATAL_REJECTED);
+              publishIkEvidence();
+              red_telemetry->tryPush(telemetryRecord(
+                  telemetry_stamp,
+                  contracts::mcl_telemetry_v1::kCartesianTrackingTopic,
+                  makeCartesianTracking(
+                      telemetry_context, target, reference,
+                      staged_for_attempt, raw_left_pose, raw_right_pose,
+                      output.left_pose, output.right_pose)));
+            }
             return mcl::WorkerIterationResult{
                 mcl::WorkerIterationOutcome::FatalRejected,
                 diagnostics.attempt_revision,
@@ -1630,14 +2353,6 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
                 attempt.detail};
           }
 
-          const auto raw_left_pose =
-              requirePose(solution.kinematics_solution.solved_poses,
-                          robot.left_end_effector_frame)
-                  .pose;
-          const auto raw_right_pose =
-              requirePose(solution.kinematics_solution.solved_poses,
-                          robot.right_end_effector_frame)
-                  .pose;
           const auto executed_left_pose =
               requirePose(executed_fk.poses, robot.left_end_effector_frame)
                   .pose;
@@ -1653,6 +2368,8 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
           staged_planner_sample.reset();
 
           output.revision = diagnostics.value_revision;
+          output.event_timestamp_ns = telemetry_stamp.timestamp_ns;
+          output.run_time_ns = telemetry_stamp.run_time_ns;
           output.accepted_target = reference;
           output.source_goal = target;
           output.accepted_planner_sample = accepted_planner_sample;
@@ -1685,6 +2402,38 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
               poseError(reference.right, executed_right_pose);
           updateSolverDebug(output.solver_debug, diagnostics,
                             solution.kinematics_solution.disposition);
+          if (telemetry_enabled) {
+            telemetry_context.set_outcome(proto::ACCEPTED);
+            telemetry_context.set_committed(true);
+            telemetry_context.set_value_revision(diagnostics.value_revision);
+            attempt.solver_debug = output.solver_debug;
+            publishIkEvidence();
+            red_telemetry->tryPush(telemetryRecord(
+                telemetry_stamp,
+                contracts::mcl_telemetry_v1::kCartesianTrackingTopic,
+                makeCartesianTracking(
+                    telemetry_context, target, reference, staged_for_attempt,
+                    raw_left_pose, raw_right_pose, executed_left_pose,
+                    executed_right_pose)));
+            red_telemetry->tryPush(telemetryRecord(
+                telemetry_stamp,
+                contracts::mcl_telemetry_v1::kJointTrackingTopic,
+                makeJointTracking(telemetry_context, joint_names, output,
+                                  joint_otg_limits)));
+            auto joint_tick_diagnostics = joint_step_diagnostics;
+            joint_tick_diagnostics.duration = joint_plan_diagnostics.duration;
+            joint_tick_diagnostics.calculation_time_ms +=
+                joint_plan_diagnostics.calculation_time_ms;
+            red_telemetry->tryPush(telemetryRecord(
+                telemetry_stamp,
+                contracts::mcl_telemetry_v1::kJointPlannerTopic,
+                makePlannerTelemetry(
+                    telemetry_context, "joint", "jerk_limited",
+                    planningSynchronizationName(
+                        planned_options.planning.joint_synchronization),
+                    "plan+step", joint_tick_diagnostics,
+                    joint_sample.time_from_start)));
+          }
           output_to_ui.publish(output);
 
           attempt.state = RedAttemptState::Accepted;
@@ -1695,14 +2444,11 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
 
           if (loaded_replay.has_value()) {
             ++replay_accepted_solve_count;
-            const std::uint64_t final_revision =
-                loaded_replay->timeline.timeline
-                    .at(loaded_replay->timeline.timeline.size() - 1U)
-                    .sequence +
-                1U;
+            const std::size_t final_source_index =
+                loaded_replay->timeline.timeline.size() - 1U;
             const bool settled = replay_settling.update(
-                target.revision == final_revision &&
-                    replay_last_consumed_revision.load() >= final_revision,
+                target.replay_source_index == final_source_index &&
+                    replay_last_consumed_revision.load() >= target.revision,
                 planning_diagnostics.state == mcc::PlanningState::Finished,
                 output.left_position_error_m, output.left_orientation_error_rad,
                 output.right_position_error_m,
@@ -1769,13 +2515,24 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
               diagnostics.attempt_revision,
               total_solver_time_ms,
               {}};
-        });
+        },
+        telemetry_observer);
   });
 
   mcl::SingleRateScheduler ui_scheduler(
       {options.ui_rate_hz, options.duration_s});
   TargetSnapshot published_target = initial_target;
   TargetSnapshot last_command_target = initial_target;
+  std::vector<mcl::ArmTarget> latest_input_targets = armTargets(initial_target);
+  if (planned_options.source_mode == SourceMode::Replay &&
+      initial_target.replay_source_index.has_value()) {
+    const auto &source = replay_source->sourceFrame();
+    latest_input_targets = {
+        {mcl::ArmSide::Left, source.value.left.pose},
+        {mcl::ArmSide::Right, source.value.right.pose}};
+  }
+  std::optional<std::size_t> last_released_replay_source_index =
+      initial_target.replay_source_index;
   RedOutputSnapshot latest_output = initial_output;
   RedAttemptSnapshot latest_red_attempt = initial_red_attempt;
   mcl::SelfCollisionDebug latest_collision_debug = initial_collision_debug;
@@ -1785,9 +2542,22 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
   std::optional<mcl::RejectedTargetDebug> rejected_target;
   std::optional<RedAttemptSnapshot> last_recoverable_rejection;
   std::optional<mcl::GroupedWorkerFault> held_fault;
+  std::optional<std::string> pending_fault_event;
   std::uint64_t handled_rejected_target_revision = 0;
   std::size_t publish_count = 0;
   bool replay_completed = false;
+  std::string telemetry_run_id;
+  if (telemetry_enabled) {
+    telemetry_run_id =
+        planned_options.replay.has_value()
+            ? planned_options.replay->output_dir.filename().string()
+            : mcl::make_run_id(mcl::sha256_file(options.urdf_path));
+  }
+  bool run_info_published = false;
+  bool replay_eos_event_published = false;
+  std::uint64_t last_run_info_run_time_ns = 0U;
+  std::uint64_t last_reported_dropped_samples = 0U;
+  double previous_write_time_ms = 0.0;
   mcl::IkDebugFrame frame;
   frame.joint_names = joint_names;
   frame.positions = robot.default_positions;
@@ -1820,6 +2590,58 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
       planned_options.planning.max_angular_velocity_rps,
       planned_options.planning.max_angular_acceleration_rps2,
       planned_options.planning.max_angular_jerk_rps3};
+  std::optional<std::uint64_t> pending_step_hold_red_iteration;
+  bool pending_synthetic_replay_hold = false;
+
+  const auto publishSyntheticReplayHold = [&](std::string status) {
+    published_target.revision += 1U;
+    published_target.replay_source_index.reset();
+    published_target.replay_joint_hold = true;
+    published_target.left = latest_output.left_pose;
+    published_target.right = latest_output.right_pose;
+    latest_input_targets = armTargets(published_target);
+    last_command_target = published_target;
+    target_to_red.publish(published_target);
+    replay_settled.store(false);
+    replay_settled_cycle_count.store(0U);
+    input.setTargetPose(mcl::ArmSide::Left, published_target.left, status);
+    input.setTargetPose(mcl::ArmSide::Right, published_target.right,
+                        std::move(status));
+  };
+  const auto publishCurrentReplayFrame = [&](std::string status) {
+    const auto &source = replay_source->sourceFrame();
+    published_target.revision += 1U;
+    published_target.replay_source_index = replay_source->sourceIndex();
+    published_target.replay_joint_hold = false;
+    published_target.left =
+        source.value.left.pose * robot.left_tcp_offset.inverse();
+    published_target.right =
+        source.value.right.pose * robot.right_tcp_offset.inverse();
+    latest_input_targets = {
+        {mcl::ArmSide::Left, source.value.left.pose},
+        {mcl::ArmSide::Right, source.value.right.pose}};
+    last_released_replay_source_index = replay_source->sourceIndex();
+    last_command_target = published_target;
+    target_to_red.publish(published_target);
+    input.setTargetPose(mcl::ArmSide::Left, published_target.left, status);
+    input.setTargetPose(mcl::ArmSide::Right, published_target.right,
+                        std::move(status));
+  };
+  const auto scheduleSingleFrameHold = [&](std::int64_t duration_ns) {
+    const auto red_stats = red_worker_diagnostics.snapshot();
+    pending_step_hold_red_iteration =
+        red_stats.iteration_count + workerTicksForReplayDuration(
+                                        duration_ns, options.red_rate_hz);
+  };
+  const auto currentReplayFrameDuration = [&]() {
+    const std::size_t source_index = replay_source->sourceIndex();
+    const auto &timeline = loaded_replay->timeline.timeline;
+    if (source_index + 1U < timeline.size()) {
+      return timeline.at(source_index + 1U).projected_time_ns -
+             timeline.at(source_index).projected_time_ns;
+    }
+    return planned_options.replay->target_period_ns;
+  };
 
   while (true) {
     const auto schedule = ui_scheduler.next();
@@ -1867,6 +2689,7 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
     if (!held_fault.has_value()) {
       if (const auto recorded_fault = fault.snapshot()) {
         held_fault = *recorded_fault;
+        pending_fault_event = faultSummary(*recorded_fault);
         workers.join();
         input.setMotionInputEnabled(
             false, std::string{"FAULT HOLD: "} +
@@ -1895,8 +2718,54 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
 
     if (planned_options.source_mode == SourceMode::Replay &&
         !held_fault.has_value()) {
+      bool skip_replay_advance = false;
+      std::optional<std::int64_t> pending_step_start_ns;
       for (const auto control : input.consumeSourceControls()) {
+        const bool was_paused = replay_source->paused();
+        if (control == mcl::SourceControl::Step) {
+          pending_step_hold_red_iteration.reset();
+          const bool current_frame_has_not_been_released =
+              replay_source->paused() &&
+              (!last_released_replay_source_index.has_value() ||
+               *last_released_replay_source_index !=
+                   replay_source->sourceIndex());
+          if (current_frame_has_not_been_released) {
+            publishCurrentReplayFrame("Replay single-frame goal");
+            scheduleSingleFrameHold(currentReplayFrameDuration());
+            skip_replay_advance = true;
+          } else {
+            pending_step_start_ns =
+                replay_source->sourceFrame().projected_time_ns;
+            replay_source->applyControl(control);
+          }
+          continue;
+        }
+
         replay_source->applyControl(control);
+        const bool paused_now = replay_source->paused();
+        const bool paused_by_control =
+            control == mcl::SourceControl::Pause ||
+            (control == mcl::SourceControl::TogglePause && !was_paused &&
+             paused_now);
+        const bool resumed_by_control =
+            control == mcl::SourceControl::Resume ||
+            (control == mcl::SourceControl::TogglePause && was_paused &&
+             !paused_now);
+        if (paused_by_control) {
+          pending_step_hold_red_iteration.reset();
+          pending_synthetic_replay_hold =
+              published_target.replay_source_index.has_value();
+          skip_replay_advance = true;
+        } else if (resumed_by_control) {
+          pending_step_hold_red_iteration.reset();
+          pending_synthetic_replay_hold = false;
+          publishCurrentReplayFrame("Replay resumed from current source frame");
+          skip_replay_advance = true;
+        } else if (control == mcl::SourceControl::Stop) {
+          pending_step_hold_red_iteration.reset();
+          pending_synthetic_replay_hold = false;
+          skip_replay_advance = true;
+        }
       }
       const bool worker_consumed_current =
           replay_last_consumed_revision.load() >= published_target.revision;
@@ -1904,24 +2773,52 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
                                    mcl::data::ExecutionMode::Realtime ||
                                worker_consumed_current;
       const auto advance =
-          may_advance ? replay_source->advance(static_cast<std::int64_t>(
-                            std::llround(1.0e9 / options.ui_rate_hz)))
-                      : replay::ReplayAdvance{};
+          !skip_replay_advance && may_advance
+              ? replay_source->advance(static_cast<std::int64_t>(
+                    std::llround(1.0e9 / options.ui_rate_hz)))
+              : replay::ReplayAdvance{};
       replay_source->waitForCurrentFrame();
       input.setPaused(replay_source->paused(), replay_source->status().detail);
       if (advance.frame_changed) {
-        const auto &source = replay_source->sourceFrame();
-        published_target.revision = source.sequence + 1U;
-        published_target.left =
-            source.value.left.pose * robot.left_tcp_offset.inverse();
-        published_target.right =
-            source.value.right.pose * robot.right_tcp_offset.inverse();
-        last_command_target = published_target;
-        target_to_red.publish(published_target);
-        input.setTargetPose(mcl::ArmSide::Left, published_target.left,
-                            "Replay goal advanced");
-        input.setTargetPose(mcl::ArmSide::Right, published_target.right,
-                            "Replay goal advanced");
+        publishCurrentReplayFrame("Replay goal advanced");
+        if (pending_step_start_ns.has_value()) {
+          const std::int64_t frame_duration_ns =
+              replay_source->sourceFrame().projected_time_ns -
+              *pending_step_start_ns;
+          scheduleSingleFrameHold(frame_duration_ns);
+        }
+      }
+      if (pending_step_hold_red_iteration.has_value() &&
+          replay_source->paused() &&
+          red_worker_diagnostics.snapshot().iteration_count >=
+              *pending_step_hold_red_iteration) {
+        pending_synthetic_replay_hold = true;
+        pending_step_hold_red_iteration.reset();
+      }
+      output_to_ui.readLatest(latest_output);
+      const bool current_target_finished =
+          latest_output.source_goal.revision == published_target.revision &&
+          latest_output.planner_state == mcc::PlanningState::Finished;
+      const bool execution_settled =
+          latest_output.left_position_error_m <=
+              planned_options.replay_settling.fk_position_m &&
+          latest_output.right_position_error_m <=
+              planned_options.replay_settling.fk_position_m &&
+          latest_output.left_orientation_error_rad <=
+              planned_options.replay_settling.fk_orientation_rad &&
+          latest_output.right_orientation_error_rad <=
+              planned_options.replay_settling.fk_orientation_rad &&
+          maximumAbsolute(latest_output.state.velocities) <=
+              planned_options.replay_settling.velocity_rad_per_s &&
+          maximumAbsolute(latest_output.state.accelerations) <=
+              planned_options.replay_settling.acceleration_rad_per_s2;
+      // An instantaneous FK(current-q) retarget while q is moving requires a
+      // stop-and-return Cartesian path. Finish the already released source
+      // frame first, then make the settled execution state the synthetic q0.
+      if (pending_synthetic_replay_hold && replay_source->paused() &&
+          current_target_finished && execution_settled) {
+        publishSyntheticReplayHold("Replay paused at settled FK");
+        pending_synthetic_replay_hold = false;
       }
     }
 
@@ -1931,10 +2828,12 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
           !sameTargetPoses(last_command_target, input.targets())) {
         published_target =
             targetSnapshot(input.targets(), published_target.revision + 1);
+        latest_input_targets = input.targets();
         last_command_target = published_target;
         target_to_red.publish(published_target);
       }
 
+      frame.input_targets = latest_input_targets;
       frame.targets = armTargets(latest_output.accepted_target);
       frame.forward_kinematics = {
           {mcl::ArmSide::Left, latest_output.left_pose},
@@ -2200,8 +3099,15 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
       visualization_debug_frame.forward_kinematics = {
           {mcl::ArmSide::Left, latest_output.raw_left_pose},
           {mcl::ArmSide::Right, latest_output.raw_right_pose}};
+      EventStamp emit_stamp{
+          schedule->emit_time_ns,
+          static_cast<std::uint64_t>(std::max<std::int64_t>(0, schedule->sample_time_ns)),
+          0U};
+      if (telemetry_enabled) {
+        emit_stamp = telemetry_clock->sample();
+      }
       auto visualization_frame = mcl::makeIkRenderBatch(
-          visualization_debug_frame, presentation, schedule->emit_time_ns);
+          visualization_debug_frame, presentation, emit_stamp.timestamp_ns);
       mcl::planned_hierarchical_step_otg::appendPlanningRequestPoses(
           visualization_frame, robot.base_frame,
           latest_red_attempt.attempted_reference.left,
@@ -2211,7 +3117,287 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
           toStdVector(latest_output.state.positions),
           toStdVector(latest_output.state.velocities), robot.base_frame,
           latest_output.left_pose, latest_output.right_pose);
+
+      if (telemetry_enabled) {
+        const auto output_timestamp = latest_output.event_timestamp_ns == 0U
+                                          ? emit_stamp.timestamp_ns
+                                          : latest_output.event_timestamp_ns;
+        const auto attempt_timestamp = latest_red_attempt.event_timestamp_ns == 0U
+                                           ? emit_stamp.timestamp_ns
+                                           : latest_red_attempt.event_timestamp_ns;
+        for (auto &pose : visualization_frame.poses) {
+          if (pose.channel == contracts::mcl_state_v1::kLeftCartesianIkTopic ||
+              pose.channel == contracts::mcl_state_v1::kRightCartesianIkTopic ||
+              pose.channel == contracts::mcl_execution_v1::kLeftCartesianExecutionTopic ||
+              pose.channel == contracts::mcl_execution_v1::kRightCartesianExecutionTopic) {
+            pose.timestamp_ns = output_timestamp;
+          } else if (
+              pose.channel == contracts::mcl_planning_v1::kLeftCartesianReferenceTopic ||
+              pose.channel == contracts::mcl_planning_v1::kRightCartesianReferenceTopic) {
+            pose.timestamp_ns = attempt_timestamp;
+          } else {
+            pose.timestamp_ns = emit_stamp.timestamp_ns;
+          }
+        }
+        for (auto &joints : visualization_frame.joint_states) {
+          joints.timestamp_ns = output_timestamp;
+        }
+
+        const std::size_t queue_depth =
+            red_telemetry->depth() + yellow_telemetry->depth();
+        std::vector<TelemetryRecord> records;
+        records.reserve(queue_depth);
+        drainTelemetryQueue(*red_telemetry, records);
+        drainTelemetryQueue(*yellow_telemetry, records);
+        double oldest_sample_age_ms = 0.0;
+        for (const auto &record : records) {
+          if (emit_stamp.timestamp_ns >= record.stamp.timestamp_ns) {
+            oldest_sample_age_ms = std::max(
+                oldest_sample_age_ms,
+                static_cast<double>(emit_stamp.timestamp_ns -
+                                    record.stamp.timestamp_ns) /
+                    1.0e6);
+          }
+        }
+        auto encode_statistics = telemetry_encoder->append(
+            std::move(records), emit_stamp, visualization_frame);
+
+        const bool run_info_due =
+            !run_info_published ||
+            emit_stamp.run_time_ns - last_run_info_run_time_ns >= 1000000000ULL;
+        if (run_info_due) {
+          proto::RunInfo run_info;
+          const auto info_context = makeSampleContext(
+              emit_stamp, proto::ACCEPTED, false, 2U,
+              published_target.revision,
+              latest_red_attempt.solver_debug.grouped_attempt.has_value()
+                  ? latest_red_attempt.solver_debug.grouped_attempt->attempt_revision
+                  : 0U,
+              latest_output.revision);
+          *run_info.mutable_timestamp() = info_context.timestamp();
+          run_info.set_run_id(telemetry_run_id);
+          run_info.set_app_id(kProgramId);
+          run_info.set_source_mode(
+              planned_options.source_mode == SourceMode::Replay ? "replay" : "teleop");
+          run_info.set_base_frame_id(robot.base_frame);
+          for (const auto &name : joint_names) {
+            run_info.add_joint_names(name);
+          }
+          run_info.set_control_rate_hz(options.red_rate_hz);
+          run_info.set_avoidance_rate_hz(options.yellow_rate_hz);
+          run_info.set_visualization_rate_hz(options.ui_rate_hz);
+          run_info.set_schema_version(contracts::mcl_telemetry_v1::kSchemaVersion);
+          const auto add_option = [&](const std::string &name,
+                                      const std::string &value) {
+            auto *option = run_info.add_resolved_options();
+            option->set_name(name);
+            option->set_value(value);
+          };
+          add_option("solver_kind", "hierarchical_ik");
+          add_option("solver_backend", latest_red_attempt.solver_debug.backend);
+          add_option("joint_limit_policy",
+                     latest_red_attempt.solver_debug.joint_limit_policy);
+          add_option(
+              "joint_target_mode",
+              jointTargetModeName(planned_options.joint_target.mode));
+          add_option("cartesian_algorithm", "jerk_limited");
+          add_option("joint_algorithm", "jerk_limited");
+          add_option(
+              "cartesian_synchronization",
+              planningSynchronizationName(
+                  planned_options.planning.cartesian_synchronization));
+          add_option(
+              "joint_synchronization",
+              planningSynchronizationName(
+                  planned_options.planning.joint_synchronization));
+          add_option("deadline_policy",
+                     options.deadline_policy == mcl::DeadlinePolicy::Strict
+                         ? "strict"
+                         : "monitor");
+          add_option(
+              "max_linear_velocity_mps",
+              std::to_string(planned_options.planning.max_linear_velocity_mps));
+          add_option(
+              "max_linear_acceleration_mps2",
+              std::to_string(
+                  planned_options.planning.max_linear_acceleration_mps2));
+          add_option(
+              "max_linear_jerk_mps3",
+              std::to_string(planned_options.planning.max_linear_jerk_mps3));
+          add_option(
+              "max_angular_velocity_radps",
+              std::to_string(planned_options.planning.max_angular_velocity_rps));
+          add_option(
+              "max_angular_acceleration_radps2",
+              std::to_string(
+                  planned_options.planning.max_angular_acceleration_rps2));
+          add_option(
+              "max_angular_jerk_radps3",
+              std::to_string(planned_options.planning.max_angular_jerk_rps3));
+          add_option("joint_stream_profile_revision",
+                     options.robot.joint_stream.source_revision);
+          add_option("joint_stream_profile_path",
+                     options.robot.joint_stream.source_path);
+          add_option("joint_stream_profile_sha256",
+                     options.robot.joint_stream.source_sha256);
+          add_option("visualization_sink",
+                     options.visualization.mcap_path.has_value()
+                         ? "foxglove_websocket+mcap"
+                         : "foxglove_websocket");
+          telemetry_encoder->appendMessage(
+              contracts::mcl_telemetry_v1::kRunInfoTopic, run_info,
+              emit_stamp, emit_stamp, visualization_frame,
+              encode_statistics);
+          run_info_published = true;
+          last_run_info_run_time_ns = emit_stamp.run_time_ns;
+        }
+
+        const bool will_finish_replay =
+            loaded_replay.has_value() && replay_settled.load() &&
+            replay_source->sourceIndex() + 1U ==
+                loaded_replay->timeline.timeline.size();
+        if (loaded_replay.has_value()) {
+          const auto &source = replay_source->sourceFrame();
+          const bool input_consumed =
+              replay_last_consumed_revision.load() >= published_target.revision;
+          const bool cartesian_finished =
+              latest_output.planner_state == mcc::PlanningState::Finished;
+          const bool pose_within =
+              latest_output.left_position_error_m <=
+                  planned_options.replay_settling.fk_position_m &&
+              latest_output.right_position_error_m <=
+                  planned_options.replay_settling.fk_position_m &&
+              latest_output.left_orientation_error_rad <=
+                  planned_options.replay_settling.fk_orientation_rad &&
+              latest_output.right_orientation_error_rad <=
+                  planned_options.replay_settling.fk_orientation_rad;
+          const bool velocity_within =
+              maximumAbsolute(latest_output.state.velocities) <=
+              planned_options.replay_settling.velocity_rad_per_s;
+          const bool acceleration_within =
+              maximumAbsolute(latest_output.state.accelerations) <=
+              planned_options.replay_settling.acceleration_rad_per_s2;
+          proto::ReplayTelemetry replay_message;
+          *replay_message.mutable_context() = makeSampleContext(
+              emit_stamp, proto::ACCEPTED, false, 2U,
+              published_target.revision,
+              latest_red_attempt.solver_debug.grouped_attempt.has_value()
+                  ? latest_red_attempt.solver_debug.grouped_attempt->attempt_revision
+                  : 0U,
+              latest_output.revision);
+          replay_message.set_source_sequence(source.sequence);
+          const auto set_source_time = [&](google::protobuf::Timestamp *output,
+                                           const std::optional<std::int64_t> &value) {
+            if (!value.has_value() || *value < 0) {
+              return;
+            }
+            const auto timestamp_context = makeSampleContext(
+                EventStamp{static_cast<std::uint64_t>(*value), 0U, 0U},
+                proto::UNSPECIFIED, false, 0U, 0U, 0U, 0U);
+            *output = timestamp_context.timestamp();
+          };
+          set_source_time(replay_message.mutable_source_header_time(),
+                          source.value.left.time.header_stamp_ns);
+          set_source_time(replay_message.mutable_source_log_time(),
+                          source.value.left.time.log_time_ns);
+          set_source_time(replay_message.mutable_source_publish_time(),
+                          source.value.left.time.publish_time_ns);
+          replay_message.set_source_time_from_start_ns(
+              static_cast<std::uint64_t>(source.source_time_from_start_ns));
+          replay_message.set_projected_time_ns(
+              static_cast<std::uint64_t>(source.projected_time_ns));
+          replay_message.set_playback_rate(planned_options.replay->playback_rate);
+          replay_message.set_paused(replay_source->paused());
+          replay_message.set_end_of_stream(
+              replay_source->endOfStream() || will_finish_replay);
+          replay_message.set_input_consumed(input_consumed);
+          replay_message.set_cartesian_finished(cartesian_finished);
+          replay_message.set_pose_error_within_tolerance(pose_within);
+          replay_message.set_joint_velocity_within_tolerance(velocity_within);
+          replay_message.set_joint_acceleration_within_tolerance(
+              acceleration_within);
+          replay_message.set_settled_cycles(
+              replay_settled_cycle_count.load());
+          replay_message.set_required_cycles(
+              planned_options.replay_settling.required_cycles);
+          telemetry_encoder->appendMessage(
+              contracts::mcl_telemetry_v1::kReplayTopic, replay_message,
+              emit_stamp, emit_stamp, visualization_frame,
+              encode_statistics);
+          if (will_finish_replay && !replay_eos_event_published) {
+            visualization_frame.logs.push_back(motion_control::viz::LogSample{
+                contracts::mcl_telemetry_v1::kEventsTopic,
+                motion_control::viz::LogLevel::Info,
+                "replay end of stream after settling",
+                "replay-eos",
+                {},
+                0U,
+                emit_stamp.timestamp_ns});
+            replay_eos_event_published = true;
+          }
+        }
+
+        if (pending_fault_event.has_value()) {
+          visualization_frame.logs.push_back(motion_control::viz::LogSample{
+              contracts::mcl_telemetry_v1::kEventsTopic,
+              motion_control::viz::LogLevel::Fatal,
+              *pending_fault_event,
+              "fault-hold",
+              {},
+              0U,
+              emit_stamp.timestamp_ns});
+          pending_fault_event.reset();
+        }
+
+        const std::uint64_t dropped_samples =
+            red_telemetry->dropped() + yellow_telemetry->dropped();
+        if (dropped_samples > last_reported_dropped_samples) {
+          visualization_frame.logs.push_back(motion_control::viz::LogSample{
+              contracts::mcl_telemetry_v1::kEventsTopic,
+              motion_control::viz::LogLevel::Warning,
+              "telemetry queue dropped " +
+                  std::to_string(dropped_samples -
+                                 last_reported_dropped_samples) +
+                  " samples",
+              "telemetry-queue-drop",
+              {},
+              0U,
+              emit_stamp.timestamp_ns});
+          last_reported_dropped_samples = dropped_samples;
+        }
+
+        proto::TransportTelemetry transport;
+        *transport.mutable_context() = makeSampleContext(
+            emit_stamp, proto::ACCEPTED, false, 2U,
+            published_target.revision,
+            latest_red_attempt.solver_debug.grouped_attempt.has_value()
+                ? latest_red_attempt.solver_debug.grouped_attempt->attempt_revision
+                : 0U,
+            latest_output.revision);
+        transport.set_sink_kind(
+            options.visualization.mcap_path.has_value()
+                ? "foxglove_websocket+mcap"
+                : "foxglove_websocket");
+        transport.set_connected(true);
+        transport.set_queue_depth(queue_depth);
+        transport.set_queue_capacity(kTelemetryQueueCapacity * 2U);
+        transport.set_dropped_samples(dropped_samples);
+        transport.set_oldest_sample_age_ms(oldest_sample_age_ms);
+        transport.set_encode_time_ms(encode_statistics.encode_time_ms);
+        transport.set_write_time_ms(previous_write_time_ms);
+        transport.set_serialized_bytes(encode_statistics.serialized_bytes);
+        telemetry_encoder->appendMessage(
+            contracts::mcl_telemetry_v1::kTransportTopic, transport,
+            emit_stamp, emit_stamp, visualization_frame,
+            encode_statistics);
+      }
+
+      const auto write_started = std::chrono::steady_clock::now();
       visualization_sink->write(visualization_frame);
+      if (telemetry_enabled) {
+        previous_write_time_ms = std::chrono::duration<double, std::milli>(
+            std::chrono::steady_clock::now() - write_started).count();
+      }
       ++publish_count;
 
       if (planned_options.source_mode == SourceMode::Replay &&

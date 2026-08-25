@@ -34,6 +34,16 @@ bool requiredChannelsPresent(
           return std::any_of(
             batch.line_strips.begin(), batch.line_strips.end(),
             [&channel](const auto & line) { return line.channel == channel.topic; });
+        case contracts::ChannelKind::Log:
+          return std::any_of(
+            batch.logs.begin(), batch.logs.end(),
+            [&channel](const auto & log) { return log.channel == channel.topic; });
+        case contracts::ChannelKind::EncodedMessage:
+          return std::any_of(
+            batch.encoded_messages.begin(), batch.encoded_messages.end(),
+            [&channel](const auto & sample) {
+              return sample.channel == channel.topic && sample.schema_name == channel.schema;
+            });
       }
       return false;
     });

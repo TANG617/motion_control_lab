@@ -1,0 +1,16 @@
+{
+  "schema_version": "mcl.state.v1",
+  "applicability": {
+    "required_for": "every Motion Control Lab app that publishes IK state",
+    "non_ik_apps": "not applicable"
+  },
+  "channels": [
+    {"topic": "/mcl/cartesian/input/left", "foxglove_schema": "foxglove.PoseInFrame", "role": "left_cartesian_input", "required": true, "semantics": "Decoded left input pose before app-specific TCP or goal conversion."},
+    {"topic": "/mcl/cartesian/input/right", "foxglove_schema": "foxglove.PoseInFrame", "role": "right_cartesian_input", "required": true, "semantics": "Decoded right input pose before app-specific TCP or goal conversion."},
+    {"topic": "/mcl/cartesian/goal/left", "foxglove_schema": "foxglove.PoseInFrame", "role": "left_cartesian_goal", "required": true, "semantics": "Normalized left end-effector goal consumed by the app."},
+    {"topic": "/mcl/cartesian/goal/right", "foxglove_schema": "foxglove.PoseInFrame", "role": "right_cartesian_goal", "required": true, "semantics": "Normalized right end-effector goal consumed by the app."},
+    {"topic": "/mcl/cartesian/ik/left", "foxglove_schema": "foxglove.PoseInFrame", "role": "left_cartesian_ik", "required": true, "semantics": "Left end-effector FK computed from the accepted IK joint state."},
+    {"topic": "/mcl/cartesian/ik/right", "foxglove_schema": "foxglove.PoseInFrame", "role": "right_cartesian_ik", "required": true, "semantics": "Right end-effector FK computed from the accepted IK joint state."},
+    {"topic": "/mcl/joints/ik", "foxglove_schema": "foxglove.JointStates", "role": "joint_ik", "required": true, "semantics": "Full-order accepted IK position and velocity state."}
+  ]
+}

@@ -2,6 +2,7 @@ add_library(
   mcl_planned_hierarchical_step_otg_support
   solver.cpp
   planning.cpp
+  telemetry.cpp
   loop.cpp
 )
 add_library(
@@ -25,6 +26,7 @@ target_link_libraries(
     motion_control_lab::preview_transport
     motion_control_lab::preview_projection
     motion_control_lab::visualization_contracts
+    motion_control_lab::telemetry_proto
     motion_control_lab::replay
     Threads::Threads
 )
@@ -96,6 +98,16 @@ if(BUILD_TESTING)
     COMMAND test_planned_hierarchical_step_otg_visualization
   )
 
+  add_executable(test_planned_hierarchical_step_otg_telemetry tests/telemetry.cpp)
+  target_link_libraries(
+    test_planned_hierarchical_step_otg_telemetry
+    PRIVATE motion_control_lab::planned_hierarchical_step_otg_support
+  )
+  add_test(
+    NAME apps.mcl_planned_hierarchical_step_otg_telemetry
+    COMMAND test_planned_hierarchical_step_otg_telemetry
+  )
+
   add_executable(
     test_planned_hierarchical_step_otg_tui_projection
     tests/tui_projection.cpp
@@ -108,4 +120,5 @@ if(BUILD_TESTING)
     NAME apps.mcl_planned_hierarchical_step_otg_tui_projection
     COMMAND test_planned_hierarchical_step_otg_tui_projection
   )
+
 endif()

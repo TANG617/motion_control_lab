@@ -48,8 +48,8 @@ cmake --build /workspace/build/motion_control_lab --target mcl_e03_batch_replay_
 Connect Foxglove to `ws://127.0.0.1:8765`. E03 opens one server for the entire batch,
 publishes each action's initial frame immediately, and does not wait for Space. The global
 visualization sequence is monotonic across action boundaries. It publishes the Lab-wide
-five-topic contract documented in
-[Foxglove IK visualization contract](../../docs/foxglove_ik_visualization_contract.md).
+seven-topic state contract documented in
+[MCL Foxglove topic and telemetry contract](../../docs/foxglove_mcl_telemetry_contract.md).
 Visualization MCAP recording is intentionally not part of E03 v1.
 
 Runs are append-only under `runs/<run-id>/`. An action stops after writing its first failed

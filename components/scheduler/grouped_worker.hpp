@@ -121,6 +121,20 @@ struct PeriodicWorkerStatistics
   double latest_non_solver_execution_ms{0.0};
 };
 
+struct PeriodicIterationTiming
+{
+  double deadline_ms{0.0};
+  double release_lateness_ms{0.0};
+  double execution_ms{0.0};
+  double release_to_finish_ms{0.0};
+  double overrun_ms{0.0};
+};
+
+using PeriodicIterationObserver = std::function<void(
+    const WorkerIterationResult &,
+    const PeriodicIterationTiming &,
+    const PeriodicWorkerStatistics &)>;
+
 class PeriodicWorkerDiagnostics
 {
 public:
@@ -160,7 +174,8 @@ private:
     WorkerStopController &,
     GroupedFaultState &,
     PeriodicWorkerDiagnostics &,
-    const WorkerIteration &);
+    const WorkerIteration &,
+    const PeriodicIterationObserver &);
 };
 
 void runPeriodicWorker(
@@ -168,6 +183,7 @@ void runPeriodicWorker(
   WorkerStopController & stop_controller,
   GroupedFaultState & fault,
   PeriodicWorkerDiagnostics & diagnostics,
-  const WorkerIteration & iteration);
+  const WorkerIteration & iteration,
+  const PeriodicIterationObserver & observer = {});
 
 }  // namespace motion_control_lab

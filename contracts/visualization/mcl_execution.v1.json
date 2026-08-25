@@ -1,0 +1,8 @@
+{
+  "schema_version": "mcl.execution.v1",
+  "channels": [
+    {"topic": "/mcl/cartesian/execution/left", "foxglove_schema": "foxglove.PoseInFrame", "role": "left_cartesian_execution", "required": true, "semantics": "Left end-effector FK computed from the committed post-OTG state."},
+    {"topic": "/mcl/cartesian/execution/right", "foxglove_schema": "foxglove.PoseInFrame", "role": "right_cartesian_execution", "required": true, "semantics": "Right end-effector FK computed from the committed post-OTG state."},
+    {"topic": "/mcl/joints/execution", "foxglove_schema": "foxglove.JointStates", "role": "joint_execution", "required": true, "semantics": "Full-order committed post-OTG position and velocity state."}
+  ]
+}

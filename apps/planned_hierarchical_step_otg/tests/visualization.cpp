@@ -5,31 +5,36 @@
 #include <vector>
 
 #include "../loop.hpp"
-#include "contracts/visualization/foxglove_ik_v1.hpp"
-#include "contracts/visualization/foxglove_planned_hierarchical_step_otg_v1.hpp"
+#include "contracts/visualization/mcl_execution_v1.hpp"
+#include "contracts/visualization/mcl_planning_v1.hpp"
+#include "contracts/visualization/mcl_state_v1.hpp"
 #include "contracts/presentation/ik_app_snapshot.hpp"
 #include "components/visualization/preview_projection.hpp"
 #include "tests/visualization_contract_conformance.hpp"
 
 int main() {
   namespace mcl = motion_control_lab;
-  namespace contract = mcl::contracts::foxglove_planned_hierarchical_step_otg_v1;
+  namespace execution_contract = mcl::contracts::mcl_execution_v1;
+  namespace planning_contract = mcl::contracts::mcl_planning_v1;
 
   mcl::InteractiveIkPresentation presentation;
   presentation.base_frame_id = "base_link";
   presentation.joint_state_channel =
-      mcl::contracts::foxglove_ik_v1::kIkOutputJointStateTopic;
+      mcl::contracts::mcl_state_v1::kJointIkTopic;
   presentation.arms = {
-      {mcl::ArmSide::Left, mcl::contracts::foxglove_ik_v1::kLeftInputTargetTopic,
-       mcl::contracts::foxglove_ik_v1::kLeftFkOutputTopic, {}},
-      {mcl::ArmSide::Right, mcl::contracts::foxglove_ik_v1::kRightInputTargetTopic,
-       mcl::contracts::foxglove_ik_v1::kRightFkOutputTopic, {}}};
+      {mcl::ArmSide::Left, mcl::contracts::mcl_state_v1::kLeftCartesianInputTopic,
+       mcl::contracts::mcl_state_v1::kLeftCartesianGoalTopic,
+       mcl::contracts::mcl_state_v1::kLeftCartesianIkTopic, {}},
+      {mcl::ArmSide::Right, mcl::contracts::mcl_state_v1::kRightCartesianInputTopic,
+       mcl::contracts::mcl_state_v1::kRightCartesianGoalTopic,
+       mcl::contracts::mcl_state_v1::kRightCartesianIkTopic, {}}};
   mcl::IkDebugFrame raw;
   raw.joint_names = {"j0"};
   raw.positions = {1.0};
   raw.velocities = {2.0};
   raw.targets = {{mcl::ArmSide::Left, mcl::Pose::Identity()},
                  {mcl::ArmSide::Right, mcl::Pose::Identity()}};
+  raw.input_targets = raw.targets;
   raw.forward_kinematics = {{mcl::ArmSide::Left, mcl::Pose::Identity()},
                             {mcl::ArmSide::Right, mcl::Pose::Identity()}};
   auto batch = mcl::makeIkRenderBatch(raw, presentation, 13U);
@@ -42,14 +47,15 @@ int main() {
 
   return batch.timestamp_ns == 13U && batch.joint_states.size() == 2U &&
              batch.joint_states.at(0).channel ==
-                 mcl::contracts::foxglove_ik_v1::kIkOutputJointStateTopic &&
-             batch.poses.at(4).channel == contract::kLeftPlanningRequestTopic &&
-             batch.joint_states.at(1).channel == contract::kJointOtgExecutionStateTopic &&
-             batch.poses.at(6).channel == contract::kLeftOtgFkTopic &&
-             batch.poses.at(7).channel == contract::kRightOtgFkTopic &&
+                 mcl::contracts::mcl_state_v1::kJointIkTopic &&
+             batch.poses.at(6).channel == planning_contract::kLeftCartesianReferenceTopic &&
+             batch.joint_states.at(1).channel == execution_contract::kJointExecutionTopic &&
+             batch.poses.at(8).channel == execution_contract::kLeftCartesianExecutionTopic &&
+             batch.poses.at(9).channel == execution_contract::kRightCartesianExecutionTopic &&
              mcl::tests::requiredChannelsPresent(
-               batch, mcl::contracts::foxglove_ik_v1::kChannels) &&
-             mcl::tests::requiredChannelsPresent(batch, contract::kChannels)
+               batch, mcl::contracts::mcl_state_v1::kChannels) &&
+             mcl::tests::requiredChannelsPresent(batch, planning_contract::kChannels) &&
+             mcl::tests::requiredChannelsPresent(batch, execution_contract::kChannels)
          ? EXIT_SUCCESS
          : EXIT_FAILURE;
 }

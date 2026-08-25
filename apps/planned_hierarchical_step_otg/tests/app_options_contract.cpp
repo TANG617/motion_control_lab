@@ -53,6 +53,7 @@ int main() {
   char *planned_argv[]{program, teleop, urdf_option, urdf, mode_option, mode};
   const auto planned = app::parseOptions(6, planned_argv);
   if (planned.joint_target.mode != app::JointTargetMode::IkPv ||
+      !planned.replay_trace_enabled ||
       planned.interactive.red_rate_hz != 1000.0 ||
       planned.interactive.yellow_rate_hz != 100.0 ||
       planned.planning.cartesian_synchronization !=
@@ -90,6 +91,17 @@ int main() {
   const auto replay_options = app::parseOptions(14, replay_argv);
   if (replay_options.source_mode != app::SourceMode::Replay ||
       replay_options.replay_trace_enabled) {
+    return EXIT_FAILURE;
+  }
+  char replay_trace_invalid[] = "sometimes";
+  replay_argv[13] = replay_trace_invalid;
+  bool invalid_replay_trace_rejected = false;
+  try {
+    (void)app::parseOptions(14, replay_argv);
+  } catch (const std::runtime_error &) {
+    invalid_replay_trace_rejected = true;
+  }
+  if (!invalid_replay_trace_rejected) {
     return EXIT_FAILURE;
   }
 

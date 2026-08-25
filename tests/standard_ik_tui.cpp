@@ -142,8 +142,9 @@ int main()
 {
   mcl::InteractiveIkPresentation presentation;
   presentation.base_frame_id = "base_link";
-  presentation.arms = {{mcl::ArmSide::Left, "left_target", "left_fk", {2}},
-                       {mcl::ArmSide::Right, "right_target", "right_fk", {3}}};
+  presentation.arms = {
+    {mcl::ArmSide::Left, "left_input", "left_goal", "left_ik", {2}},
+    {mcl::ArmSide::Right, "right_input", "right_goal", "right_ik", {3}}};
 
   auto frame = makeFrame();
   const auto standard = mcl::makeStandardIkTuiDocument(

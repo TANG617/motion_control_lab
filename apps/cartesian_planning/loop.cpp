@@ -1,6 +1,7 @@
 #include "loop.hpp"
 
 #include "components/visualization/preview_transport.hpp"
+#include "contracts/visualization/mcl_planning_v1.hpp"
 
 #include <Eigen/Geometry>
 
@@ -10,6 +11,8 @@
 #include <chrono>
 #include <csignal>
 #include <memory>
+#include <stdexcept>
+#include <string>
 #include <thread>
 
 namespace motion_control_lab::cartesian_planning {
@@ -17,7 +20,7 @@ namespace {
 
 namespace mcc = motion_control::core;
 namespace mcv = motion_control::viz;
-constexpr const char *kSceneChannel = "/mc/cartesian/scene";
+constexpr const char *kSceneChannel = "/mcl/cartesian/scene";
 constexpr double kAxisLengthM = 0.05;
 
 std::atomic_bool stop_requested{false};
@@ -76,6 +79,19 @@ std::uint64_t wallTimeNs() {
           .count());
 }
 
+const char *referenceTopic(const std::string &frame_name) {
+  namespace contract = motion_control_lab::contracts::mcl_planning_v1;
+  if (frame_name.find("left") != std::string::npos) {
+    return contract::kLeftCartesianReferenceTopic;
+  }
+  if (frame_name.find("right") != std::string::npos) {
+    return contract::kRightCartesianReferenceTopic;
+  }
+  throw std::runtime_error(
+      "Cartesian playback frame cannot be mapped to MCL left/right reference topic: " +
+      frame_name);
+}
+
 void waitUntil(const std::chrono::steady_clock::time_point &deadline) {
   constexpr auto poll_interval = std::chrono::milliseconds(20);
   while (!stop_requested.load()) {
@@ -127,7 +143,7 @@ makePlaybackFrame(const mcc::CartesianTrajectorySample &sample,
     Eigen::Quaterniond orientation(frame.pose.linear());
     orientation.normalize();
     visualization.poses.push_back(mcv::PoseSample{
-        "/mc/cartesian/pose/" + frame.frame_name, frame.reference_frame_name,
+        referenceTopic(frame.frame_name), frame.reference_frame_name,
         mcv::Pose3d{toPoint(frame.pose.translation()),
                     {orientation.x(), orientation.y(), orientation.z(),
                      orientation.w()}}});

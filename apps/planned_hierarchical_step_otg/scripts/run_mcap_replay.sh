@@ -3,7 +3,7 @@ set -euo pipefail
 lab_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
 binary=${MCL_BINARY:-"${lab_root}/build/mcl_planned_hierarchical_step_otg"}
 urdf=${MCL_URDF:-/workspace/products/synrobot/modules/common/robot_description/psi_r1/urdf/Psi_R1_rev1.urdf}
-input=${MCL_INPUT:-/workspace/fixtures/raw/sliced_RW1AZHYCSEFT5_RW1AZHYCSEFT5260310002_20260731015829_0.mcap}
+input=${MCL_INPUT:-/workspace/fixtures/raw/sliced-RW1AZHYCSEFT5_RW1AZHYCSEFT5260310002_20260813164525_0.mcap}
 
 start_paused=()
 case "${MCL_START_PAUSED:-on}" in

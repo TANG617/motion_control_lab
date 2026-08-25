@@ -148,6 +148,7 @@ int runTeleopLoop(const baseline::TeleopOptions &options, Solver &solver) {
 
   mcl::IkDebugFrame frame;
   frame.run_id = "placo-production-static-" + sourceSummary();
+  frame.input_targets = initial_targets;
   frame.targets = initial_targets;
   frame.forward_kinematics = {{mcl::ArmSide::Left, initial_left_tcp},
                               {mcl::ArmSide::Right, initial_right_tcp}};
@@ -189,6 +190,7 @@ int runTeleopLoop(const baseline::TeleopOptions &options, Solver &solver) {
       result.solver_debug.run_counters = counters;
       result.solver_debug.native_status = taskSummary();
 
+      frame.input_targets = input.targets();
       frame.targets = input.targets();
       frame.forward_kinematics = result.tcp_forward_kinematics;
       frame.positions = result.positions;
@@ -390,6 +392,7 @@ int runReplayLoopImpl(ReplayAppOptions options,
       result.solver_debug.native_status = taskSummary();
       mcl::IkDebugFrame frame;
       frame.run_id = options.replay.output_dir.filename().string();
+      frame.input_targets = targets;
       frame.targets = targets;
       frame.forward_kinematics = result.tcp_forward_kinematics;
       frame.joint_names = robot.joint_names;

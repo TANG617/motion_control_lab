@@ -171,7 +171,8 @@ void runPeriodicWorker(
   WorkerStopController & stop_controller,
   GroupedFaultState & fault,
   PeriodicWorkerDiagnostics & diagnostics,
-  const WorkerIteration & iteration)
+  const WorkerIteration & iteration,
+  const PeriodicIterationObserver & observer)
 {
   using Clock = std::chrono::steady_clock;
   if (options.rate_hz <= 0.0 || !std::isfinite(options.rate_hz)) {
@@ -189,15 +190,9 @@ void runPeriodicWorker(
   while (!stop_controller.stopRequested()) {
     const auto deadline = release + period;
     const auto started = Clock::now();
-    struct IterationTiming
-    {
-      double release_lateness_ms;
-      double execution_ms;
-      double release_to_finish_ms;
-      double overrun_ms;
-    };
     auto calculateTiming = [&](Clock::time_point finished) {
-        return IterationTiming{
+        return PeriodicIterationTiming{
+          deadline_ms,
           std::max(
             0.0,
             std::chrono::duration<double, std::milli>(started - release).count()),
@@ -210,7 +205,7 @@ void runPeriodicWorker(
     auto makeFault = [&options, deadline_ms](
         WorkerFailureKind failure,
         std::uint64_t revision,
-        const IterationTiming & timing,
+        const PeriodicIterationTiming & timing,
         double solver_ms,
         std::string detail) {
         return GroupedWorkerFault{
@@ -230,7 +225,7 @@ void runPeriodicWorker(
         started - epoch).count();
       const WorkerIterationResult result = iteration(1.0 / options.rate_hz, sample_time_ns);
       const auto finished = Clock::now();
-      const IterationTiming timing = calculateTiming(finished);
+      const PeriodicIterationTiming timing = calculateTiming(finished);
       const bool deadline_missed = finished > deadline;
       diagnostics.recordIteration(
         deadline_missed,
@@ -241,6 +236,9 @@ void runPeriodicWorker(
         result.solve_time_ms);
       if (result.outcome == WorkerIterationOutcome::RecoverableRejected) {
         diagnostics.recordRecoverableRejection();
+      }
+      if (observer) {
+        observer(result, timing, diagnostics.snapshot());
       }
       if (result.outcome == WorkerIterationOutcome::FatalRejected) {
         fault.trigger(makeFault(

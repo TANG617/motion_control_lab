@@ -1,0 +1,8 @@
+{
+  "schema_version": "mcl.planning.v1",
+  "channels": [
+    {"topic": "/mcl/cartesian/reference/left", "foxglove_schema": "foxglove.PoseInFrame", "role": "left_cartesian_reference", "required": true, "semantics": "Left Cartesian planner reference submitted to IK."},
+    {"topic": "/mcl/cartesian/reference/right", "foxglove_schema": "foxglove.PoseInFrame", "role": "right_cartesian_reference", "required": true, "semantics": "Right Cartesian planner reference submitted to IK."},
+    {"topic": "/mcl/cartesian/scene", "foxglove_schema": "foxglove.SceneUpdate", "role": "cartesian_planning_scene", "required": false, "semantics": "Optional Cartesian path and frame-axis scene for planner-only visualization apps."}
+  ]
+}

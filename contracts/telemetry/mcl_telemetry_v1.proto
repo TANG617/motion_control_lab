@@ -1,0 +1,313 @@
+syntax = "proto3";
+
+package mcl.telemetry.v1;
+
+import "google/protobuf/timestamp.proto";
+
+// This file is the wire contract for numeric MCL telemetry. Field units are
+// part of the contract and are therefore encoded in field names where useful.
+
+enum AttemptOutcome {
+  UNSPECIFIED = 0;
+  IDLE = 1;
+  ACCEPTED = 2;
+  RECOVERABLE_REJECTED = 3;
+  FATAL_REJECTED = 4;
+  FAULT_HOLD = 5;
+}
+
+message SampleContext {
+  google.protobuf.Timestamp timestamp = 1;
+  google.protobuf.Timestamp emit_time = 2;
+  uint64 run_time_ns = 3;
+  uint64 sequence = 4;
+  uint64 run_generation = 5;
+  uint64 target_revision = 6;
+  uint64 attempt_revision = 7;
+  uint64 value_revision = 8;
+  AttemptOutcome outcome = 9;
+  bool committed = 10;
+}
+
+message StringValue {
+  string name = 1;
+  string value = 2;
+}
+
+message RunInfo {
+  google.protobuf.Timestamp timestamp = 1;
+  string run_id = 2;
+  string app_id = 3;
+  string source_mode = 4;
+  string base_frame_id = 5;
+  repeated string joint_names = 6;
+  double control_rate_hz = 7;
+  double avoidance_rate_hz = 8;
+  double visualization_rate_hz = 9;
+  string schema_version = 10;
+  repeated StringValue resolved_options = 11;
+}
+
+message Vector3 {
+  double x = 1;
+  double y = 2;
+  double z = 3;
+}
+
+message CartesianError {
+  Vector3 position_m = 1;
+  Vector3 rotation_vector_rad = 2;
+  double position_norm_m = 3;
+  double rotation_norm_rad = 4;
+}
+
+message CartesianArmTracking {
+  string side = 1;
+  CartesianError goal_to_reference = 2;
+  CartesianError reference_to_ik = 3;
+  CartesianError reference_to_execution = 4;
+  CartesianError ik_to_execution = 5;
+  Vector3 reference_linear_velocity_mps = 6;
+  Vector3 reference_angular_velocity_radps = 7;
+  Vector3 reference_linear_acceleration_mps2 = 8;
+  Vector3 reference_angular_acceleration_radps2 = 9;
+}
+
+message CartesianTracking {
+  SampleContext context = 1;
+  repeated CartesianArmTracking arms = 2;
+}
+
+enum ProjectionKind {
+  PROJECTION_KIND_UNSPECIFIED = 0;
+  PROJECTION_KIND_VELOCITY_LIMIT = 1;
+  PROJECTION_KIND_ACCELERATION_LIMIT = 2;
+  PROJECTION_KIND_JERK_STOPPING_ENVELOPE = 3;
+  PROJECTION_KIND_POSITION_LIMIT = 4;
+}
+
+message JointTrackingSample {
+  string name = 1;
+  double ik_position_rad = 2;
+  double ik_velocity_radps = 3;
+  double raw_target_position_rad = 4;
+  double raw_target_velocity_radps = 5;
+  double raw_target_acceleration_radps2 = 6;
+  double projected_target_position_rad = 7;
+  double projected_target_velocity_radps = 8;
+  double projected_target_acceleration_radps2 = 9;
+  double execution_position_rad = 10;
+  double execution_velocity_radps = 11;
+  double execution_acceleration_radps2 = 12;
+  double execution_jerk_radps3 = 13;
+  double position_lower_rad = 14;
+  double position_upper_rad = 15;
+  double velocity_limit_radps = 16;
+  double acceleration_limit_radps2 = 17;
+  double jerk_limit_radps3 = 18;
+  double velocity_utilization = 19;
+  double acceleration_utilization = 20;
+  double jerk_utilization = 21;
+  double position_margin_rad = 22;
+  repeated ProjectionKind projection_kinds = 23;
+}
+
+message JointTracking {
+  SampleContext context = 1;
+  repeated JointTrackingSample joints = 2;
+}
+
+message ConstraintViolation {
+  string label = 1;
+  string kind = 2;
+  string bound_source = 3;
+  string side = 4;
+  string source = 5;
+  string component = 6;
+  string unit = 7;
+  double value = 8;
+  double lower = 9;
+  double upper = 10;
+  double violation = 11;
+}
+
+message SolverPass {
+  string label = 1;
+  int32 priority = 2;
+  int32 pass = 3;
+  bool attempted = 4;
+  bool succeeded = 5;
+  string status = 6;
+  string native_status = 7;
+  double solve_time_ms = 8;
+  int32 iterations = 9;
+  bool warm_start_used = 10;
+  double objective_value = 11;
+  double primal_residual = 12;
+  double dual_residual = 13;
+  double maximum_constraint_violation = 14;
+  repeated ConstraintViolation constraint_violations = 15;
+}
+
+message TaskComponent {
+  string label = 1;
+  double residual_optimum = 2;
+  double preservation_drift = 3;
+  double preservation_tolerance = 4;
+  string residual_unit = 5;
+}
+
+message SolverTask {
+  string name = 1;
+  string kind = 2;
+  int32 priority = 3;
+  bool enabled = 4;
+  double target_error = 5;
+  string target_error_unit = 6;
+  repeated TaskComponent components = 7;
+}
+
+message TaskScale {
+  string label = 1;
+  int32 priority = 2;
+  bool active = 3;
+  double scale = 4;
+  double cost = 5;
+  bool degraded = 6;
+  bool stuck = 7;
+  double preservation_drift = 8;
+}
+
+message SolverRequirement {
+  string label = 1;
+  int32 priority = 2;
+  string unit = 3;
+  string source = 4;
+  bool enabled = 5;
+  bool active = 6;
+  double maximum_violation = 7;
+  double cost = 8;
+}
+
+message SolverTelemetry {
+  SampleContext context = 1;
+  string solver_kind = 2;
+  string backend = 3;
+  string joint_limit_policy = 4;
+  string status = 5;
+  string native_status = 6;
+  double solve_time_ms = 7;
+  double maximum_hard_violation = 8;
+  int32 highest_completed_priority = 9;
+  int32 fallback_priority = 10;
+  repeated SolverPass passes = 11;
+  repeated SolverTask tasks = 12;
+  repeated TaskScale task_scales = 13;
+  repeated SolverRequirement requirements = 14;
+}
+
+message PlannerLimit {
+  string label = 1;
+  string unit = 2;
+  double configured = 3;
+  double observed = 4;
+  double utilization = 5;
+  bool violated = 6;
+}
+
+message PlannerTelemetry {
+  SampleContext context = 1;
+  string planner_kind = 2;
+  string algorithm = 3;
+  string synchronization = 4;
+  string state = 5;
+  string operation = 6;
+  double duration_s = 7;
+  double sample_time_s = 8;
+  uint64 sample_count = 9;
+  double calculation_time_ms = 10;
+  repeated PlannerLimit limits = 11;
+}
+
+message CollisionPair {
+  string label = 1;
+  string first_link = 2;
+  string second_link = 3;
+  double distance_before_m = 4;
+  double distance_after_m = 5;
+  double margin_shortfall_m = 6;
+  bool active = 7;
+}
+
+message CollisionTelemetry {
+  SampleContext context = 1;
+  double minimum_distance_m = 2;
+  double influence_distance_m = 3;
+  double minimum_before_m = 4;
+  double minimum_after_m = 5;
+  double margin_shortfall_m = 6;
+  repeated CollisionPair pairs = 7;
+}
+
+message CouplingTelemetry {
+  SampleContext context = 1;
+  string producer = 2;
+  string consumer = 3;
+  string state = 4;
+  uint64 source_attempt_revision = 5;
+  uint64 source_value_revision = 6;
+  uint64 consumed_value_revision = 7;
+  double source_age_ms = 8;
+  uint64 captured_state_sequence = 9;
+}
+
+message WorkerTelemetry {
+  SampleContext context = 1;
+  string worker_role = 2;
+  double configured_rate_hz = 3;
+  double deadline_ms = 4;
+  double release_lateness_ms = 5;
+  double execution_ms = 6;
+  double solver_ms = 7;
+  double non_solver_ms = 8;
+  double release_to_finish_ms = 9;
+  double overrun_ms = 10;
+  uint64 iteration_count = 11;
+  uint64 deadline_miss_count = 12;
+  uint64 skipped_release_count = 13;
+  uint64 recoverable_rejection_count = 14;
+  uint64 fatal_rejection_count = 15;
+}
+
+message TransportTelemetry {
+  SampleContext context = 1;
+  string sink_kind = 2;
+  bool connected = 3;
+  uint64 queue_depth = 4;
+  uint64 queue_capacity = 5;
+  uint64 dropped_samples = 6;
+  double oldest_sample_age_ms = 7;
+  double encode_time_ms = 8;
+  double write_time_ms = 9;
+  uint64 serialized_bytes = 10;
+}
+
+message ReplayTelemetry {
+  SampleContext context = 1;
+  uint64 source_sequence = 2;
+  google.protobuf.Timestamp source_header_time = 3;
+  google.protobuf.Timestamp source_log_time = 4;
+  google.protobuf.Timestamp source_publish_time = 5;
+  uint64 source_time_from_start_ns = 6;
+  uint64 projected_time_ns = 7;
+  double playback_rate = 8;
+  bool paused = 9;
+  bool end_of_stream = 10;
+  bool input_consumed = 11;
+  bool cartesian_finished = 12;
+  bool pose_error_within_tolerance = 13;
+  bool joint_velocity_within_tolerance = 14;
+  bool joint_acceleration_within_tolerance = 15;
+  uint64 settled_cycles = 16;
+  uint64 required_cycles = 17;
+}

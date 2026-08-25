@@ -219,8 +219,9 @@ struct CartesianPlannerDebug
 struct ArmPresentation
 {
   ArmSide side{ArmSide::Left};
-  std::string target_channel;
-  std::string forward_kinematics_channel;
+  std::string input_channel;
+  std::string goal_channel;
+  std::string ik_channel;
   std::vector<std::size_t> joint_indices;
 };
 
@@ -245,6 +246,7 @@ inline const ArmPresentation * findArmPresentation(
 struct IkDebugFrame
 {
   std::string run_id{"interactive-preview"};
+  std::vector<ArmTarget> input_targets;
   std::vector<ArmTarget> targets;
   std::vector<ArmForwardKinematics> forward_kinematics;
   JointNames joint_names;

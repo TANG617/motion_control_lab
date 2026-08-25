@@ -1235,6 +1235,7 @@ int runLoopImpl(LaunchOptions launch, const mcl::R1RobotConfig &robot,
         target_to_red.publish(published_target);
       }
 
+      frame.input_targets = input.targets();
       frame.targets = input.targets();
       frame.forward_kinematics = {
           {mcl::ArmSide::Left, latest_output.left_pose},

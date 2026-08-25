@@ -1,0 +1,19 @@
+{
+  "schema_version": "mcl.telemetry.v1",
+  "channels": [
+    {"topic": "/mcl/run/info", "foxglove_schema": "mcl.telemetry.v1.RunInfo", "role": "run_info", "required": true, "semantics": "Resolved run identity and telemetry metadata."},
+    {"topic": "/mcl/events", "foxglove_schema": "foxglove.Log", "role": "events", "required": false, "semantics": "Edge-triggered runtime events."},
+    {"topic": "/mcl/telemetry/tracking/cartesian", "foxglove_schema": "mcl.telemetry.v1.CartesianTracking", "role": "cartesian_tracking", "required": true, "semantics": "Per-control-attempt Cartesian tracking chain."},
+    {"topic": "/mcl/telemetry/tracking/joints", "foxglove_schema": "mcl.telemetry.v1.JointTracking", "role": "joint_tracking", "required": true, "semantics": "Per-commit joint IK, target, projected and execution chain."},
+    {"topic": "/mcl/telemetry/solver/ik", "foxglove_schema": "mcl.telemetry.v1.SolverTelemetry", "role": "ik_solver", "required": true, "semantics": "IK or hierarchical IK diagnostics."},
+    {"topic": "/mcl/telemetry/solver/avoidance", "foxglove_schema": "mcl.telemetry.v1.SolverTelemetry", "role": "avoidance_solver", "required": true, "semantics": "Avoidance solver diagnostics."},
+    {"topic": "/mcl/telemetry/planner/cartesian", "foxglove_schema": "mcl.telemetry.v1.PlannerTelemetry", "role": "cartesian_planner", "required": true, "semantics": "Cartesian planning diagnostics."},
+    {"topic": "/mcl/telemetry/planner/joint", "foxglove_schema": "mcl.telemetry.v1.PlannerTelemetry", "role": "joint_planner", "required": true, "semantics": "Joint planning diagnostics."},
+    {"topic": "/mcl/telemetry/safety/collision", "foxglove_schema": "mcl.telemetry.v1.CollisionTelemetry", "role": "collision", "required": true, "semantics": "Self-collision distance diagnostics."},
+    {"topic": "/mcl/telemetry/coupling/avoidance_to_ik", "foxglove_schema": "mcl.telemetry.v1.CouplingTelemetry", "role": "avoidance_to_ik_coupling", "required": true, "semantics": "Avoidance proposal consumption and freshness."},
+    {"topic": "/mcl/telemetry/worker/control", "foxglove_schema": "mcl.telemetry.v1.WorkerTelemetry", "role": "control_worker", "required": true, "semantics": "Control worker per-release timing."},
+    {"topic": "/mcl/telemetry/worker/avoidance", "foxglove_schema": "mcl.telemetry.v1.WorkerTelemetry", "role": "avoidance_worker", "required": true, "semantics": "Avoidance worker per-release timing."},
+    {"topic": "/mcl/telemetry/transport", "foxglove_schema": "mcl.telemetry.v1.TransportTelemetry", "role": "transport", "required": true, "semantics": "Telemetry queue and transport timing."},
+    {"topic": "/mcl/telemetry/replay", "foxglove_schema": "mcl.telemetry.v1.ReplayTelemetry", "role": "replay", "required": false, "semantics": "Replay clocks, state and settling diagnostics."}
+  ]
+}

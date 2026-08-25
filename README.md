@@ -26,7 +26,7 @@ TUI 与 wall-clock pacing；Lab-owned IK projection 把算法快照映射为通�
 初始姿态、关节 mask、限位和 TargetSolve 终止条件，不读取 `/etc/robot/software.yaml`，也不
 启用 adaptive reach、continuity 或 elbow-pole 动态策略。
 所有 IK app 的 Foxglove topic 与 FK 一致性要求由
-[Foxglove IK 可视化数据流合同](docs/foxglove_ik_visualization_contract.md)统一定义。
+[MCL Foxglove Topic 与 Telemetry 合同](docs/foxglove_mcl_telemetry_contract.md)统一定义。
 该路径用于开发调试，不替代由 canonical timeline 驱动的可复现实验执行器。
 共享层已拆为 solver-neutral 的 input/presentation/runtime contracts，以及 scheduler、terminal
 frontend/key router、keyboard/cartesian teleop、TUI renderer、ReplaySource、preview
@@ -225,7 +225,7 @@ cmake --build build/replay-ik-viz --target mcl_step -j8
 完整 E02 命令见
 [`experiments/E02_dual_arm_replay_ik/README.md`](experiments/E02_dual_arm_replay_ik/README.md)。
 五条固定 topic 见
-[Foxglove IK 可视化数据流合同](docs/foxglove_ik_visualization_contract.md)。
+[MCL Foxglove Topic 与 Telemetry 合同](docs/foxglove_mcl_telemetry_contract.md)。
 
 E03 将同一个固定 replay IK engine 应用于 PSI R1 双臂动作库。默认只扫描
 `/workspace/fixtures/datasets/psi_r1_dual_arm_motion_library/` 的直接 `*.mcap` 子项，按文件名
@@ -513,8 +513,8 @@ cmake --build build/cartesian-planning --target mcl_cartesian_planning -j8
   --output-dir build/cartesian-planning/output
 ```
 
-Foxglove 连接 `ws://127.0.0.1:8765`，场景位于 `/mc/cartesian/scene`，原始 pose 位于
-`/mc/cartesian/pose/<frame_name>`。默认按规划时间循环播放至 Ctrl-C；`--once` 只播放一次，
+Foxglove 连接 `ws://127.0.0.1:8765`，场景位于 `/mcl/cartesian/scene`，左右规划 pose 位于
+`/mcl/cartesian/reference/{left,right}`。默认按规划时间循环播放至 Ctrl-C；`--once` 只播放一次，
 `--playback-rate` 只改变展示速度。仅生成离线结果时使用：
 
 ```bash

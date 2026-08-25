@@ -69,6 +69,7 @@ int runInteractive(const AppOptions &app_options, const std::string &solver_id,
 
   mcl::IkDebugFrame latest_frame;
   latest_frame.run_id = run_id;
+  latest_frame.input_targets = input.targets();
   latest_frame.targets = input.targets();
   latest_frame.forward_kinematics = {{mcl::ArmSide::Left, initial_left_fk},
                                      {mcl::ArmSide::Right, initial_right_fk}};
@@ -108,6 +109,7 @@ int runInteractive(const AppOptions &app_options, const std::string &solver_id,
           solve_time_percentiles.snapshot();
       result.solver_debug.run_counters = run_counters;
 
+      latest_frame.input_targets = input.targets();
       latest_frame.targets = input.targets();
       latest_frame.ik_status = result.ik_status;
       latest_frame.iterations = result.iterations;

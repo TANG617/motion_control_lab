@@ -1,5 +1,5 @@
 #include "contracts/data/data_error.hpp"
-#include "contracts/visualization/foxglove_ik_v1.hpp"
+#include "contracts/visualization/mcl_state_v1.hpp"
 #include "e03_build_config.hpp"
 #include "experiments/E03_psi_r1_dual_arm_motion_library_replay_ik/src/batch_replay.hpp"
 #include "experiments/E03_psi_r1_dual_arm_motion_library_replay_ik/src/legacy_replay/replay_ik_engine.hpp"
@@ -39,7 +39,7 @@ namespace
 namespace mcl = motion_control_lab;
 namespace e03 = motion_control_lab::e03;
 namespace replay = motion_control_lab::replay;
-namespace visualization_contract = motion_control_lab::contracts::foxglove_ik_v1;
+namespace visualization_contract = motion_control_lab::contracts::mcl_state_v1;
 #if MCL_WITH_REPLAY_VISUALIZATION
 namespace mcv = motion_control::viz;
 #endif
@@ -702,16 +702,20 @@ mcv::RenderBatch visualizationBatch(const replay::ReplayIkVisualizationSample & 
   mcv::RenderBatch result;
   result.timestamp_ns = wallClockNanoseconds();
   result.poses = {
-    {visualization_contract::kLeftInputTargetTopic, sample.left_target_frame_id,
+    {visualization_contract::kLeftCartesianInputTopic, sample.left_target_frame_id,
      visualizationPose(sample.left_input_target)},
-    {visualization_contract::kRightInputTargetTopic, sample.right_target_frame_id,
+    {visualization_contract::kRightCartesianInputTopic, sample.right_target_frame_id,
      visualizationPose(sample.right_input_target)},
-    {visualization_contract::kLeftFkOutputTopic,
+    {visualization_contract::kLeftCartesianGoalTopic, sample.left_target_frame_id,
+     visualizationPose(sample.left_input_target)},
+    {visualization_contract::kRightCartesianGoalTopic, sample.right_target_frame_id,
+     visualizationPose(sample.right_input_target)},
+    {visualization_contract::kLeftCartesianIkTopic,
      sample.forward_kinematics_frame_id, visualizationPose(sample.left_end_effector_fk)},
-    {visualization_contract::kRightFkOutputTopic,
+    {visualization_contract::kRightCartesianIkTopic,
      sample.forward_kinematics_frame_id, visualizationPose(sample.right_end_effector_fk)}};
   result.joint_states.push_back(mcv::JointStateSample{
-    visualization_contract::kIkOutputJointStateTopic,
+    visualization_contract::kJointIkTopic,
     sample.joint_names,
     sample.positions,
     sample.velocities});

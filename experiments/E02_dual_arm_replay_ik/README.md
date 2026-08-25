@@ -43,16 +43,15 @@ Use `--ui none` for unattended replay.
 
 Published channels:
 
-- `/mc/ik/joint_states`
-- `/mc/ik/target/left_pose`
-- `/mc/ik/target/right_pose`
-- `/mc/fk/pose/left_end_effector`
-- `/mc/fk/pose/right_end_effector`
+- `/mcl/joints/ik`
+- `/mcl/cartesian/input/{left,right}`
+- `/mcl/cartesian/goal/{left,right}`
+- `/mcl/cartesian/ik/{left,right}`
 
 The target topics preserve the MCAP TCP inputs. The FK topics are actual end-effector poses
 computed from the joint positions in the same visualization sample; they are not converted
 targets. See the Lab-wide
-[Foxglove IK visualization contract](../../docs/foxglove_ik_visualization_contract.md).
+[MCL Foxglove topic and telemetry contract](../../docs/foxglove_mcl_telemetry_contract.md).
 
 When requested, `visualization.mcap` is stored beside `trace.csv`, `status.json`, and
 `manifest.json` in the run directory. Completed run directories are append-only local

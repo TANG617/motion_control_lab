@@ -139,5 +139,5 @@ realtime 使用独立于 solver rate 的 projected target timeline；solver 消�
 的旧帧计入 dropped counter。TUI pause 只冻结 timeline，solver/planner 继续跟踪当前 goal；
 resume 重置 clock 原点以避免追赶暂停期间的 deadline。Viz 只消费 solver 输出，不推进 timeline
 或修改算法 `dt`。所有 IK preview/replay 的 topic 与 FK 数据一致性遵循
-[`foxglove_ik_visualization_contract.md`](./foxglove_ik_visualization_contract.md)。E01/E04 的
+[`foxglove_mcl_telemetry_contract.md`](./foxglove_mcl_telemetry_contract.md)。E01/E04 的
 R1 smoke 语义和输入由 pair contract 固定。

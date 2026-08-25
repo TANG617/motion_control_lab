@@ -78,6 +78,7 @@ int runInteractive(const AppOptions &app_options, const std::string &solver_id,
 
   mcl::IkDebugFrame latest_frame;
   latest_frame.run_id = run_id;
+  latest_frame.input_targets = input.targets();
   latest_frame.targets = input.targets();
   latest_frame.forward_kinematics = {{mcl::ArmSide::Left, initial_left_fk},
                                      {mcl::ArmSide::Right, initial_right_fk}};
@@ -113,6 +114,7 @@ int runInteractive(const AppOptions &app_options, const std::string &solver_id,
           solve_time_percentiles.snapshot();
       result.solver_debug.run_counters = run_counters;
 
+      latest_frame.input_targets = input.targets();
       latest_frame.targets = input.targets();
       latest_frame.forward_kinematics = std::move(result.forward_kinematics);
       latest_frame.positions = std::move(result.positions);
@@ -329,6 +331,7 @@ int runReplayWithSolver(ReplayAppOptions options, const std::string &solver_id,
 
       mcl::IkDebugFrame frame;
       frame.run_id = options.replay.output_dir.filename().string();
+      frame.input_targets = targets;
       frame.targets = targets;
       frame.forward_kinematics = result.forward_kinematics;
       frame.joint_names = robot.joint_names;

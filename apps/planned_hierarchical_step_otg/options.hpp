@@ -108,7 +108,7 @@ struct JointStreamProfileOptions {
       "right_arm_joint3",  "right_arm_joint4", "right_arm_joint5",
       "right_arm_joint6",  "right_arm_joint7"};
   std::array<double, 20> max_velocity_rad_per_s{
-      3.0, 3.0, 3.0, 2.0,  2.0,  2.0,  5.05, 5.05, 5.71, 5.24,
+      3.0, 3.0, 3.0, 3.0,  3.0,  3.0,  5.05, 5.05, 5.71, 5.24,
       4.1, 4.1, 4.1, 5.05, 5.05, 5.71, 5.24, 4.1,  4.1,  4.1};
   std::array<double, 20> max_acceleration_rad_per_s2{
       9.0,  9.0,  9.0,  6.0,   6.0,   6.0,   15.15, 15.15, 18.63, 18.72,

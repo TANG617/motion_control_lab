@@ -21,6 +21,7 @@ target_link_libraries(
   PUBLIC
     motion_control_core::motion_control_core
     motion_control_lab::preview_transport
+    motion_control_lab::visualization_contracts
   PRIVATE
     eiquadprog::eiquadprog
     jsoncpp_lib
