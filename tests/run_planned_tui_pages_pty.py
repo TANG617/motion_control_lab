@@ -14,11 +14,11 @@ import time
 def main() -> int:
     if len(sys.argv) != 4:
         raise RuntimeError(
-            "usage: run_planned_tui_pages_pty.py <app> <6|7> <urdf>"
+            "usage: run_planned_tui_pages_pty.py <app> <6|7|8> <urdf>"
         )
     executable, page_count_text, urdf = sys.argv[1:]
     page_count = int(page_count_text)
-    if page_count not in (6, 7):
+    if page_count not in (6, 7, 8):
         raise RuntimeError(f"unsupported page count: {page_count}")
 
     command = [
@@ -42,7 +42,12 @@ def main() -> int:
     ]
 
     master_fd, slave_fd = pty.openpty()
-    fcntl.ioctl(slave_fd, termios.TIOCSWINSZ, struct.pack("HHHH", 74, 155, 0, 0))
+    initial_columns = 180 if page_count == 8 else 155
+    fcntl.ioctl(
+        slave_fd,
+        termios.TIOCSWINSZ,
+        struct.pack("HHHH", 74, initial_columns, 0, 0),
+    )
     environment = os.environ.copy()
     environment["TERM"] = "xterm-256color"
     environment.setdefault("LC_ALL", "C.UTF-8")
@@ -59,17 +64,29 @@ def main() -> int:
     output = bytearray()
     ready_at = None
     action_index = 0
-    actions = tuple(
-        ("input", str(page).encode()) for page in range(1, page_count + 1)
-    ) + (
+    actions = tuple(("input", str(page).encode()) for page in range(1, page_count + 1)) + (
         ("input", b"\t"),
         ("input", b"\x1b[Z"),
-        ("resize", (24, 80)),
-        ("input", b"1"),
-        ("resize", (24, 60)),
-        ("input", b"2"),
-        ("input", b"x"),
     )
+    if page_count == 8:
+        actions += (
+            ("resize", (24, 100)),
+            ("input", b"8"),
+            ("resize", (24, 60)),
+            ("input", b"8"),
+            ("input", b"c"),
+            ("input", b"w"),
+            ("input", b"x"),
+            ("input", b"\x1b"),
+        )
+    else:
+        actions += (
+            ("resize", (24, 80)),
+            ("input", b"1"),
+            ("resize", (24, 60)),
+            ("input", b"2"),
+            ("input", b"x"),
+        )
     deadline = time.monotonic() + 15.0
     try:
         while process.poll() is None and time.monotonic() < deadline:
@@ -134,7 +151,7 @@ def main() -> int:
             b"Processor affinity",
             b"Self-collision pairs",
         ]
-        if page_count == 7:
+        if page_count >= 7:
             expected_markers.extend(
                 [
                     b"Joint Planning",
@@ -146,6 +163,17 @@ def main() -> int:
             )
         else:
             expected_markers.append(b"Reference angular motion")
+        if page_count == 8:
+            expected_markers.extend(
+                [
+                    b"Null-space",
+                    b"Secondary objectives",
+                    b"Selected-side null-space evidence",
+                    b"Tertiary",
+                    b"Terminal",
+                    b"held-link4",
+                ]
+            )
         missing = [marker for marker in expected_markers if marker not in output]
         actions_completed = action_index == len(actions)
         if return_code != 0 or not terminal_restored or missing or not actions_completed:

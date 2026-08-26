@@ -32,8 +32,15 @@ bool requiredChannelsPresent(
             [&channel](const auto & joints) { return joints.channel == channel.topic; });
         case contracts::ChannelKind::SceneUpdate:
           return std::any_of(
-            batch.line_strips.begin(), batch.line_strips.end(),
-            [&channel](const auto & line) { return line.channel == channel.topic; });
+                   batch.line_strips.begin(), batch.line_strips.end(),
+                   [&channel](const auto & line) {
+                     return line.channel == channel.topic;
+                   }) ||
+                 std::any_of(
+                   batch.spheres.begin(), batch.spheres.end(),
+                   [&channel](const auto & sphere) {
+                     return sphere.channel == channel.topic;
+                   });
         case contracts::ChannelKind::Log:
           return std::any_of(
             batch.logs.begin(), batch.logs.end(),

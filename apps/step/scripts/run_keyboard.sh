@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 lab_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
-binary=${MCL_BINARY:-"${lab_root}/build/mcl_step"}
+install_prefix=${MCL_INSTALL_PREFIX:-/workspace/install/algorithm}
+binary=${MCL_BINARY:-"${install_prefix}/bin/mcl_step"}
 urdf=${MCL_URDF:-/workspace/models/r1.cos.urdf}
 exec "${lab_root}/scripts/launch_app.sh" "${binary}" teleop \
   --urdf "${urdf}" --solver "${MCL_SOLVER:-mcc}" --backend "${MCL_BACKEND:-proxqp}" \

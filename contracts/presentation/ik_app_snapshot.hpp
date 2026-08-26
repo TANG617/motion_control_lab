@@ -216,6 +216,12 @@ struct CartesianPlannerDebug
   std::vector<PlannedArmDebug> arms;
 };
 
+struct ReplayFrameProgressDebug
+{
+  std::size_t source_index{0};
+  std::size_t source_frame_count{0};
+};
+
 struct ArmPresentation
 {
   ArmSide side{ArmSide::Left};
@@ -263,6 +269,7 @@ struct IkDebugFrame
   std::vector<SelfCollisionDebug> self_collisions;
   std::optional<RejectedTargetDebug> rejected_target;
   std::optional<CartesianPlannerDebug> cartesian_planner;
+  std::optional<ReplayFrameProgressDebug> replay_frame_progress;
   std::string status{"Ready"};
   IkRuntimeState runtime_state{IkRuntimeState::Running};
   bool paused{false};

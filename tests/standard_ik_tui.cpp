@@ -149,6 +149,8 @@ int main()
   auto frame = makeFrame();
   const auto standard = mcl::makeStandardIkTuiDocument(
     frame, presentation, 7, "null", "Grouped IK", "running");
+  require(standard.subtitle == "null  publish sequence=7",
+          "teleop subtitle must not contain replay progress");
   const std::vector<std::string> expected_standard{
     "Overview", "Solver and Quadratic Programming", "Joint State", "Runtime", "Events"};
   require(standard.pages.size() == expected_standard.size(), "standard IK must produce five pages");
@@ -179,6 +181,20 @@ int main()
     section(page(standard, "Events"), "Self-collision pairs").tables.front().rows[0][1] ==
       "left_link",
     "collision pair mapping mismatch");
+
+  frame.replay_frame_progress = mcl::ReplayFrameProgressDebug{127U, 1732U};
+  const auto replay = mcl::makeStandardIkTuiDocument(
+    frame, presentation, 7, "null", "Grouped IK", "running");
+  require(replay.subtitle ==
+            "null  publish sequence=7  replay frame=128/1732",
+          "replay subtitle must use one-based paired-timeline progress");
+  frame.replay_frame_progress = mcl::ReplayFrameProgressDebug{1731U, 1732U};
+  const auto replay_end = mcl::makeStandardIkTuiDocument(
+    frame, presentation, 9, "null", "Grouped IK", "end of stream");
+  require(replay_end.subtitle ==
+            "null  publish sequence=9  replay frame=1732/1732",
+          "final replay frame must render as N/N");
+  frame.replay_frame_progress.reset();
 
   mcl::CartesianPlannerDebug planner;
   planner.state = "planning";

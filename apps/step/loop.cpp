@@ -347,6 +347,8 @@ int runReplayWithSolver(ReplayAppOptions options, const std::string &solver_id,
           "Replay source revision=" + std::to_string(source.sequence) +
           " dropped=" + std::to_string(execution.dropped_frame_count);
       frame.paused = replay_source.paused();
+      frame.replay_frame_progress = mcl::ReplayFrameProgressDebug{
+          replay_source.sourceIndex(), loaded.timeline.timeline.size()};
       visualization_sink->write(mcl::makeIkRenderBatch(
           frame, presentation,
           std::chrono::duration_cast<std::chrono::nanoseconds>(

@@ -16,6 +16,8 @@ struct R1RobotConfig
   std::string base_frame;
   std::string left_end_effector_frame;
   std::string right_end_effector_frame;
+  std::string left_link4_frame;
+  std::string right_link4_frame;
   Eigen::Isometry3d left_tcp_offset{Eigen::Isometry3d::Identity()};
   Eigen::Isometry3d right_tcp_offset{Eigen::Isometry3d::Identity()};
   std::vector<std::string> joint_names;

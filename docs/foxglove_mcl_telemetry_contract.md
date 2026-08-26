@@ -28,6 +28,7 @@
 | `/mcl/cartesian/execution/right` | `foxglove.PoseInFrame` | committed post-OTG state 的右 EE FK。 |
 | `/mcl/joints/ik` | `foxglove.JointStates` | accepted raw IK 完整 P/V。 |
 | `/mcl/joints/execution` | `foxglove.JointStates` | committed post-OTG 完整 P/V。 |
+| `/mcl/nullspace/elbow/scene` | `foxglove.SceneUpdate` | null-space app 的 link4 target、raw IK FK、executed OTG FK 小球以及 target→execution 误差线。 |
 | `/mcl/telemetry/tracking/cartesian` | `mcl.telemetry.v1.CartesianTracking` | 每个 control/IK attempt 的 goal→reference→IK→execution 误差链。 |
 | `/mcl/telemetry/tracking/joints` | `mcl.telemetry.v1.JointTracking` | 仅 committed tick；逐关节 IK、raw target、projected target、execution P/V/A/J。 |
 | `/mcl/telemetry/solver/ik` | `mcl.telemetry.v1.SolverTelemetry` | 每个 IK attempt；`solver_kind` 和 `passes[]` 区分普通 IK/HKS。 |
@@ -44,9 +45,12 @@
 planner-only app 还可发布 `/mcl/cartesian/scene`（`foxglove.SceneUpdate`）来显示路径和
 坐标轴；它不是 OTG app 的必需 topic。
 
-`mcl_planned_hierarchical_step_otg` 默认发布上表中除 replay topic 外它具备的全部状态与
-数值流；`/mcl/events` 仅在事件发生时出现。replay mode 额外启用
-`/mcl/telemetry/replay`。
+`mcl_planned_hierarchical_step_otg` 与
+`mcl_planned_hierarchical_step_otg_nullspace` 默认发布上表中除 replay topic 外各自具备的
+全部状态与数值流；`/mcl/events` 仅在事件发生时出现。null-space app 还发布
+`/mcl/nullspace/elbow/scene`：绿色为 enabled target，蓝色为 raw HKS FK，橙色为 executed OTG
+FK，绿色连线表示 target→execution 误差；link4 与 Yellow objective 数值仍记录在通用 HKS
+`tasks[]` 中。replay mode 额外启用 `/mcl/telemetry/replay`。
 
 ## 时间合同
 

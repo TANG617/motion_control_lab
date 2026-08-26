@@ -795,6 +795,11 @@ TuiDocument makeStandardIkTuiDocument(
   TuiDocument document;
   document.title = title;
   document.subtitle = sink_status + "  publish sequence=" + std::to_string(publish_count);
+  if (frame.replay_frame_progress.has_value()) {
+    const auto & replay = *frame.replay_frame_progress;
+    document.subtitle += "  replay frame=" + std::to_string(replay.source_index + 1U) + "/" +
+                         std::to_string(replay.source_frame_count);
+  }
   document.status = input_status;
   document.header_left =
     std::string{"selected arm="} + armSideName(frame.selected_side) + "   " +

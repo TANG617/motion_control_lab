@@ -59,6 +59,12 @@
   `main/options/planning/loop` 中实际存在的职责，且算法入口仍使用上述简洁名称。
 - 按实际 source 能力提供 `scripts/run_keyboard.sh`、`run_mcap_replay.sh`、
   `run_csv_replay.sh` 或 JSON request script。脚本最后必须原样转发 `"$@"`。
+- workspace 的标准构建入口是从 `/workspace` 执行 `colcon build`，标准运行产物是
+  `${MCL_INSTALL_PREFIX:-/workspace/install/algorithm}/bin/mcl_<app>`。app-local 启动脚本必须默认
+  指向该 install tree，不得默认运行 `labs/motion-control-lab/build/` 中可能过期的 standalone
+  产物。
+- 启动脚本不隐式构建。需要运行 standalone CMake build 时，调用者必须用 `MCL_BINARY` 显式
+  指定对应 executable；`MCL_BINARY` 继续拥有最高的 binary 路径优先级。
 - 参数优先级是 compiled defaults、script preset/environment、trailing explicit arguments。
 - 产生实验 artifact 的 app 记录 resolved config、原始 argv、launcher 标识和 input hash/
   provenance。

@@ -155,7 +155,7 @@ planned-grouped TUI presenter 根据 snapshot capability 决定是否增加 Join
 projection 和 clamp 页面；它只格式化数据，不 include MCC、不解释 MCC diagnostics。真正的
 FTXUI 渲染实现只存在一份，也不通过 callback、mode 或配置对象隐藏 app 差异。
 
-两个 planned-hierarchical app 的 `options.*` 直接嵌入 `PlannedGroupedTuiConfig`，loop 侧只保留
+planned-hierarchical apps 的 `options.*` 直接嵌入 `PlannedGroupedTuiConfig`，loop 侧只保留
 短调用；app 先完成 MCC diagnostics 到 solver-neutral snapshot 的解释：
 
 ```cpp
@@ -340,6 +340,7 @@ flowchart LR
   Hierarchical[apps/hierarchical_step]
   Planned[apps/planned_hierarchical_step]
   OTG[apps/planned_hierarchical_step_otg]
+  Nullspace[apps/planned_hierarchical_step_otg_nullspace]
   Common[Shared component targets]
 
   Servo --> Common
@@ -347,17 +348,21 @@ flowchart LR
   Hierarchical --> Common
   Planned --> Common
   OTG --> Common
+  Nullspace --> Common
 
   Servo -. no include or link .-> Target
   Target -. no include or link .-> Hierarchical
   Hierarchical -. no include or link .-> Planned
   Planned -. no include or link .-> OTG
+  OTG -. no include or link .-> Nullspace
 ```
 
 若一段 solver/task 逻辑只被同一个 app 的 executable 和测试使用，可以建立
 `mcl_<app>_support` target，但源文件必须留在该 app 目录，其他 app 不得链接它。
 
 ## Bash 启动与 runtime override
+
+> 本节更新日期：2026-08-26
 
 不增加统一 CLI。用户面对的是每个 app 自己的脚本，例如：
 
@@ -369,11 +374,19 @@ apps/planned_hierarchical_step/scripts/run_csv_replay.sh
 
 脚本负责表达可读、可审查的实验 preset：
 
-- binary、URDF、input/topic 和 output root；
+- 从 `${MCL_INSTALL_PREFIX:-/workspace/install/algorithm}/bin` 选择 workspace colcon install
+  executable；只有显式的 `MCL_BINARY` 才覆盖到 standalone 或临时产物；
+- URDF、input/topic 和 output root；
 - `LD_LIBRARY_PATH` 等本机运行环境；
 - `chrt`、`taskset`、CPU mask 和 realtime priority 等 OS policy；
 - 本 app 的推荐 rate、deadline、solver 和 planner/OTG 参数；
 - 把 `"$@"` 原样放在命令末尾，允许一次运行覆盖脚本默认参数。
+
+启动脚本不执行 configure/build，也不以 `labs/motion-control-lab/build/` 作为隐式 fallback。
+workspace build、install 与 standalone CMake build 是三个不同 artifact tree：标准开发闭环是
+`/workspace` 下 `colcon build` 写入 `build/algorithm` 和 `install/algorithm`，随后 app 脚本运行
+同一个 install prefix。standalone build 只在调用者用 `MCL_BINARY` 明确选择时参与运行，避免
+同名旧 executable 掩盖刚完成的 colcon 构建。
 
 每个 executable 只解析自己的参数。共享组件接收 typed config，不接收 `argc/argv`，也不从
 全局环境隐式读取算法参数。参数优先级为：

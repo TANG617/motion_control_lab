@@ -136,6 +136,9 @@ int run(bool throw_after_render, bool fault_hold, bool replay_controls, bool rep
   }
 
   auto document = makeDocument(fault_hold, input.status());
+  if (replay_controls) {
+    document.subtitle = "null  publish sequence=7  replay frame=128/1732";
+  }
   tui.render(document);
   if (throw_after_render) {
     throw std::runtime_error(std::string{kExpectedException});
@@ -151,6 +154,8 @@ int run(bool throw_after_render, bool fault_hold, bool replay_controls, bool rep
     for (const auto control : input.consumeSourceControls()) {
       if (control == mcl::SourceControl::Step) {
         single_step_requested = true;
+        document.subtitle =
+            "null  publish sequence=7  replay frame=129/1732";
       }
     }
     document.status = input.status();

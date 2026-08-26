@@ -1,0 +1,6 @@
+{
+  "schema_version": "mcl.nullspace.v1",
+  "channels": [
+    {"topic": "/mcl/nullspace/elbow/scene", "foxglove_schema": "foxglove.SceneUpdate", "role": "elbow_scene", "required": true, "semantics": "Null-space link4 target, raw IK FK, executed OTG FK and target-to-execution error geometry."}
+  ]
+}

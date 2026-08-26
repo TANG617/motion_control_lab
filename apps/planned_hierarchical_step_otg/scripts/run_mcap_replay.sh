@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 lab_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
-binary=${MCL_BINARY:-"${lab_root}/build/mcl_planned_hierarchical_step_otg"}
+install_prefix=${MCL_INSTALL_PREFIX:-/workspace/install/algorithm}
+binary=${MCL_BINARY:-"${install_prefix}/bin/mcl_planned_hierarchical_step_otg"}
 urdf=${MCL_URDF:-/workspace/products/synrobot/modules/common/robot_description/psi_r1/urdf/Psi_R1_rev1.urdf}
 input=${MCL_INPUT:-/workspace/fixtures/raw/sliced-RW1AZHYCSEFT5_RW1AZHYCSEFT5260310002_20260813164525_0.mcap}
 
@@ -34,12 +35,12 @@ exec "${lab_root}/scripts/launch_app.sh" "${binary}" replay --urdf "${urdf}" \
   --yellow-rate "${MCL_YELLOW_RATE_HZ:-500}" \
   --deadline-policy "${MCL_DEADLINE_POLICY:-monitor}" \
   --joint-target-mode "${MCL_JOINT_TARGET_MODE:-future-o1-pv}" \
-  --max-linear-velocity-mps "${MCL_MAX_LINEAR_VELOCITY_MPS:-3.0}" \
-  --max-linear-acceleration-mps2 "${MCL_MAX_LINEAR_ACCELERATION_MPS2:-20.0}" \
-  --max-linear-jerk-mps3 "${MCL_MAX_LINEAR_JERK_MPS3:-400.0}" \
-  --max-angular-velocity-rps "${MCL_MAX_ANGULAR_VELOCITY_RPS:-3.0}" \
-  --max-angular-acceleration-rps2 "${MCL_MAX_ANGULAR_ACCELERATION_RPS2:-20.0}" \
-  --max-angular-jerk-rps3 "${MCL_MAX_ANGULAR_JERK_RPS3:-300.0}" \
+  --max-linear-velocity-mps "${MCL_MAX_LINEAR_VELOCITY_MPS:-0.8}" \
+  --max-linear-acceleration-mps2 "${MCL_MAX_LINEAR_ACCELERATION_MPS2:-4.0}" \
+  --max-linear-jerk-mps3 "${MCL_MAX_LINEAR_JERK_MPS3:-60.0}" \
+  --max-angular-velocity-rps "${MCL_MAX_ANGULAR_VELOCITY_RPS:-3.5}" \
+  --max-angular-acceleration-rps2 "${MCL_MAX_ANGULAR_ACCELERATION_RPS2:-15.0}" \
+  --max-angular-jerk-rps3 "${MCL_MAX_ANGULAR_JERK_RPS3:-180.0}" \
   --ui "${MCL_UI:-tui}" \
   --terminal-input "${MCL_TERMINAL_INPUT:-on}" \
   --replay-trace "${MCL_REPLAY_TRACE:-on}" \

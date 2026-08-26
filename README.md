@@ -58,6 +58,38 @@ MoveIt 和 C++20 构建，Lab 目标继续保持 C++17。
 
 ## 构建与测试
 
+### Workspace colcon 构建与运行产物
+
+> 本节更新日期：2026-08-26
+
+在 Motion Control Workspace 中，Lab 的标准构建入口是 `/workspace` 下的 `colcon build`。
+当前 algorithm defaults 将 build tree 放在 `/workspace/build/algorithm`，将 merged install tree
+放在 `/workspace/install/algorithm`：
+
+```bash
+cd /workspace
+COLCON_DEFAULTS_FILE=/workspace/.vscode/workspace/algorithm_colcon_defaults.yaml \
+  colcon build --packages-up-to motion_control_lab
+```
+
+所有 app-local 启动脚本默认执行
+`${MCL_INSTALL_PREFIX:-/workspace/install/algorithm}/bin/mcl_<app>`，因此上述构建完成后无需再对
+`labs/motion-control-lab/build/` 执行第二次 standalone build。启动脚本不会隐式构建，也不会因为
+Lab standalone build 中存在同名旧文件而选择它。需要验证其他 install prefix 时设置
+`MCL_INSTALL_PREFIX`；需要有意运行 standalone 或临时 executable 时显式设置 `MCL_BINARY`：
+
+```bash
+MCL_BINARY=/workspace/labs/motion-control-lab/build/mcl_planned_hierarchical_step_otg_nullspace \
+  apps/planned_hierarchical_step_otg_nullspace/scripts/run_keyboard.sh
+```
+
+`COLCON_PREFIX_PATH` 用于已安装 package 的发现，不决定本次 build/install 目录，也不决定启动脚本
+选择哪个 executable；这些分别由 `COLCON_DEFAULTS_FILE` 与上述 binary 路径合同决定。不要把
+`/workspace/build/algorithm/motion_control_lab`、`/workspace/install/algorithm` 和
+`labs/motion-control-lab/build` 的时间戳或测试结果混为同一构建。
+
+standalone CMake 仍是受支持的独立开发路径，但必须显式选择其 executable：
+
 ```bash
 cmake --preset dev
 cmake --build --preset dev --target e01_placo_smoke -j8
@@ -80,19 +112,22 @@ ctest --test-dir build/headless --output-on-failure
 
 ## IK app CPU affinity（Linux）
 
-IK app 可以在编译时启用固定的 Linux CPU affinity；默认关闭，因此不会改变普通 Linux
-或 macOS 构建：
+IK app 在 Linux 构建中默认启用固定 CPU affinity；非 Linux 构建默认关闭。Linux 上需要
+显式的非绑核调试构建时，可在配置阶段传入 `-DMCL_ENABLE_CPU_AFFINITY=OFF`：
 
 ```bash
-cmake -S . -B build/affinity -DMCL_ENABLE_CPU_AFFINITY=ON
-cmake --build build/affinity -j8
+cmake -S . -B build/no-affinity -DMCL_ENABLE_CPU_AFFINITY=OFF
+cmake --build build/no-affinity -j8
 ```
+
+已有 build 目录继续使用其 CMake cache；从旧的默认关闭配置迁移时，需要在该目录重新配置一次
+`-DMCL_ENABLE_CPU_AFFINITY=ON`。
 
 CPU 编号由各 app 的源码常量持有，不提供运行时覆盖；TUI 会显示当前编译版本实际请求和
 生效的 CPU。启用后，若请求 CPU 不在进程启动时的 cgroup/cpuset allowed set 内，app
 会立即失败并打印请求、允许和实际 CPU 集。该能力只限制线程运行位置，不负责 CPU 独占、
 SMT sibling 隔离、IRQ affinity 或实时调度优先级。交互 IK 的 TUI Runtime 页显示每个角色的
-启用状态、线程 ID、requested CPU 和内核核验后的 effective CPU；关闭构建明确显示
+启用状态、线程 ID、requested CPU 和内核核验后的 effective CPU；显式关闭的构建明确显示
 `disabled`，worker 完成绑定前显示 `pending`。
 
 所有交互 IK 的 Solver and Quadratic Programming 与 Runtime 页还会显示 IK calculation time 的
@@ -447,6 +482,12 @@ distance `0.30 m`、influence distance `0.35 m`、gain `2 s^-1`、weight `100`�
 运动优化目标，不是硬安全屏障；
 margin shortfall 不会自动拒绝 accepted solution，硬件 command authorization 仍由集成层负责。
 
+`mcl_planned_hierarchical_step_otg_nullspace` 是从 OTG 入口独立复制的两级 HQP 演示。
+Primary 保持左右 TCP position/orientation，Secondary 同时优化当前 held 的单侧 link4 position
+和 Yellow accepted `qY` posture target，默认权重分别为 `100` 和 `1`。Tertiary 与 Terminal
+保持关闭。键盘用 `c` 切换 TCP/link4 编辑焦点；link4 目标走 app-local latest snapshot，
+不会增加 Cartesian planner revision。该目标返回 TCP 后继续保持，同一时间最多启用一侧。
+
 app 从 R1 URDF 所在 `robot_description/psi_r1/urdf` 布局推导 mesh package search root，并直接
 交给模型加载器。调试入口不预先校验 mesh 目录或 collision diagnostics 形状；底层错误直接退出，
 不新增 TUI 或 Foxglove schema。
@@ -463,7 +504,9 @@ app 从 R1 URDF 所在 `robot_description/psi_r1/urdf` 布局推导 mesh package
 
 支持 keyboard、MCAP 或 CSV 的 app 在自己的 `scripts/` 下提供对应的
 `run_keyboard.sh`、`run_mcap_replay.sh`、`run_csv_replay.sh`；Cartesian planning 提供
-`run_json_request.sh`。脚本通过根目录 `scripts/launch_app.sh` 统一处理 binary、
+`run_json_request.sh`。脚本默认从
+`${MCL_INSTALL_PREFIX:-/workspace/install/algorithm}/bin` 选择 colcon 安装产物；只有显式设置
+`MCL_BINARY` 才运行其他 build tree。脚本通过根目录 `scripts/launch_app.sh` 统一处理 binary、
 `LD_LIBRARY_PATH`，以及可选的 `MCL_CPU_SET`/`MCL_RT_PRIORITY` 对应的 `taskset`/`chrt`，但不
 解析 app 的算法语义。每个脚本把 `"$@"` 放在 preset 后面，因此优先级是：
 
@@ -471,7 +514,7 @@ app 从 R1 URDF 所在 `robot_description/psi_r1/urdf` 布局推导 mesh package
 app compiled defaults < script preset/environment < trailing explicit arguments
 ```
 
-两个 planned hierarchical app 的 `run_mcap_replay.sh` 可直接运行：默认回放
+planned hierarchical apps 的 `run_mcap_replay.sh` 可直接运行：默认回放
 `sliced_RW1AZHYCSEFT5_RW1AZHYCSEFT5260310002_20260731015829_0.mcap`，使用左右
 `/hal/tracker/htc/*/calib_target_pose` 和首帧 `/mc/ik/joint_states`，以 10 ms、nearest/5 ms、
 realtime、monitor、start-paused preset 启动。其 `run_keyboard.sh` 使用相同的 URDF、Red/Yellow
@@ -548,6 +591,7 @@ apps/single_arm_step/ main/options/solver/loop；单臂 ServoStep
 apps/hierarchical_step/  main/options/solver/loop；raw Red/Yellow ServoStep
 apps/planned_hierarchical_step/ main/options/solver/planning/loop；在线 Cartesian replan
 apps/planned_hierarchical_step_otg/ main/options/solver/planning/loop；Cartesian replan + JointPlanner OTG
+apps/planned_hierarchical_step_otg_nullspace/ 独立两级 HQP null-space + JointPlanner OTG 演示
 contracts/                definition、manifest、metric 与 visualization 合同
 data/raw/                 原始数据占位；不得静默改写
 data/canonical/           规范数据占位

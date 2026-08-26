@@ -158,20 +158,23 @@ ftxui::Element renderColumns(const std::vector<int> & source_weights,
   return hbox(std::move(rendered_columns));
 }
 
-ftxui::Element renderPage(const TuiPage & page)
+ftxui::Element renderPageLayout(
+  const std::vector<TuiSection> & sections,
+  const std::vector<int> & column_weights,
+  const std::vector<TuiPageRow> & rows)
 {
   using namespace ftxui;
-  if (page.rows.empty()) {
-    std::vector<const TuiSection *> sections;
-    sections.reserve(page.sections.size());
-    for (const auto & section : page.sections) {
-      sections.push_back(&section);
+  if (rows.empty()) {
+    std::vector<const TuiSection *> section_pointers;
+    section_pointers.reserve(sections.size());
+    for (const auto & section : sections) {
+      section_pointers.push_back(&section);
     }
-    return renderColumns(page.column_weights, sections, false);
+    return renderColumns(column_weights, section_pointers, false);
   }
 
-  std::vector<std::vector<const TuiSection *>> row_sections(page.rows.size());
-  for (const auto & section : page.sections) {
+  std::vector<std::vector<const TuiSection *>> row_sections(rows.size());
+  for (const auto & section : sections) {
     if (section.row >= row_sections.size()) {
       throw std::invalid_argument("TUI section row is outside the page layout");
     }
@@ -179,12 +182,25 @@ ftxui::Element renderPage(const TuiPage & page)
   }
 
   Elements rendered_rows;
-  for (std::size_t index = 0; index < page.rows.size(); ++index) {
+  for (std::size_t index = 0; index < rows.size(); ++index) {
     rendered_rows.push_back(
-        renderColumns(page.rows[index].column_weights, row_sections[index], true) |
-        yflex_grow_factor(std::max(page.rows[index].height_weight, 1)));
+        renderColumns(rows[index].column_weights, row_sections[index], true) |
+        yflex_grow_factor(std::max(rows[index].height_weight, 1)));
   }
   return vbox(std::move(rendered_rows));
+}
+
+ftxui::Element renderPage(const TuiPage & page, int terminal_width)
+{
+  for (const auto & layout : page.responsive_layouts) {
+    const bool above_minimum = terminal_width >= layout.minimum_width;
+    const bool below_maximum =
+      layout.maximum_width == 0 || terminal_width <= layout.maximum_width;
+    if (above_minimum && below_maximum) {
+      return renderPageLayout(layout.sections, layout.column_weights, layout.rows);
+    }
+  }
+  return renderPageLayout(page.sections, page.column_weights, page.rows);
 }
 #endif
 
@@ -278,7 +294,7 @@ void TuiRenderer::render(const TuiDocument & document)
     }
   } else if (!document.pages.empty()) {
     const auto & page = document.pages[page_index_];
-    sections.push_back(renderPage(page) | flex);
+    sections.push_back(renderPage(page, width) | flex);
   }
   if (sections.empty()) {
     sections.push_back(text("No presentation data"));

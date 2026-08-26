@@ -168,7 +168,12 @@ def main() -> int:
             return 0
 
         if replay_controls:
-            expected_markers = (b"Replay timeline paused", b"Replay single-frame")
+            expected_markers = (
+                b"Replay timeline paused",
+                b"Replay single-frame",
+                b"publish sequence=7  replay frame=128/1732",
+                b"publish sequence=7  replay frame=129/1732",
+            )
             missing_markers = [
                 marker for marker in expected_markers if marker not in output
             ]
@@ -265,6 +270,11 @@ def main() -> int:
                 + ", ".join(marker.decode() for marker in missing_markers)
                 + "\n"
             )
+            return 1
+
+        if b"replay frame=" in output:
+            sys.stderr.buffer.write(output)
+            sys.stderr.write("teleop TUI unexpectedly rendered replay progress\n")
             return 1
 
         if "┌".encode() in output:

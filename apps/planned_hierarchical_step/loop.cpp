@@ -1535,6 +1535,11 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
       frame.rejected_target = rejected_target;
       frame.paused = input.paused();
       frame.selected_side = input.selectedSide();
+      if (planned_options.source_mode == SourceMode::Replay) {
+        frame.replay_frame_progress = mcl::ReplayFrameProgressDebug{
+            replay_source->sourceIndex(),
+            loaded_replay->timeline.timeline.size()};
+      }
 
       mcl::IkDebugFrame visualization_debug_frame = frame;
       visualization_debug_frame.targets = armTargets(latest_red_attempt.target);

@@ -50,6 +50,11 @@ option(
   ON
 )
 option(
+  MCL_BUILD_PLANNED_HIERARCHICAL_STEP_OTG_NULLSPACE
+  "Build the planned hierarchical joint-OTG null-space demonstration"
+  ON
+)
+option(
   MCL_BUILD_MCC_PLOTS
   "Build the optional motion_control_core matplotlib renderer"
   OFF
@@ -74,11 +79,16 @@ option(
   "Build optional Foxglove live visualization into the E03 legacy replay runner"
   OFF
 )
+set(MCL_ENABLE_CPU_AFFINITY_DEFAULT OFF)
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+  set(MCL_ENABLE_CPU_AFFINITY_DEFAULT ON)
+endif()
 option(
   MCL_ENABLE_CPU_AFFINITY
   "Compile Linux CPU affinity into IK applications"
-  OFF
+  ${MCL_ENABLE_CPU_AFFINITY_DEFAULT}
 )
+unset(MCL_ENABLE_CPU_AFFINITY_DEFAULT)
 option(MCL_ENABLE_TUI "Build the FTXUI terminal renderer" ON)
 option(MCL_ENABLE_FOXGLOVE_TRANSPORT "Build Foxglove WebSocket/MCAP preview transports" ON)
 
@@ -104,7 +114,8 @@ endif()
 set(MCL_BUILD_ANY_INTERACTIVE_IK OFF)
 if(MCL_BUILD_SINGLE_ARM_STEP OR MCL_BUILD_STEP OR
    MCL_BUILD_TARGET OR MCL_BUILD_BASELINE OR MCL_BUILD_HIERARCHICAL_STEP OR
-   MCL_BUILD_PLANNED_HIERARCHICAL_STEP OR MCL_BUILD_PLANNED_HIERARCHICAL_STEP_OTG)
+   MCL_BUILD_PLANNED_HIERARCHICAL_STEP OR MCL_BUILD_PLANNED_HIERARCHICAL_STEP_OTG OR
+   MCL_BUILD_PLANNED_HIERARCHICAL_STEP_OTG_NULLSPACE)
   set(MCL_BUILD_ANY_INTERACTIVE_IK ON)
 endif()
 
@@ -146,6 +157,7 @@ set(MCL_VISUALIZATION_CONTRACT_JSONS
     "${MCL_VISUALIZATION_CONTRACT_DIR}/mcl_state.v1.json"
     "${MCL_VISUALIZATION_CONTRACT_DIR}/mcl_planning.v1.json"
     "${MCL_VISUALIZATION_CONTRACT_DIR}/mcl_execution.v1.json"
+    "${MCL_VISUALIZATION_CONTRACT_DIR}/mcl_nullspace.v1.json"
     "${MCL_VISUALIZATION_CONTRACT_DIR}/mcl_telemetry.v1.json")
 
 set(MCL_CHANNEL_SPEC_HEADER
@@ -183,6 +195,8 @@ mcl_generate_visualization_contract(
 mcl_generate_visualization_contract(
   mcl_execution motion_control_lab::contracts::mcl_execution_v1)
 mcl_generate_visualization_contract(
+  mcl_nullspace motion_control_lab::contracts::mcl_nullspace_v1)
+mcl_generate_visualization_contract(
   mcl_telemetry motion_control_lab::contracts::mcl_telemetry_v1)
 
 add_custom_target(
@@ -206,7 +220,8 @@ target_include_directories(
   INTERFACE "$<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/generated>"
 )
 
-if(MCL_BUILD_PLANNED_HIERARCHICAL_STEP_OTG)
+if(MCL_BUILD_PLANNED_HIERARCHICAL_STEP_OTG OR
+   MCL_BUILD_PLANNED_HIERARCHICAL_STEP_OTG_NULLSPACE)
   find_package(Protobuf REQUIRED)
   set(MCL_TELEMETRY_PROTO
       "${CMAKE_CURRENT_SOURCE_DIR}/contracts/telemetry/mcl_telemetry_v1.proto")
@@ -237,7 +252,7 @@ endif()
 
 if(MCL_BUILD_ANY_INTERACTIVE_IK OR MCL_BUILD_CARTESIAN_PLANNING OR
    MCL_BUILD_E03_REPLAY_VISUALIZATION)
-  find_package(motion_control_viz 0.4 CONFIG REQUIRED)
+  find_package(motion_control_viz 0.5 CONFIG REQUIRED)
 endif()
 
 add_library(mcl_input_contract INTERFACE)
@@ -495,6 +510,10 @@ if(MCL_BUILD_ANY_INTERACTIVE_IK)
   endif()
   if(MCL_BUILD_PLANNED_HIERARCHICAL_STEP_OTG)
     add_subdirectory(apps/planned_hierarchical_step_otg)
+  endif()
+
+  if(MCL_BUILD_PLANNED_HIERARCHICAL_STEP_OTG_NULLSPACE)
+    add_subdirectory(apps/planned_hierarchical_step_otg_nullspace)
   endif()
 endif()
 
@@ -827,6 +846,7 @@ install(
 
 if(BUILD_TESTING)
   find_program(MCL_BASH_EXECUTABLE bash REQUIRED)
+  find_program(MCL_TRUE_EXECUTABLE true REQUIRED)
   file(
     GLOB_RECURSE MCL_APP_SHELL_SCRIPTS
     CONFIGURE_DEPENDS
@@ -865,6 +885,58 @@ if(BUILD_TESTING)
       )
       set_tests_properties(
         scripts.planned_hierarchical_step_otg_keyboard_smoke
+        PROPERTIES TIMEOUT 15
+      )
+    endif()
+  endif()
+
+  if(MCL_BUILD_PLANNED_HIERARCHICAL_STEP_OTG_NULLSPACE)
+    add_test(
+      NAME scripts.nullspace_source_launcher_path_resolution
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        --unset=MCL_BINARY
+        "PATH=$<TARGET_FILE_DIR:mcl_planned_hierarchical_step_otg_nullspace>:$ENV{PATH}"
+        "MCL_UI=none"
+        "MCL_VIZ=none"
+        "${CMAKE_CURRENT_SOURCE_DIR}/apps/planned_hierarchical_step_otg_nullspace/scripts/run_keyboard.sh"
+        --help
+    )
+    add_test(
+      NAME scripts.planned_hierarchical_step_otg_nullspace_mcap_preset_smoke
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        "MCL_BINARY=${MCL_TRUE_EXECUTABLE}"
+        "MCL_CPU_SET="
+        "MCL_RT_PRIORITY="
+        "MCL_UI=none"
+        "MCL_VIZ=none"
+        "${CMAKE_CURRENT_SOURCE_DIR}/apps/planned_hierarchical_step_otg_nullspace/scripts/run_mcap_replay.sh"
+    )
+    add_test(
+      NAME scripts.planned_hierarchical_step_otg_nullspace_csv_preset_smoke
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        "MCL_BINARY=${MCL_TRUE_EXECUTABLE}"
+        "MCL_INPUT=/tmp/mcl-nullspace-csv-launcher-smoke.csv"
+        "${CMAKE_CURRENT_SOURCE_DIR}/apps/planned_hierarchical_step_otg_nullspace/scripts/run_csv_replay.sh"
+    )
+
+    if(MCL_SCRIPT_EXECUTABLE)
+      add_test(
+        NAME scripts.planned_hierarchical_step_otg_nullspace_keyboard_smoke
+        COMMAND
+          "${CMAKE_COMMAND}" -E env
+          --unset=MCL_BINARY
+          "PATH=$<TARGET_FILE_DIR:mcl_planned_hierarchical_step_otg_nullspace>:$ENV{PATH}"
+          "MCL_UI=none"
+          "MCL_VIZ=none"
+          "${MCL_SCRIPT_EXECUTABLE}" -qec
+          "${CMAKE_CURRENT_SOURCE_DIR}/apps/planned_hierarchical_step_otg_nullspace/scripts/run_keyboard.sh --duration 0.05"
+          /dev/null
+      )
+      set_tests_properties(
+        scripts.planned_hierarchical_step_otg_nullspace_keyboard_smoke
         PROPERTIES TIMEOUT 15
       )
     endif()
@@ -1090,6 +1162,22 @@ if(BUILD_TESTING)
           PROPERTIES TIMEOUT 20
         )
       endif()
+
+      if(TARGET mcl_planned_hierarchical_step_otg_nullspace)
+        add_test(
+          NAME apps.mcl_planned_hierarchical_step_otg_nullspace_tui_pages_pty
+          COMMAND
+            "${Python3_EXECUTABLE}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tests/run_planned_tui_pages_pty.py"
+            "$<TARGET_FILE:mcl_planned_hierarchical_step_otg_nullspace>"
+            8
+            "/workspace/products/synrobot/modules/common/robot_description/psi_r1/urdf/Psi_R1_rev1.urdf"
+        )
+        set_tests_properties(
+          apps.mcl_planned_hierarchical_step_otg_nullspace_tui_pages_pty
+          PROPERTIES TIMEOUT 20
+        )
+      endif()
     endif()
 
     foreach(MCL_DUAL_ARM_TARGET IN ITEMS
@@ -1116,11 +1204,13 @@ if(BUILD_TESTING)
         mcl_step
         mcl_hierarchical_step
         mcl_planned_hierarchical_step
-        mcl_planned_hierarchical_step_otg)
+        mcl_planned_hierarchical_step_otg
+        mcl_planned_hierarchical_step_otg_nullspace)
       if(TARGET ${MCL_SERVO_TARGET})
         set(MCL_SERVO_PLANNED OFF)
         if(MCL_SERVO_TARGET STREQUAL "mcl_planned_hierarchical_step" OR
-           MCL_SERVO_TARGET STREQUAL "mcl_planned_hierarchical_step_otg")
+           MCL_SERVO_TARGET STREQUAL "mcl_planned_hierarchical_step_otg" OR
+           MCL_SERVO_TARGET STREQUAL "mcl_planned_hierarchical_step_otg_nullspace")
           set(MCL_SERVO_PLANNED ON)
         endif()
         add_test(

@@ -23,7 +23,7 @@ KeyRoute KeyRouter::route(const KeyEvent & event) const noexcept
   case KeyCode::Function7: return KeyRoute::Navigation;
   case KeyCode::Character: {
     const char key = static_cast<char>(std::tolower(static_cast<unsigned char>(event.character)));
-    if ((key >= '1' && key <= '7') || key == 'h' || key == '?') {
+    if ((key >= '1' && key <= '9') || key == 'h' || key == '?') {
       return KeyRoute::Navigation;
     }
     return KeyRoute::Source;

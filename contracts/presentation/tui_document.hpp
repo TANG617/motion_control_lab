@@ -60,12 +60,22 @@ struct TuiPageRow
   int height_weight{1};
 };
 
+struct TuiPageLayout
+{
+  int minimum_width{0};
+  int maximum_width{0};
+  std::vector<TuiSection> sections;
+  std::vector<int> column_weights{1};
+  std::vector<TuiPageRow> rows;
+};
+
 struct TuiPage
 {
   std::string title;
   std::vector<TuiSection> sections;
   std::vector<int> column_weights{1};
   std::vector<TuiPageRow> rows;
+  std::vector<TuiPageLayout> responsive_layouts;
 };
 
 struct TuiDocument

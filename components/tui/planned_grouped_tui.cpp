@@ -274,148 +274,174 @@ makePlannedGroupedTuiDocument(const PlannedGroupedTuiSnapshot &snapshot) {
   TuiDocument document = makeStandardIkTuiDocument(
       *snapshot.frame, *snapshot.presentation, snapshot.publish_count,
       snapshot.sink_status, snapshot.title, snapshot.input_status);
-  if (!snapshot.joint_otg.has_value()) {
-    return document;
+  if (snapshot.joint_otg.has_value()) {
+    const auto &app = *snapshot.joint_otg;
+    document.header_right = "source=" + app.source_mode +
+                            "  Cartesian planning=" + app.cartesian_plan.state +
+                            "  Joint execution=" + app.joint_step.state;
+
+    auto &overview = page(document, "Overview");
+    overview.sections.push_back(sheet(
+        "Safety", {textColumn("Safety metric"), textColumn("Value")},
+        {{"Left task scale", fixed(app.left_task_scale, 3)},
+         {"Right task scale", fixed(app.right_task_scale, 3)},
+         {"Projection events this cycle",
+          std::to_string(app.projection_events.size())},
+         {"Projection events total",
+          std::to_string(app.projection_event_count)},
+         {"Retarget clamps this cycle",
+          std::to_string(app.clamp_events.size())},
+         {"Maximum clamp limit ratio", fixed(app.maximum_clamp_limit_ratio, 3)},
+         {"Maximum absolute velocity", fixed(app.maximum_absolute_velocity, 3)},
+         {"Maximum absolute acceleration",
+          fixed(app.maximum_absolute_acceleration, 3)},
+         {"Maximum absolute jerk", fixed(app.maximum_absolute_jerk, 2)}},
+        1U, 0U));
+    auto planning = sheet("Planning",
+                          {textColumn("Planning stage"), textColumn("State"),
+                           numberColumn("Calculation [ms]")},
+                          {{"Cartesian", app.cartesian_plan.state,
+                            fixed(app.cartesian_plan.calculation_time_ms, 4)},
+                           {"Joint plan", app.joint_plan.state,
+                            fixed(app.joint_plan.calculation_time_ms, 4)},
+                           {"Joint first step", app.joint_step.state,
+                            fixed(app.joint_step.calculation_time_ms, 4)}},
+                          1U, 1U);
+    planning.lines.push_back("Target mode: " + app.target_mode);
+    planning.lines.push_back("Feedback topology: " + app.feedback_topology);
+    overview.sections.push_back(std::move(planning));
+
+    auto &cartesian_page = page(document, "Cartesian Planning");
+    cartesian_page.sections.front() = sheet(
+        "Planner",
+        {textColumn("State"), numberColumn("Duration [s]"),
+         numberColumn("Sample time [s]"), numberColumn("Samples"),
+         numberColumn("Calculation [ms]")},
+        {{app.cartesian_plan.state, fixed(app.cartesian_plan.duration_s, 6),
+          fixed(app.cartesian_plan.sample_time_s, 6),
+          std::to_string(app.cartesian_plan.sample_count),
+          fixed(app.cartesian_plan.calculation_time_ms, 4)}});
+    cartesian_page.sections.insert(
+        cartesian_page.sections.begin() + 1,
+        sheet("Configured limits",
+              {textColumn("Metric"), numberColumn("Value"), textColumn("Unit")},
+              {{"Linear velocity", fixed(app.cartesian_limits.linear_velocity),
+                "m/s"},
+               {"Linear acceleration",
+                fixed(app.cartesian_limits.linear_acceleration), "m/s\xC2\xB2"},
+               {"Linear jerk", fixed(app.cartesian_limits.linear_jerk),
+                "m/s\xC2\xB3"},
+               {"Angular velocity",
+                fixed(app.cartesian_limits.angular_velocity), "rad/s"},
+               {"Angular acceleration",
+                fixed(app.cartesian_limits.angular_acceleration),
+                "rad/s\xC2\xB2"},
+               {"Angular jerk", fixed(app.cartesian_limits.angular_jerk),
+                "rad/s\xC2\xB3"}}));
+
+    const auto cartesian_position =
+        std::find_if(document.pages.begin(), document.pages.end(),
+                     [](const TuiPage &candidate) {
+                       return candidate.title == "Cartesian Planning";
+                     });
+    document.pages.insert(cartesian_position + 1, makeJointPlanningPage(app));
+
+    replaceJointStatePage(page(document, "Joint State"), app);
+
+    auto &runtime = page(document, "Runtime");
+    runtime.sections.push_back(
+        sheet("Planner timing",
+              {textColumn("Planner"), textColumn("State"),
+               numberColumn("Duration [s]"), numberColumn("Sample time [s]"),
+               numberColumn("Samples"), numberColumn("Calculation [ms]")},
+              {{"Cartesian", app.cartesian_plan.state,
+                fixed(app.cartesian_plan.duration_s, 6),
+                fixed(app.cartesian_plan.sample_time_s, 6),
+                std::to_string(app.cartesian_plan.sample_count),
+                fixed(app.cartesian_plan.calculation_time_ms, 4)},
+               {"Joint plan", app.joint_plan.state,
+                fixed(app.joint_plan.duration_s, 6),
+                fixed(app.joint_plan.sample_time_s, 6),
+                std::to_string(app.joint_plan.sample_count),
+                fixed(app.joint_plan.calculation_time_ms, 4)},
+               {"Joint first step", app.joint_step.state,
+                fixed(app.joint_step.duration_s, 6),
+                fixed(app.joint_step.sample_time_s, 6),
+                std::to_string(app.joint_step.sample_count),
+                fixed(app.joint_step.calculation_time_ms, 4)}},
+              1U));
+
+    auto &events = page(document, "Events");
+    auto &current_state = section(events, "Current state");
+    current_state.tables.front().rows.push_back(
+        {"Projection modified joints",
+         std::to_string(app.modified_joint_count)});
+    current_state.tables.front().rows.push_back(
+        {"Clamp target revision", std::to_string(app.clamp_target_revision)});
+    current_state.tables.front().rows.push_back(
+        {"Maximum clamp limit ratio", fixed(app.maximum_clamp_limit_ratio, 3)});
+
+    std::vector<std::vector<std::string>> projection_rows;
+    for (const auto &event : app.projection_events) {
+      projection_rows.push_back(
+          {event.joint, event.component, fixed(event.original_value, 6),
+           fixed(event.applied_value, 6), fixed(event.limit, 6)});
+    }
+    if (projection_rows.empty()) {
+      projection_rows.push_back(noneRow(5U));
+    }
+    events.sections.insert(
+        events.sections.begin() + 1,
+        sheet("Joint projection events",
+              {textColumn("Joint"), textColumn("Component"),
+               numberColumn("Original"), numberColumn("Applied"),
+               numberColumn("Limit")},
+              std::move(projection_rows)));
+
+    std::vector<std::vector<std::string>> clamp_rows;
+    for (const auto &event : app.clamp_events) {
+      clamp_rows.push_back({event.arm, event.component, event.axis,
+                            fixed(event.original_value, 6),
+                            fixed(event.applied_value, 6),
+                            fixed(event.limit, 6)});
+    }
+    if (clamp_rows.empty()) {
+      clamp_rows.push_back(noneRow(6U));
+    }
+    events.sections.insert(
+        events.sections.begin() + 2,
+        sheet("Cartesian retarget clamp events",
+              {textColumn("Arm"), textColumn("Component"), textColumn("Axis"),
+               numberColumn("Original"), numberColumn("Applied"),
+               numberColumn("Limit")},
+              std::move(clamp_rows)));
   }
-  const auto &app = *snapshot.joint_otg;
-  document.header_right = "source=" + app.source_mode +
-                          "  Cartesian planning=" + app.cartesian_plan.state +
-                          "  Joint execution=" + app.joint_step.state;
-  document.footer_hints =
-      app.source_mode == "mcap replay"
-          ? "Space pause · . step · 1–7 pages · ? help · x exit"
-          : "Space pause · 1–7 pages · ? help · x exit";
-  document.help_lines.front() = "1..7/F1..F7/Tab/BackTab: pages; "
-                                "PageUp/PageDown/Home/End: scroll; h/?: help";
 
-  auto &overview = page(document, "Overview");
-  overview.sections.push_back(sheet(
-      "Safety", {textColumn("Safety metric"), textColumn("Value")},
-      {{"Left task scale", fixed(app.left_task_scale, 3)},
-       {"Right task scale", fixed(app.right_task_scale, 3)},
-       {"Projection events this cycle",
-        std::to_string(app.projection_events.size())},
-       {"Projection events total", std::to_string(app.projection_event_count)},
-       {"Retarget clamps this cycle", std::to_string(app.clamp_events.size())},
-       {"Maximum clamp limit ratio", fixed(app.maximum_clamp_limit_ratio, 3)},
-       {"Maximum absolute velocity", fixed(app.maximum_absolute_velocity, 3)},
-       {"Maximum absolute acceleration",
-        fixed(app.maximum_absolute_acceleration, 3)},
-       {"Maximum absolute jerk", fixed(app.maximum_absolute_jerk, 2)}},
-      1U, 0U));
-  auto planning = sheet("Planning",
-                        {textColumn("Planning stage"), textColumn("State"),
-                         numberColumn("Calculation [ms]")},
-                        {{"Cartesian", app.cartesian_plan.state,
-                          fixed(app.cartesian_plan.calculation_time_ms, 4)},
-                         {"Joint plan", app.joint_plan.state,
-                          fixed(app.joint_plan.calculation_time_ms, 4)},
-                         {"Joint first step", app.joint_step.state,
-                          fixed(app.joint_step.calculation_time_ms, 4)}},
-                        1U, 1U);
-  planning.lines.push_back("Target mode: " + app.target_mode);
-  planning.lines.push_back("Feedback topology: " + app.feedback_topology);
-  overview.sections.push_back(std::move(planning));
-
-  auto &cartesian_page = page(document, "Cartesian Planning");
-  cartesian_page.sections.front() =
-      sheet("Planner",
-            {textColumn("State"), numberColumn("Duration [s]"),
-             numberColumn("Sample time [s]"), numberColumn("Samples"),
-             numberColumn("Calculation [ms]")},
-            {{app.cartesian_plan.state, fixed(app.cartesian_plan.duration_s, 6),
-              fixed(app.cartesian_plan.sample_time_s, 6),
-              std::to_string(app.cartesian_plan.sample_count),
-              fixed(app.cartesian_plan.calculation_time_ms, 4)}});
-  cartesian_page.sections.insert(
-      cartesian_page.sections.begin() + 1,
-      sheet(
-          "Configured limits",
-          {textColumn("Metric"), numberColumn("Value"), textColumn("Unit")},
-          {{"Linear velocity", fixed(app.cartesian_limits.linear_velocity),
-            "m/s"},
-           {"Linear acceleration",
-            fixed(app.cartesian_limits.linear_acceleration), "m/s\xC2\xB2"},
-           {"Linear jerk", fixed(app.cartesian_limits.linear_jerk),
-            "m/s\xC2\xB3"},
-           {"Angular velocity", fixed(app.cartesian_limits.angular_velocity),
-            "rad/s"},
-           {"Angular acceleration",
-            fixed(app.cartesian_limits.angular_acceleration), "rad/s\xC2\xB2"},
-           {"Angular jerk", fixed(app.cartesian_limits.angular_jerk),
-            "rad/s\xC2\xB3"}}));
-
-  const auto cartesian_position =
-      std::find_if(document.pages.begin(), document.pages.end(),
-                   [](const TuiPage &candidate) {
-                     return candidate.title == "Cartesian Planning";
-                   });
-  document.pages.insert(cartesian_position + 1, makeJointPlanningPage(app));
-
-  replaceJointStatePage(page(document, "Joint State"), app);
-
-  auto &runtime = page(document, "Runtime");
-  runtime.sections.push_back(sheet(
-      "Planner timing",
-      {textColumn("Planner"), textColumn("State"), numberColumn("Duration [s]"),
-       numberColumn("Sample time [s]"), numberColumn("Samples"),
-       numberColumn("Calculation [ms]")},
-      {{"Cartesian", app.cartesian_plan.state,
-        fixed(app.cartesian_plan.duration_s, 6),
-        fixed(app.cartesian_plan.sample_time_s, 6),
-        std::to_string(app.cartesian_plan.sample_count),
-        fixed(app.cartesian_plan.calculation_time_ms, 4)},
-       {"Joint plan", app.joint_plan.state, fixed(app.joint_plan.duration_s, 6),
-        fixed(app.joint_plan.sample_time_s, 6),
-        std::to_string(app.joint_plan.sample_count),
-        fixed(app.joint_plan.calculation_time_ms, 4)},
-       {"Joint first step", app.joint_step.state,
-        fixed(app.joint_step.duration_s, 6),
-        fixed(app.joint_step.sample_time_s, 6),
-        std::to_string(app.joint_step.sample_count),
-        fixed(app.joint_step.calculation_time_ms, 4)}},
-      1U));
-
-  auto &events = page(document, "Events");
-  auto &current_state = section(events, "Current state");
-  current_state.tables.front().rows.push_back(
-      {"Projection modified joints", std::to_string(app.modified_joint_count)});
-  current_state.tables.front().rows.push_back(
-      {"Clamp target revision", std::to_string(app.clamp_target_revision)});
-  current_state.tables.front().rows.push_back(
-      {"Maximum clamp limit ratio", fixed(app.maximum_clamp_limit_ratio, 3)});
-
-  std::vector<std::vector<std::string>> projection_rows;
-  for (const auto &event : app.projection_events) {
-    projection_rows.push_back(
-        {event.joint, event.component, fixed(event.original_value, 6),
-         fixed(event.applied_value, 6), fixed(event.limit, 6)});
+  document.pages.insert(document.pages.end(), snapshot.extra_pages.begin(),
+                        snapshot.extra_pages.end());
+  if (!snapshot.header_context.empty()) {
+    document.header_left += "   " + snapshot.header_context;
   }
-  if (projection_rows.empty()) {
-    projection_rows.push_back(noneRow(5U));
+  const std::string page_count = std::to_string(document.pages.size());
+  if (snapshot.footer_hints.has_value()) {
+    document.footer_hints = *snapshot.footer_hints;
+  } else if (snapshot.joint_otg.has_value()) {
+    document.footer_hints =
+        snapshot.joint_otg->source_mode == "mcap replay"
+            ? "Space pause · . step · 1–" + page_count +
+                  " pages · ? help · x exit"
+            : "Space pause · 1–" + page_count + " pages · ? help · x exit";
   }
-  events.sections.insert(events.sections.begin() + 1,
-                         sheet("Joint projection events",
-                               {textColumn("Joint"), textColumn("Component"),
-                                numberColumn("Original"),
-                                numberColumn("Applied"), numberColumn("Limit")},
-                               std::move(projection_rows)));
-
-  std::vector<std::vector<std::string>> clamp_rows;
-  for (const auto &event : app.clamp_events) {
-    clamp_rows.push_back(
-        {event.arm, event.component, event.axis, fixed(event.original_value, 6),
-         fixed(event.applied_value, 6), fixed(event.limit, 6)});
+  document.help_lines.front() =
+      "1.." + page_count +
+      (document.pages.size() <= 7U ? "/F1..F" + page_count : "/F1..F7") +
+      "/Tab/BackTab: pages; PageUp/PageDown/Home/End: scroll; h/?: help";
+  if (!snapshot.help_lines.empty()) {
+    document.help_lines.resize(1U);
+    document.help_lines.insert(document.help_lines.end(),
+                               snapshot.help_lines.begin(),
+                               snapshot.help_lines.end());
   }
-  if (clamp_rows.empty()) {
-    clamp_rows.push_back(noneRow(6U));
-  }
-  events.sections.insert(events.sections.begin() + 2,
-                         sheet("Cartesian retarget clamp events",
-                               {textColumn("Arm"), textColumn("Component"),
-                                textColumn("Axis"), numberColumn("Original"),
-                                numberColumn("Applied"), numberColumn("Limit")},
-                               std::move(clamp_rows)));
   return document;
 }
 

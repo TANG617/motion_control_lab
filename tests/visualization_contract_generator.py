@@ -51,6 +51,7 @@ def main() -> int:
         "/mcl/cartesian/execution/left": "foxglove.PoseInFrame",
         "/mcl/cartesian/execution/right": "foxglove.PoseInFrame",
         "/mcl/cartesian/scene": "foxglove.SceneUpdate",
+        "/mcl/nullspace/elbow/scene": "foxglove.SceneUpdate",
         "/mcl/joints/ik": "foxglove.JointStates",
         "/mcl/joints/execution": "foxglove.JointStates",
         "/mcl/telemetry/tracking/cartesian": "mcl.telemetry.v1.CartesianTracking",

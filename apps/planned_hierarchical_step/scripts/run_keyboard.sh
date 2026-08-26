@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 lab_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
-binary=${MCL_BINARY:-"${lab_root}/build/mcl_planned_hierarchical_step"}
+install_prefix=${MCL_INSTALL_PREFIX:-/workspace/install/algorithm}
+binary=${MCL_BINARY:-"${install_prefix}/bin/mcl_planned_hierarchical_step"}
 urdf=${MCL_URDF:-/workspace/models/Psi_R1_visual_collision.urdf}
 
 export MCL_CPU_SET=${MCL_CPU_SET-5-7}

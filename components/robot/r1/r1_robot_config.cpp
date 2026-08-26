@@ -20,6 +20,8 @@ const R1RobotConfig & r1RobotConfig()
     "base_link",
     "left_arm_ee_link",
     "right_arm_ee_link",
+    "left_arm_link4",
+    "right_arm_link4",
     makeTcpOffset(),
     makeTcpOffset(),
     {

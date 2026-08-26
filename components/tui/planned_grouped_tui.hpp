@@ -104,6 +104,10 @@ struct PlannedGroupedTuiSnapshot {
   std::string sink_status;
   std::string title;
   std::string input_status;
+  std::vector<TuiPage> extra_pages;
+  std::string header_context;
+  std::optional<std::string> footer_hints;
+  std::vector<std::string> help_lines;
 };
 
 TuiDocument

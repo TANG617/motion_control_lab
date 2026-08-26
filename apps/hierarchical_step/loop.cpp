@@ -1322,6 +1322,11 @@ int runLoopImpl(LaunchOptions launch, const mcl::R1RobotConfig &robot,
       frame.rejected_target = rejected_target;
       frame.paused = input.paused();
       frame.selected_side = input.selectedSide();
+      if (launch.source_mode == SourceMode::Replay) {
+        frame.replay_frame_progress = mcl::ReplayFrameProgressDebug{
+            replay_source->sourceIndex(),
+            loaded_replay->timeline.timeline.size()};
+      }
 
       const std::uint64_t rejected_revision =
           rejected_target.has_value() ? rejected_target->revision : 0;

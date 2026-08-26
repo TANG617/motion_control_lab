@@ -3410,6 +3410,11 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
       }
     }
     if (schedule->draw_due) {
+      if (planned_options.source_mode == SourceMode::Replay) {
+        frame.replay_frame_progress = mcl::ReplayFrameProgressDebug{
+            replay_source->sourceIndex(),
+            loaded_replay->timeline.timeline.size()};
+      }
       const mcl::PlannedGroupedTuiSnapshot tui_snapshot{
           &frame,
           &presentation,

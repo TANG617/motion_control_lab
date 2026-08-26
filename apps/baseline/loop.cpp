@@ -408,6 +408,8 @@ int runReplayLoopImpl(ReplayAppOptions options,
                      " frame scale=" + std::to_string(result.frame_scale) +
                      " config=" + config_sha256.substr(0, 12);
       frame.paused = replay_source.paused();
+      frame.replay_frame_progress = mcl::ReplayFrameProgressDebug{
+          replay_source.sourceIndex(), loaded.timeline.timeline.size()};
       auto visualization_debug_frame = frame;
       visualization_debug_frame.forward_kinematics =
           result.end_effector_forward_kinematics;
