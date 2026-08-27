@@ -1,5 +1,7 @@
 #include "nullspace.hpp"
 
+#include "components/tui/standard_ik_tui.hpp"
+
 #include <algorithm>
 #include <cctype>
 #include <iomanip>
@@ -21,11 +23,17 @@ std::string vectorText(const Eigen::Vector3d &value) {
 
 std::string yesNo(bool value) { return value ? "yes" : "no"; }
 
-TuiTableColumn textColumn(std::string title) {
+TuiTableColumn textColumn(std::string title, int cell_width = 0) {
+  if (cell_width > static_cast<int>(title.size())) {
+    title.append(static_cast<std::size_t>(cell_width) - title.size(), ' ');
+  }
   return TuiTableColumn{std::move(title), TuiTableAlignment::Left};
 }
 
-TuiTableColumn numberColumn(std::string title) {
+TuiTableColumn numberColumn(std::string title, int cell_width = 8) {
+  if (cell_width > static_cast<int>(title.size())) {
+    title.insert(0U, static_cast<std::size_t>(cell_width) - title.size(), ' ');
+  }
   return TuiTableColumn{std::move(title), TuiTableAlignment::Right};
 }
 
@@ -41,14 +49,14 @@ TuiSection tableSection(std::string title,
   return result;
 }
 
-std::vector<TuiSection> wideSections(const NullspaceTuiDebug &debug) {
+std::vector<TuiSection> nullspacePanels(const NullspaceTuiDebug &debug) {
   const std::string held = debug.held_link4_side.has_value()
                                ? armSideName(*debug.held_link4_side)
                                : "none";
   std::vector<TuiSection> sections;
   sections.push_back(tableSection(
       "Control",
-      {textColumn("Metric"), textColumn("Value")},
+      {textColumn("Metric", 22), textColumn("Value", 20)},
       {{"Selected arm", armSideName(debug.selected_side)},
        {"Edit focus", controlPointName(debug.control_point)},
        {"Held link4", held},
@@ -91,8 +99,8 @@ std::vector<TuiSection> wideSections(const NullspaceTuiDebug &debug) {
       1U));
   sections.push_back(tableSection(
       "Link4 target to raw HKS to executed OTG",
-      {textColumn("Arm"), textColumn("Target xyz [m]"),
-       textColumn("Raw xyz [m]"), textColumn("Executed xyz [m]"),
+      {textColumn("Arm", 5), textColumn("Target xyz [m]", 28),
+       textColumn("Raw xyz [m]", 28), textColumn("Executed xyz [m]", 28),
        numberColumn("Raw error [m]"), numberColumn("Executed error [m]")},
       {{"left", vectorText(debug.link4_target.left),
         vectorText(debug.raw_left_link4), vectorText(debug.executed_left_link4),
@@ -105,46 +113,6 @@ std::vector<TuiSection> wideSections(const NullspaceTuiDebug &debug) {
         fixed(debug.right_link4_executed_error_m)}},
       1U));
   return sections;
-}
-
-std::vector<TuiSection> standardSections(const NullspaceTuiDebug &debug) {
-  auto sections = wideSections(debug);
-  for (auto &section : sections) {
-    section.column = 0U;
-  }
-  return sections;
-}
-
-std::vector<TuiSection> narrowSections(const NullspaceTuiDebug &debug) {
-  const bool left = debug.selected_side == ArmSide::Left;
-  const bool enabled = left ? debug.link4_target.left_enabled
-                            : debug.link4_target.right_enabled;
-  const double link4_error = left ? debug.left_link4_executed_error_m
-                                  : debug.right_link4_executed_error_m;
-  const double tcp_position_error =
-      left ? debug.left_tcp_position_error_m
-           : debug.right_tcp_position_error_m;
-  const double tcp_orientation_error =
-      left ? debug.left_tcp_orientation_error_rad
-           : debug.right_tcp_orientation_error_rad;
-  const double task_scale =
-      left ? debug.left_task_scale : debug.right_task_scale;
-  return {tableSection(
-      "Selected-side null-space evidence",
-      {textColumn("Metric"), textColumn("Value")},
-      {{"Arm", armSideName(debug.selected_side)},
-       {"Focus", controlPointName(debug.control_point)},
-       {"Link4 enabled", yesNo(enabled)},
-       {"Link4 executed error [m]", fixed(link4_error)},
-       {"TCP position error [m]", fixed(tcp_position_error)},
-       {"TCP orientation error [rad]", fixed(tcp_orientation_error)},
-       {"Primary scale", fixed(task_scale)},
-       {"Primary drift", fixed(debug.primary_maximum_preservation_drift)},
-       {"Secondary", debug.secondary_attempted
-                         ? (debug.secondary_succeeded ? "succeeded" : "failed")
-                         : "not attempted"},
-       {"Tertiary", debug.tertiary_attempted ? "attempted" : "not attempted"},
-       {"Terminal", debug.terminal_attempted ? "attempted" : "not attempted"}})};
 }
 
 } // namespace
@@ -526,11 +494,9 @@ std::string NullspaceTargetSource::headerContext() const {
       mode_ == KeyboardSourceMode::Replay
           ? (replay_elbow_teleop_enabled_ ? "replay+elbow-teleop" : "replay")
           : "keyboard-teleop";
-  return "input=" + input_mode + "  control=" +
-         controlPointName(control_point_) + "  selected=" +
-         armSideName(selectedSide()) + "  held-link4=" +
-         (held.has_value() ? armSideName(*held) : "none") + "  step=" +
-         fixed(stepMetres(), 4) + "m";
+  return "input " + input_mode + " · focus " + controlPointName(control_point_) +
+         " · held " + (held.has_value() ? armSideName(*held) : "-") +
+         " · step " + fixed(stepMetres(), 4) + " m";
 }
 
 std::string NullspaceTargetSource::footerHints() const {
@@ -542,9 +508,9 @@ std::string NullspaceTargetSource::footerHints() const {
       if (control_point_ == ControlPoint::Link4) {
         return "c disable elbow · ←/→ arm · wasd/qe move · x clear · ? help";
       }
-      return "Space pause · . step · c enable elbow · 1–8 pages · ? help";
+      return "Space pause · . step · c enable elbow · 1–6 pages · ? help";
     }
-    return "Space pause · . step · 1–8 pages · ? help · x exit";
+    return "Space pause · . step · 1–6 pages · ? help · x exit";
   }
   if (control_point_ == ControlPoint::Link4) {
     return "c TCP/link4 · wasd/qe move · r capture · x clear · Esc exit · ? help";
@@ -623,13 +589,7 @@ NullspaceTargetSource::consumeElbowTeleopEvents() {
 }
 
 TuiPage makeNullspaceTuiPage(const NullspaceTuiDebug &debug) {
-  TuiPage page;
-  page.title = "Null-space";
-  page.responsive_layouts = {
-      {121, 0, wideSections(debug), {1, 1}, {}},
-      {80, 120, standardSections(debug), {1}, {}},
-      {0, 79, narrowSections(debug), {1}, {}}};
-  return page;
+  return makeStandardCapabilityPage("Null-space", nullspacePanels(debug));
 }
 
 } // namespace motion_control_lab::planned_hierarchical_step_otg_nullspace

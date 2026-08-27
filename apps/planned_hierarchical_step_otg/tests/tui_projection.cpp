@@ -210,8 +210,8 @@ int main()
   const mcl::PlannedGroupedTuiSnapshot servo_snapshot{
       &frame, &presentation, std::nullopt, 37, "ws://127.0.0.1:8765", "Planned Servo", "paused"};
   const auto servo_document = mcl::makePlannedGroupedTuiDocument(servo_snapshot);
-  require(servo_document.pages.size() == 6U,
-          "snapshot without Joint-OTG capability must produce six pages");
+  require(servo_document.pages.size() == 5U,
+          "snapshot without Joint-OTG capability must produce five pages");
   require(!hasUiLabel(servo_document, "Joint Planning"),
           "snapshot without Joint-OTG capability must not produce an N/A page");
 
@@ -220,141 +220,99 @@ int main()
   const auto document = mcl::makePlannedGroupedTuiDocument(snapshot);
 
   const std::vector<std::string> expected_titles{
-      "Overview", "Cartesian Planning", "Joint Planning", "Solver and Quadratic Programming",
-      "Joint State", "Runtime", "Events"};
-  require(document.pages.size() == expected_titles.size(), "projection must produce seven pages");
+      "Monitor", "Motion", "Solver", "Joints", "System"};
+  require(document.pages.size() == expected_titles.size(), "projection must produce five pages");
   require(document.footer_hints.find("? help") != std::string::npos,
           "footer must expose the conventional help key");
   for (std::size_t index = 0U; index < expected_titles.size(); ++index) {
     require(document.pages[index].title == expected_titles[index], "page order mismatch");
   }
   requireSingleTableSheets(document);
-  const auto & overview = page(document, "Overview");
-  require(overview.column_weights == std::vector<int>({3, 2}),
-          "Overview must preserve its primary 3:2 columns");
-  require(overview.rows.size() == 2U &&
+  const auto & overview = page(document, "Monitor");
+  require(overview.rows.size() == 3U &&
               overview.rows.at(0).column_weights == std::vector<int>({3, 2}) &&
               overview.rows.at(0).height_weight == 3 &&
-              overview.rows.at(1).column_weights == std::vector<int>({2, 3}) &&
-              overview.rows.at(1).height_weight == 2,
-          "Overview must use the reference 3:2 / 2:3 dashboard grid");
-  require(page(document, "Runtime").column_weights == std::vector<int>({3, 2}),
-          "Runtime must use 3:2 columns");
-  for (const std::string title :
-       {"Cartesian Planning", "Joint Planning", "Solver and Quadratic Programming",
-        "Joint State", "Events"}) {
-    require(page(document, title).column_weights == std::vector<int>({1}),
-            "full-width page must use one column");
-  }
+              overview.rows.at(1).column_weights == std::vector<int>({3, 2}) &&
+              overview.rows.at(1).height_weight == 2 &&
+              overview.rows.at(2).column_weights == std::vector<int>({1}),
+          "Monitor must use the shared 160x72 dashboard grid and failure preview row");
 
-  const auto & overview_cartesian = section(overview, "Cartesian tracking");
+  const auto & overview_cartesian =
+      section(overview, "TCP tracking · Goal → Reference → Output");
   require(overview_cartesian.row == 0U && overview_cartesian.column == 0U &&
               overview_cartesian.style == mcl::TuiSectionStyle::Panel &&
               overview_cartesian.tables.size() == 1U &&
               overview_cartesian.tables.front().style == mcl::TuiTableStyle::Compact &&
-              overview_cartesian.tables.front().rows.size() == 6U,
-          "Overview Cartesian panel must use compact reference-style pose sheets");
-  require(section(overview, "Cartesian errors").row == 0U &&
-            section(overview, "Cartesian errors").column == 0U,
-          "Overview Cartesian errors must be a sibling sheet");
-  const auto & overview_joints = section(overview, "Joint positions");
-  require(overview_joints.row == 1U && overview_joints.column == 0U &&
-              overview_joints.tables.front().rows.size() == 20U &&
-              overview_joints.tables.front().columns.size() == 3U,
-          "Overview must preserve all joint positions");
-  const auto & overview_runtime = section(overview, "Worker runtime");
-  require(overview_runtime.row == 1U && overview_runtime.column == 1U &&
-              overview_runtime.tables.front().columns.size() == 5U &&
-              section(overview, "Processor affinity").column == 1U &&
-              section(overview, "Collision safety").column == 1U &&
-              section(overview, "Safety").row == 0U &&
-              section(overview, "Safety").column == 1U &&
-              section(overview, "Planning").row == 1U &&
-              section(overview, "Planning").column == 1U,
-          "Overview diagnostic sheets must retain their dashboard cells");
+              overview_cartesian.tables.front().rows.size() == 2U,
+          "Monitor must show one compact tracking row per arm");
+  require(section(overview, "Workers").row == 1U &&
+              section(overview, "Safety and hold").column == 1U &&
+              section(overview, "Safety and hold").tables.front().rows.size() >= 8U &&
+              section(overview, "Failure focus · top violations from failed candidate")
+                    .tables.front().rows.front().at(5) == "-",
+          "Monitor must combine runtime and safety signals without extra pages");
 
   const auto & poses =
-      section(page(document, "Cartesian Planning"), "Pose: Goal to Reference to FK").tables.at(0);
+      section(page(document, "Motion"), "Cartesian states").tables.at(0);
   require(poses.columns.size() == 9U && poses.rows.size() == 6U,
           "Cartesian pose sheet shape mismatch");
-  const auto & targets =
-      section(page(document, "Joint Planning"), "IK and projected target").tables.at(0);
-  require(targets.columns.size() == 7U && targets.rows.size() == 20U,
-          "joint target chain must expose seven columns and 20 joints");
-  require(targets.rows.at(3).at(0) == "joint_3" && targets.rows.at(3).at(6) == "VA",
+  require(section(page(document, "Motion"), "Pipeline").tables.front().rows.size() == 3U &&
+              section(page(document, "Motion"), "Limits").column == 1U,
+          "Motion must keep Cartesian and joint planners in one page");
+  const auto & targets = section(
+      page(document, "Joints"), "Joint chain · Raw IK → Target → Executed").tables.at(0);
+  require(targets.columns.size() == 14U && targets.rows.size() == 20U,
+          "joint chain must expose raw, target, executed, bounds, and utilization");
+  require(targets.rows.at(3).at(0) == "joint_3" && targets.rows.at(3).at(13) == "VA",
           "joint projection mapping mismatch");
   require(targets.columns.at(1).alignment == mcl::TuiTableAlignment::Right,
           "joint numeric columns must be right aligned");
+  require(targets.columns.at(1).title == "   Raw q" &&
+              targets.columns.at(3).title == "  Exec q" &&
+              targets.columns.at(11).title == "      A%",
+          "joint numeric headers must reserve stable sign and precision space");
   const auto &passes =
-      section(page(document, "Solver and Quadratic Programming"),
-              "Hierarchical QP pass timing")
+      section(page(document, "Solver"), "Passes")
           .tables.at(0);
-  require(passes.columns.size() == 12U && passes.rows.size() == 4U,
-          "hierarchical pass timing sheet shape mismatch");
+  require(passes.columns.size() == 10U && passes.rows.size() == 4U,
+          "solver pass master table shape mismatch");
   require(passes.rows.at(0).at(1) == "Primary" &&
-              passes.rows.at(0).at(3) == "0.2100" &&
-              passes.rows.at(0).at(4) == "0.3100" &&
-              passes.rows.at(0).at(5) == "0.4100" &&
-              passes.rows.at(0).at(6) == "0.5100" &&
-              passes.rows.at(0).at(7) == "120" &&
-              passes.rows.at(2).at(2) == "not attempted" &&
-              passes.rows.at(2).at(4) == "-" &&
+              passes.rows.at(0).at(2) == "FAIL" &&
+              passes.rows.at(0).at(3) == "MAX_ITER" &&
+              passes.rows.at(0).at(5) == "0.2100" &&
+              passes.rows.at(0).at(6) == "0.3100" &&
+              passes.rows.at(0).at(7) == "0.4100" &&
+              passes.rows.at(0).at(8) == "0.5100" &&
+              passes.rows.at(2).at(2) == "SKIP" &&
               passes.rows.at(3).at(1) == "Terminal",
-          "hierarchical pass timing values were not preserved");
-  const auto &failed_pass =
-      section(page(document, "Solver and Quadratic Programming"),
-              "Failed QP pass numerical evidence")
-          .tables.at(0);
-  require(failed_pass.columns.size() == 8U && failed_pass.rows.size() == 1U &&
-              failed_pass.rows.at(0).at(1) == "Primary" &&
-              failed_pass.rows.at(0).at(2) == "0.000750000" &&
-              failed_pass.rows.at(0).at(4) == "yes",
-          "failed pass numerical evidence was not preserved");
+          "pass results and timing were not preserved");
   const auto &failed_constraints =
-      section(page(document, "Solver and Quadratic Programming"),
-              "Failed QP last-iterate constraint evidence (diagnostic only)")
+      section(page(document, "Solver"),
+              "Last-iterate violations · diagnostic only")
           .tables.at(0);
-  require(failed_constraints.columns.size() == 12U &&
+  require(failed_constraints.columns.size() == 11U &&
               failed_constraints.rows.size() == 1U &&
-              failed_constraints.rows.at(0).at(2) == "left-position" &&
-              failed_constraints.rows.at(0).at(3) == "y" &&
-              failed_constraints.rows.at(0).at(4) == "0.000750000" &&
-              failed_constraints.rows.at(0).at(6) == "task-equation",
-          "failed last-iterate constraint evidence was not preserved");
-  const auto & execution =
-      section(page(document, "Joint State"), "Executed joint state").tables.at(0);
-  require(execution.rows.size() == 20U && execution.rows.back().front() == "joint_19",
-          "execution sheet must preserve all full joint names");
-  const auto & joint_state = page(document, "Joint State");
-  require(joint_state.rows.size() == 3U &&
-              joint_state.rows.at(0).column_weights == std::vector<int>({1, 1}) &&
-              section(joint_state, "Group maximum motion").row == 0U &&
-              section(joint_state, "Group maximum motion").column == 0U &&
-              section(joint_state, "Group maximum limit utilization").row == 0U &&
-              section(joint_state, "Group maximum limit utilization").column == 1U &&
-              section(joint_state, "Executed joint state").row == 1U &&
-              section(joint_state, "Position limits and utilization").row == 2U,
-          "Joint State summaries must share the first row above the full-width joint sheets");
-  require(
-    section(joint_state, "Group maximum motion").tables.front().columns.at(1).title ==
-        "Velocity [rad/s]" &&
-      section(joint_state, "Group maximum limit utilization")
-          .tables.front()
-          .columns.at(1)
-          .title == "Velocity [%]",
-    "Joint State summary columns must avoid repeating their panel titles");
+              failed_constraints.rows.at(0).at(0) == "1" &&
+              failed_constraints.rows.at(0).at(3) == "left-position" &&
+              failed_constraints.rows.at(0).at(4) == "y" &&
+              failed_constraints.rows.at(0).at(9) == "0.000750000",
+          "ranked last-iterate constraint evidence was not preserved");
+  const auto & failure_context = section(page(document, "Solver"), "Failure context");
+  require(failure_context.rows.at(0).value == "1 / 1" &&
+              failure_context.rows.at(2).value.find("task-equation") != std::string::npos,
+          "failure detail must explain the selected violation in-place");
   const auto & projection =
-      section(page(document, "Events"), "Joint projection events").tables.at(0);
+      section(page(document, "System"), "Projection events").tables.at(0);
   require(projection.rows.at(0).at(0) == "joint_3" && projection.rows.at(0).at(2) == "12.000000" &&
               projection.rows.at(0).at(3) == "10.000000",
           "projection event values were not mapped");
-  const auto & affinity = section(page(document, "Runtime"), "Processor affinity");
-  require(affinity.column == 1U && affinity.tables.at(0).rows.at(0).at(3) == "5",
+  const auto & affinity = section(page(document, "System"), "Processor affinity");
+  require(affinity.tables.at(0).rows.at(0).at(3) == "5",
           "requested/effective CPU mapping mismatch");
   for (const std::string forbidden :
-       {"Solver/QP", "Joints", "QP", "P95", "Proj", "Calc", "Exec", "V%", "A%", "J%",
-        "CPU", "TID"}) {
-    require(!hasUiLabel(document, forbidden), "TUI contains a forbidden abbreviated label");
+       {"Overview", "Cartesian Planning", "Joint Planning", "QP Solver", "Joint State",
+        "Runtime", "Events"}) {
+    require(!hasUiLabel(document, forbidden), "TUI contains a retired page or panel label");
   }
   return EXIT_SUCCESS;
 }

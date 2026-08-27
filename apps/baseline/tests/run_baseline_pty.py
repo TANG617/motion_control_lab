@@ -33,7 +33,7 @@ def main() -> int:
     ]
 
     master_fd, slave_fd = pty.openpty()
-    fcntl.ioctl(slave_fd, termios.TIOCSWINSZ, struct.pack("HHHH", 48, 200, 0, 0))
+    fcntl.ioctl(slave_fd, termios.TIOCSWINSZ, struct.pack("HHHH", 72, 160, 0, 0))
     environment = os.environ.copy()
     environment["TERM"] = "xterm-256color"
     environment.setdefault("LC_ALL", "C.UTF-8")
@@ -94,9 +94,10 @@ def main() -> int:
         )
         markers = (
             b"PlaCo Production-Static Baseline",
-            b"source=42ed3ce3a19",
-            b"Cartesian",
-            b"IK status",
+            b"source 42ed3ce3a19",
+            b"Monitor",
+            b"Solver",
+            b"Attempt summary",
         )
         missing = [marker for marker in markers if marker not in output]
         if return_code != 0 or not terminal_restored or missing:

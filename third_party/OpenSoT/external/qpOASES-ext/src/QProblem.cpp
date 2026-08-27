@@ -2997,7 +2997,7 @@ returnValue QProblem::addConstraint_ensureLI( int number, SubjectToStatus C_stat
  	/* II) NEW CONSTRAINT IS LINEARLY DEPENDENT: */
 	/* 1) Determine coefficients of linear combination,
 	 *    cf. M.J. Best. Applied Mathematics and Parallel Computing, chapter:
-	 *    An Algorithm for the Solution of the Parametric Quadratic Programming
+	 *    An Algorithm for the Solution of the Parametric QP
 	 *    Problem, pages 57-76. Physica-Verlag, Heidelberg, 1996. */
 	int* FR_idx;
 	bounds.getFree( )->getNumberArray( &FR_idx );
@@ -3475,7 +3475,7 @@ returnValue QProblem::addBound_ensureLI( int number, SubjectToStatus B_status )
  	/* II) NEW BOUND IS LINEARLY DEPENDENT: */
 	/* 1) Determine coefficients of linear combination,
 	 *    cf. M.J. Best. Applied Mathematics and Parallel Computing, chapter:
-	 *    An Algorithm for the Solution of the Parametric Quadratic Programming
+	 *    An Algorithm for the Solution of the Parametric QP
 	 *    Problem, pages 57-76. Physica-Verlag, Heidelberg, 1996. */
 	int* FR_idx;
 	bounds.getFree( )->getNumberArray( &FR_idx );

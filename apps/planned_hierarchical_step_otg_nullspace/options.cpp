@@ -62,30 +62,41 @@ bool parseSolverOption(const std::string &argument, const std::string &value,
     options.maximum_accepted_hard_violation = parsed;
   else if (argument == "--joint-position-margin-rad")
     options.joint_position_margin_rad = parsed;
-  else if (argument == "--cartesian-progress-weight")
-    options.cartesian_progress_weight = parsed;
-  else if (argument == "--elbow-task-weight")
-    options.elbow_task_weight = parsed;
-  else if (argument == "--elbow-servo-gain-per-s")
-    options.elbow_servo_gain_per_s = parsed;
-  else if (argument == "--elbow-preservation-tolerance-mps")
-    options.elbow_preservation_tolerance_mps = parsed;
+  else if (argument == "--red-primary-task-cartesian-progress-weight")
+    options.red_primary_task_cartesian_progress_weight = parsed;
+  else if (argument == "--red-secondary-task-link4-position-weight")
+    options.red_secondary_task_link4_position_weight = parsed;
+  else if (argument ==
+           "--red-secondary-task-link4-position-servo-gain-per-s")
+    options.red_secondary_task_link4_position_servo_gain_per_s = parsed;
+  else if (argument ==
+           "--red-secondary-task-link4-position-preservation-tolerance-mps")
+    options.red_secondary_task_link4_position_preservation_tolerance_mps =
+        parsed;
   else if (argument == "--red-proxqp-absolute-tolerance")
     options.red_proxqp_absolute_tolerance = parsed;
   else if (argument == "--red-proxqp-primal-infeasibility-tolerance")
     options.red_proxqp_primal_infeasibility_tolerance = parsed;
-  else if (argument == "--yellow-posture-weight")
-    options.yellow_posture_weight = parsed;
-  else if (argument == "--yellow-to-red-coupling-weight")
-    options.yellow_to_red_coupling_weight = parsed;
-  else if (argument == "--minimum-collision-distance-m")
-    options.minimum_collision_distance_m = parsed;
-  else if (argument == "--collision-influence-distance-m")
-    options.collision_influence_distance_m = parsed;
-  else if (argument == "--collision-damping-gain-per-s")
-    options.collision_damping_gain_per_s = parsed;
-  else if (argument == "--collision-weight")
-    options.collision_weight = parsed;
+  else if (argument == "--yellow-task-posture-preference-weight")
+    options.yellow_task_posture_preference_weight = parsed;
+  else if (argument ==
+           "--red-secondary-task-yellow-posture-coupling-weight")
+    options.red_secondary_task_yellow_posture_coupling_weight = parsed;
+  else if (argument ==
+           "--yellow-constraints-self-collision-avoidance-minimum-distance-m")
+    options.yellow_constraints_self_collision_avoidance_minimum_distance_m =
+        parsed;
+  else if (argument ==
+           "--yellow-constraints-self-collision-avoidance-influence-distance-m")
+    options.yellow_constraints_self_collision_avoidance_influence_distance_m =
+        parsed;
+  else if (argument ==
+           "--yellow-constraints-self-collision-avoidance-damping-gain-per-s")
+    options.yellow_constraints_self_collision_avoidance_damping_gain_per_s =
+        parsed;
+  else if (argument ==
+           "--yellow-constraints-self-collision-avoidance-weight")
+    options.yellow_constraints_self_collision_avoidance_weight = parsed;
   else
     return false;
   return true;
@@ -111,10 +122,14 @@ void validate(const HierarchicalOptions &options) {
     throw std::runtime_error(std::string{"--urdf is required unless "} +
                              kMotionControlUrdfEnvironmentVariable + " is set");
   }
-  if (options.solver.collision_influence_distance_m <=
-      options.solver.minimum_collision_distance_m) {
-    throw std::runtime_error("--collision-influence-distance-m must exceed "
-                             "--minimum-collision-distance-m");
+  if (options.solver
+          .yellow_constraints_self_collision_avoidance_influence_distance_m <=
+      options.solver
+          .yellow_constraints_self_collision_avoidance_minimum_distance_m) {
+    throw std::runtime_error(
+        "--yellow-constraints-self-collision-avoidance-influence-distance-m "
+        "must exceed "
+        "--yellow-constraints-self-collision-avoidance-minimum-distance-m");
   }
 }
 
@@ -167,28 +182,37 @@ void printHierarchicalUsage(const char *program) {
       << "  --orientation-tolerance-rad <value>      Orientation tolerance\n"
       << "  --maximum-hard-violation <value>         App acceptance tolerance\n"
       << "  --joint-position-margin-rad <value>      Joint limit margin\n"
-      << "  --cartesian-progress-weight <value>      Cartesian progress "
-         "weight\n"
-      << "  --elbow-task-weight <value>              Secondary link4 weight "
+      << "  --red-primary-task-cartesian-progress-weight <value> Cartesian "
+         "progress weight\n"
+      << "  --red-secondary-task-link4-position-weight <value> Secondary "
+         "link4 weight "
          "(default: "
-      << defaults.solver.elbow_task_weight << ")\n"
-      << "  --elbow-servo-gain-per-s <value>         Secondary link4 gain "
+      << defaults.solver.red_secondary_task_link4_position_weight << ")\n"
+      << "  --red-secondary-task-link4-position-servo-gain-per-s <value> "
+         "Secondary link4 gain "
          "(default: "
-      << defaults.solver.elbow_servo_gain_per_s << ")\n"
-      << "  --elbow-preservation-tolerance-mps <value> Link4 preservation "
-         "tolerance (default: "
-      << defaults.solver.elbow_preservation_tolerance_mps << ")\n"
+      << defaults.solver.red_secondary_task_link4_position_servo_gain_per_s
+      << ")\n"
+      << "  --red-secondary-task-link4-position-preservation-tolerance-mps "
+         "<value> Link4 preservation tolerance (default: "
+      << defaults.solver
+             .red_secondary_task_link4_position_preservation_tolerance_mps
+      << ")\n"
       << "  --red-proxqp-absolute-tolerance <value>  Red QP tolerance\n"
       << "  --red-proxqp-primal-infeasibility-tolerance <value> Red "
          "certificate tolerance\n"
-      << "  --yellow-posture-weight <value>          Yellow posture weight\n"
-      << "  --yellow-to-red-coupling-weight <value>  Coupling weight\n"
-      << "  --minimum-collision-distance-m <value>   Collision minimum "
-         "distance\n"
-      << "  --collision-influence-distance-m <value> Collision influence "
-         "distance\n"
-      << "  --collision-damping-gain-per-s <value>   Collision damping gain\n"
-      << "  --collision-weight <value>               Collision weight\n"
+      << "  --yellow-task-posture-preference-weight <value> Yellow posture "
+         "preference weight\n"
+      << "  --red-secondary-task-yellow-posture-coupling-weight <value> "
+         "Yellow-to-Red coupling weight\n"
+      << "  --yellow-constraints-self-collision-avoidance-minimum-distance-m "
+         "<value> Collision minimum distance\n"
+      << "  --yellow-constraints-self-collision-avoidance-influence-distance-m "
+         "<value> Collision influence distance\n"
+      << "  --yellow-constraints-self-collision-avoidance-damping-gain-per-s "
+         "<value> Collision damping gain\n"
+      << "  --yellow-constraints-self-collision-avoidance-weight <value> "
+         "Collision weight\n"
       << "  --help              Show this help text\n\n"
       << "Rates must satisfy red > yellow > 0. Each group period is its "
          "deadline.\n\n";
@@ -315,16 +339,18 @@ HierarchicalOptions parseHierarchicalOptions(int argc, char **argv) {
                    {"--regularization", "--position-tolerance-m",
                     "--orientation-tolerance-rad", "--maximum-hard-violation",
                     "--joint-position-margin-rad",
-                    "--cartesian-progress-weight",
-                    "--elbow-task-weight", "--elbow-servo-gain-per-s",
-                    "--elbow-preservation-tolerance-mps",
+                    "--red-primary-task-cartesian-progress-weight",
+                    "--red-secondary-task-link4-position-weight",
+                    "--red-secondary-task-link4-position-servo-gain-per-s",
+                    "--red-secondary-task-link4-position-preservation-tolerance-mps",
                     "--red-proxqp-absolute-tolerance",
                     "--red-proxqp-primal-infeasibility-tolerance",
-                    "--yellow-posture-weight",
-                    "--yellow-to-red-coupling-weight",
-                    "--minimum-collision-distance-m",
-                    "--collision-influence-distance-m",
-                    "--collision-damping-gain-per-s", "--collision-weight"})) {
+                    "--yellow-task-posture-preference-weight",
+                    "--red-secondary-task-yellow-posture-coupling-weight",
+                    "--yellow-constraints-self-collision-avoidance-minimum-distance-m",
+                    "--yellow-constraints-self-collision-avoidance-influence-distance-m",
+                    "--yellow-constraints-self-collision-avoidance-damping-gain-per-s",
+                    "--yellow-constraints-self-collision-avoidance-weight"})) {
       parseSolverOption(argument, requireValue(index, argc, argv, argument),
                         options.solver);
     } else if (argument == "--mcap") {
@@ -426,14 +452,19 @@ Options parseOptions(int argc, char **argv) {
           {"--red-rate", "--yellow-rate", "--ui-rate", "--deadline-policy",
            "--duration", "--regularization", "--position-tolerance-m",
            "--orientation-tolerance-rad", "--maximum-hard-violation",
-           "--joint-position-margin-rad", "--cartesian-progress-weight",
-           "--elbow-task-weight", "--elbow-servo-gain-per-s",
-           "--elbow-preservation-tolerance-mps",
+           "--joint-position-margin-rad",
+           "--red-primary-task-cartesian-progress-weight",
+           "--red-secondary-task-link4-position-weight",
+           "--red-secondary-task-link4-position-servo-gain-per-s",
+           "--red-secondary-task-link4-position-preservation-tolerance-mps",
            "--red-proxqp-absolute-tolerance",
            "--red-proxqp-primal-infeasibility-tolerance",
-           "--yellow-posture-weight", "--yellow-to-red-coupling-weight",
-           "--minimum-collision-distance-m", "--collision-influence-distance-m",
-           "--collision-damping-gain-per-s", "--collision-weight"});
+           "--yellow-task-posture-preference-weight",
+           "--red-secondary-task-yellow-posture-coupling-weight",
+           "--yellow-constraints-self-collision-avoidance-minimum-distance-m",
+           "--yellow-constraints-self-collision-avoidance-influence-distance-m",
+           "--yellow-constraints-self-collision-avoidance-damping-gain-per-s",
+           "--yellow-constraints-self-collision-avoidance-weight"});
       const bool replay_value =
           optionIn(argument, {"--input",
                               "--input-format",

@@ -47,6 +47,7 @@
 #include "nullspace.hpp"
 #include "options.hpp"
 #include "planning.hpp"
+#include "rejection_policy.hpp"
 #include "solver.hpp"
 #include "telemetry.hpp"
 
@@ -507,6 +508,7 @@ struct RedAttemptSnapshot {
   std::uint64_t event_timestamp_ns{0};
   std::uint64_t run_time_ns{0};
   RedAttemptState state{RedAttemptState::Accepted};
+  RedFailureDisposition failure_disposition{RedFailureDisposition::None};
   TargetSnapshot target;
   TargetSnapshot attempted_reference;
   mcl::SolverDebug solver_debug;
@@ -722,13 +724,15 @@ const char *hierarchicalTaskResidualUnit(mcc::HierarchicalTaskKind kind) {
 double hierarchicalTaskTolerance(const mcc::HierarchicalTaskDiagnostics &task,
                                  const SolverOptions &options) {
   if (task.kind == mcc::HierarchicalTaskKind::Posture) {
-    return options.posture_preservation_tolerance;
+    return options
+        .red_secondary_task_yellow_posture_coupling_preservation_tolerance;
   }
   if (task.kind == mcc::HierarchicalTaskKind::Position &&
       task.priority == mcc::PriorityLevel::Secondary) {
-    return options.elbow_preservation_tolerance_mps;
+    return options
+        .red_secondary_task_link4_position_preservation_tolerance_mps;
   }
-  return options.cartesian_preservation_tolerance;
+  return options.red_primary_task_tcp_preservation_tolerance;
 }
 
 proto::AttemptOutcome attemptOutcome(mcl::WorkerIterationOutcome outcome) {
@@ -1494,8 +1498,10 @@ void fillSelfCollisionDebug(
     mcl::SelfCollisionDebug &output) {
   output.label = "Yellow self-collision";
   output.input_state_sequence = input_state.sequence;
-  output.minimum_distance_m = options.minimum_collision_distance_m;
-  output.influence_distance_m = options.collision_influence_distance_m;
+  output.minimum_distance_m =
+      options.yellow_constraints_self_collision_avoidance_minimum_distance_m;
+  output.influence_distance_m =
+      options.yellow_constraints_self_collision_avoidance_influence_distance_m;
   output.minimum_distance_before_m = diagnostics.minimum_distance_before_m;
   output.minimum_distance_after_m = diagnostics.minimum_distance_after_m;
   output.margin_shortfall_m = diagnostics.margin_shortfall_m;
@@ -1877,6 +1883,7 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
   std::ostringstream replay_trace;
   std::size_t replay_accepted_solve_count = 0;
   std::size_t replay_rejected_solve_count = 0;
+  std::size_t replay_primary_max_iter_rejection_count = 0;
   std::atomic<std::uint64_t> replay_last_consumed_revision{0};
   std::atomic<std::size_t> replay_settled_cycle_count{0U};
   std::atomic_bool replay_settled{false};
@@ -2182,8 +2189,8 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
                 telemetry_stamp, proto::IDLE, false, 2U, target.revision,
                 diagnostics.attempt_revision, diagnostics.value_revision);
           }
-          if (rejected_target_revision.has_value() &&
-              target.revision == *rejected_target_revision) {
+          if (shouldSkipRejectedRevision(rejected_target_revision,
+                                         target.revision)) {
             return mcl::WorkerIterationResult{mcl::WorkerIterationOutcome::Idle,
                                               diagnostics.attempt_revision,
                                               0.0,
@@ -2222,9 +2229,13 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
               }
             }
             if (!planning_status.ok()) {
-              attempt.state =
+              attempt.failure_disposition =
                   planned_options.source_mode == SourceMode::Teleop &&
                           planning_status.code == mcc::StatusCode::Infeasible
+                      ? RedFailureDisposition::RecoverableTeleopInfeasible
+                      : RedFailureDisposition::Fatal;
+              attempt.state =
+                  isRecoverableRedFailure(attempt.failure_disposition)
                       ? RedAttemptState::RecoverableRejected
                       : RedAttemptState::FatalRejected;
               attempt.target = target;
@@ -2274,6 +2285,7 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
             }
             if (!planning_status.ok()) {
               attempt.state = RedAttemptState::FatalRejected;
+              attempt.failure_disposition = RedFailureDisposition::Fatal;
               attempt.target = target;
               attempt.detail =
                   "Cartesian planner step failed: " + planning_status.message;
@@ -2311,11 +2323,11 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
                 diagnostics.attempt_revision, diagnostics.value_revision);
           }
           if (!ik_accepted) {
-            attempt.state =
-                planned_options.source_mode == SourceMode::Teleop &&
-                        ik_status.code == mcc::StatusCode::Infeasible
-                    ? RedAttemptState::RecoverableRejected
-                    : RedAttemptState::FatalRejected;
+            attempt.failure_disposition = classifyRedIkFailure(
+                planned_options.source_mode, ik_status, diagnostics);
+            attempt.state = isRecoverableRedFailure(attempt.failure_disposition)
+                                ? RedAttemptState::RecoverableRejected
+                                : RedAttemptState::FatalRejected;
             attempt.target = target;
             updateSolverDebug(attempt.solver_debug, diagnostics,
                               mcc::ResultDisposition::Rejected);
@@ -2346,6 +2358,12 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
             red_attempt_to_ui.publish(attempt);
             if (attempt.state == RedAttemptState::RecoverableRejected) {
               rejected_target_revision = target.revision;
+            }
+            if (loaded_replay.has_value() &&
+                attempt.failure_disposition ==
+                    RedFailureDisposition::
+                        RecoverablePrimaryMaximumIterations) {
+              ++replay_primary_max_iter_rejection_count;
             }
             recordFailure("red-ik", attempt.detail);
             return mcl::WorkerIterationResult{
@@ -2450,6 +2468,7 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
               joint_planner.plan(joint_request, joint_plan_diagnostics);
           if (!joint_status.ok()) {
             attempt.state = RedAttemptState::FatalRejected;
+            attempt.failure_disposition = RedFailureDisposition::Fatal;
             attempt.target = target;
             attempt.detail =
                 "JointPlanner plan failed: " + joint_status.message;
@@ -2487,6 +2506,7 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
               joint_planner.step(joint_sample, joint_step_diagnostics);
           if (!joint_status.ok()) {
             attempt.state = RedAttemptState::FatalRejected;
+            attempt.failure_disposition = RedFailureDisposition::Fatal;
             attempt.target = target;
             attempt.detail =
                 "JointPlanner step failed: " + joint_status.message;
@@ -2554,6 +2574,7 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
               executed_fk_request, executed_fk, executed_fk_diagnostics);
           if (!fk_status.ok()) {
             attempt.state = RedAttemptState::FatalRejected;
+            attempt.failure_disposition = RedFailureDisposition::Fatal;
             attempt.target = target;
             attempt.detail =
                 "OTG execution-state FK failed: " + fk_status.message;
@@ -2672,6 +2693,7 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
           output_to_ui.publish(output);
 
           attempt.state = RedAttemptState::Accepted;
+          attempt.failure_disposition = RedFailureDisposition::None;
           attempt.target = target;
           attempt.solver_debug = output.solver_debug;
           attempt.detail.clear();
@@ -2776,12 +2798,14 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
   mcl::CpuAffinityBinding latest_yellow_affinity = initial_yellow_affinity;
   std::optional<mcl::RejectedTargetDebug> rejected_target;
   std::optional<RedAttemptSnapshot> last_recoverable_rejection;
+  std::optional<RedAttemptSnapshot> last_primary_max_iter_rejection;
   std::optional<mcl::GroupedWorkerFault> held_fault;
   std::optional<std::string> pending_fault_event;
   std::vector<TelemetryRecord> ui_telemetry_records;
   std::uint64_t handled_rejected_target_revision = 0;
   std::size_t publish_count = 0;
   bool replay_completed = false;
+  bool final_replay_primary_max_iter_rejected = false;
   std::string telemetry_run_id;
   if (telemetry_enabled) {
     telemetry_run_id =
@@ -2848,6 +2872,7 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
   };
   const auto publishCurrentReplayFrame = [&](std::string status) {
     const auto &source = replay_source->sourceFrame();
+    final_replay_primary_max_iter_rejected = false;
     published_target.revision += 1U;
     published_target.replay_source_index = replay_source->sourceIndex();
     published_target.replay_joint_hold = false;
@@ -2897,6 +2922,21 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
     if (red_attempt_to_ui.readLatest(latest_red_attempt)) {
       if (latest_red_attempt.state == RedAttemptState::RecoverableRejected) {
         last_recoverable_rejection = latest_red_attempt;
+        if (latest_red_attempt.failure_disposition ==
+            RedFailureDisposition::RecoverablePrimaryMaximumIterations) {
+          last_primary_max_iter_rejection = latest_red_attempt;
+          final_replay_primary_max_iter_rejected =
+              isFinalReplayPrimaryMaximumIterationsRejection(
+                  {planned_options.source_mode,
+                   latest_red_attempt.failure_disposition,
+                   latest_red_attempt.target.replay_source_index,
+                   latest_red_attempt.target.revision,
+                   published_target.replay_source_index,
+                   published_target.revision,
+                   loaded_replay.has_value()
+                       ? loaded_replay->timeline.timeline.size()
+                       : 0U});
+        }
         rejected_target = mcl::RejectedTargetDebug{
             latest_red_attempt.target.revision,
             armTargets(latest_red_attempt.target), latest_red_attempt.detail};
@@ -2904,21 +2944,34 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
             latest_red_attempt.target.revision !=
                 handled_rejected_target_revision) {
           handled_rejected_target_revision = latest_red_attempt.target.revision;
-          input.setTargetPose(mcl::ArmSide::Left,
-                              latest_output.accepted_target.left,
-                              "Restoring last accepted Red target");
-          input.setTargetPose(
-              mcl::ArmSide::Right, latest_output.accepted_target.right,
-              "Red target rejected; edit from the last accepted "
-              "target to retry");
-          last_command_target = latest_output.accepted_target;
+          if (planned_options.source_mode == SourceMode::Teleop) {
+            input.setTargetPose(mcl::ArmSide::Left,
+                                latest_output.accepted_target.left,
+                                "Restoring last accepted Red target");
+            input.setTargetPose(
+                mcl::ArmSide::Right, latest_output.accepted_target.right,
+                "Red target rejected; edit from the last accepted "
+                "target to retry");
+            last_command_target = latest_output.accepted_target;
+          } else {
+            input.setStatus(
+                final_replay_primary_max_iter_rejected
+                    ? "Final replay frame rejected by Primary MAX_ITER; "
+                      "holding last accepted output"
+                    : "Replay frame rejected by Primary MAX_ITER; holding "
+                      "last accepted output and continuing");
+          }
         }
       } else if (latest_red_attempt.state == RedAttemptState::Accepted &&
                  rejected_target.has_value() &&
                  latest_red_attempt.target.revision >
                      rejected_target->revision) {
+        final_replay_primary_max_iter_rejected = false;
         rejected_target.reset();
-        input.setStatus("Red accepted the new target; hierarchical IK resumed");
+        input.setStatus(
+            planned_options.source_mode == SourceMode::Replay
+                ? "Replay frame accepted; hierarchical IK resumed"
+                : "Red accepted the new target; hierarchical IK resumed");
       } else if (latest_red_attempt.state == RedAttemptState::FatalRejected) {
         rejected_target = mcl::RejectedTargetDebug{
             latest_red_attempt.target.revision,
@@ -3155,10 +3208,25 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
         frame.runtime_state = mcl::IkRuntimeState::RecoverableReject;
         frame.ik_status =
             "target rejected; output held " + taskScaleStatus(latest_output);
-        frame.status = "Red target revision=" +
-                       std::to_string(latest_red_attempt.target.revision) +
-                       " rejected as infeasible; edit from the last accepted "
-                       "target to retry";
+        if (planned_options.source_mode == SourceMode::Replay) {
+          frame.status =
+              "Replay frame revision=" +
+              std::to_string(latest_red_attempt.target.revision) +
+              " rejected: Primary MAX_ITER; holding last accepted output" +
+              (final_replay_primary_max_iter_rejected
+                   ? "; replay will finish as failed"
+                   : "; continuing with later frames");
+        } else {
+          const char *reason =
+              latest_red_attempt.failure_disposition ==
+                      RedFailureDisposition::RecoverablePrimaryMaximumIterations
+                  ? "Primary MAX_ITER"
+                  : "infeasible";
+          frame.status = "Red target revision=" +
+                         std::to_string(latest_red_attempt.target.revision) +
+                         " rejected: " + reason +
+                         "; edit from the last accepted target to retry";
+        }
       } else {
         frame.runtime_state = mcl::IkRuntimeState::Running;
         frame.ik_status =
@@ -3537,7 +3605,8 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
         }
 
         const bool will_finish_replay =
-            loaded_replay.has_value() && replay_settled.load() &&
+            loaded_replay.has_value() &&
+            (replay_settled.load() || final_replay_primary_max_iter_rejected) &&
             replay_source->sourceIndex() + 1U ==
                 loaded_replay->timeline.timeline.size();
         if (loaded_replay.has_value()) {
@@ -3563,7 +3632,11 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
               planned_options.replay_settling.acceleration_rad_per_s2;
           proto::ReplayTelemetry replay_message;
           *replay_message.mutable_context() = makeSampleContext(
-              emit_stamp, proto::ACCEPTED, false, 2U, published_target.revision,
+              emit_stamp,
+              final_replay_primary_max_iter_rejected
+                  ? proto::RECOVERABLE_REJECTED
+                  : proto::ACCEPTED,
+              false, 2U, published_target.revision,
               latest_red_attempt.solver_debug.grouped_attempt.has_value()
                   ? latest_red_attempt.solver_debug.grouped_attempt
                         ->attempt_revision
@@ -3611,8 +3684,13 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
           if (will_finish_replay && !replay_eos_event_published) {
             visualization_frame.logs.push_back(motion_control::viz::LogSample{
                 contracts::mcl_telemetry_v1::kEventsTopic,
-                motion_control::viz::LogLevel::Info,
-                "replay end of stream after settling",
+                final_replay_primary_max_iter_rejected
+                    ? motion_control::viz::LogLevel::Warning
+                    : motion_control::viz::LogLevel::Info,
+                final_replay_primary_max_iter_rejected
+                    ? "replay end of stream after recoverable Primary "
+                      "MAX_ITER rejection"
+                    : "replay end of stream after settling",
                 "replay-eos",
                 {},
                 0U,
@@ -3685,7 +3763,7 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
       ++publish_count;
 
       if (planned_options.source_mode == SourceMode::Replay &&
-          replay_settled.load()) {
+          (replay_settled.load() || final_replay_primary_max_iter_rejected)) {
         replay_source->markFrameProcessed();
         if (replay_source->endOfStream()) {
           replay_completed = true;
@@ -3732,13 +3810,14 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
       nullspace_debug.primary_maximum_preservation_drift =
           latest_output.primary_maximum_preservation_drift;
       nullspace_debug.primary_preservation_tolerance =
-          options.solver.cartesian_preservation_tolerance;
+          options.solver.red_primary_task_tcp_preservation_tolerance;
       nullspace_debug.link4_task_error_m = latest_output.link4_task_error_m;
       nullspace_debug.yellow_posture_error_rad =
           latest_output.yellow_posture_error_rad;
-      nullspace_debug.link4_weight = options.solver.elbow_task_weight;
+      nullspace_debug.link4_weight =
+          options.solver.red_secondary_task_link4_position_weight;
       nullspace_debug.yellow_weight =
-          options.solver.yellow_to_red_coupling_weight;
+          options.solver.red_secondary_task_yellow_posture_coupling_weight;
       nullspace_debug.left_task_scale = latest_output.left_scale.scale;
       nullspace_debug.right_task_scale = latest_output.right_scale.scale;
       if (latest_output.highest_completed_priority.has_value()) {
@@ -3792,6 +3871,24 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
   visualization_sink->close();
 
   const auto red_stats = red_worker_diagnostics.snapshot();
+  const auto replay_run_disposition =
+      decideReplayRunDisposition(recorded_fault.has_value(), replay_completed,
+                                 replay_primary_max_iter_rejection_count);
+  std::string replay_primary_max_iter_failure;
+  if (replay_primary_max_iter_rejection_count > 0U) {
+    const std::uint64_t last_rejected_revision =
+        last_primary_max_iter_rejection.has_value()
+            ? last_primary_max_iter_rejection->target.revision
+            : 0U;
+    const std::string_view last_rejection_detail =
+        last_primary_max_iter_rejection.has_value()
+            ? std::string_view{last_primary_max_iter_rejection->detail}
+            : std::string_view{};
+    replay_primary_max_iter_failure =
+        primaryMaximumIterationsReplayFailureDetail(
+            replay_primary_max_iter_rejection_count, last_rejected_revision,
+            last_rejection_detail);
+  }
   if (planned_options.replay.has_value()) {
     const auto trace_path = planned_options.replay->output_dir / "trace.csv";
     std::string trace_sha256;
@@ -3818,13 +3915,19 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
         {"regularization", std::to_string(options.solver.regularization)},
         {"maximum_hard_violation",
          std::to_string(options.solver.maximum_accepted_hard_violation)},
-        {"cartesian_progress_weight",
-         std::to_string(options.solver.cartesian_progress_weight)},
-        {"elbow_task_weight", std::to_string(options.solver.elbow_task_weight)},
-        {"elbow_servo_gain_per_s",
-         std::to_string(options.solver.elbow_servo_gain_per_s)},
-        {"elbow_preservation_tolerance_mps",
-         std::to_string(options.solver.elbow_preservation_tolerance_mps)},
+        {"red_primary_task_cartesian_progress_weight",
+         std::to_string(
+             options.solver.red_primary_task_cartesian_progress_weight)},
+        {"red_secondary_task_link4_position_weight",
+         std::to_string(
+             options.solver.red_secondary_task_link4_position_weight)},
+        {"red_secondary_task_link4_position_servo_gain_per_s",
+         std::to_string(options.solver
+                            .red_secondary_task_link4_position_servo_gain_per_s)},
+        {"red_secondary_task_link4_position_preservation_tolerance_mps",
+         std::to_string(
+             options.solver
+                 .red_secondary_task_link4_position_preservation_tolerance_mps)},
         {"red_proxqp_maximum_iterations",
          std::to_string(options.solver.red_proxqp_maximum_iterations)},
         {"red_proxqp_absolute_tolerance",
@@ -3832,13 +3935,29 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
         {"red_proxqp_primal_infeasibility_tolerance",
          std::to_string(
              options.solver.red_proxqp_primal_infeasibility_tolerance)},
-        {"yellow_to_red_coupling_weight",
-         std::to_string(options.solver.yellow_to_red_coupling_weight)},
-        {"minimum_collision_distance_m",
-         std::to_string(options.solver.minimum_collision_distance_m)},
-        {"collision_influence_distance_m",
-         std::to_string(options.solver.collision_influence_distance_m)},
-        {"collision_weight", std::to_string(options.solver.collision_weight)},
+        {"yellow_task_posture_preference_weight",
+         std::to_string(
+             options.solver.yellow_task_posture_preference_weight)},
+        {"red_secondary_task_yellow_posture_coupling_weight",
+         std::to_string(
+             options.solver
+                 .red_secondary_task_yellow_posture_coupling_weight)},
+        {"yellow_constraints_self_collision_avoidance_minimum_distance_m",
+         std::to_string(
+             options.solver
+                 .yellow_constraints_self_collision_avoidance_minimum_distance_m)},
+        {"yellow_constraints_self_collision_avoidance_influence_distance_m",
+         std::to_string(
+             options.solver
+                 .yellow_constraints_self_collision_avoidance_influence_distance_m)},
+        {"yellow_constraints_self_collision_avoidance_damping_gain_per_s",
+         std::to_string(
+             options.solver
+                 .yellow_constraints_self_collision_avoidance_damping_gain_per_s)},
+        {"yellow_constraints_self_collision_avoidance_weight",
+         std::to_string(
+             options.solver
+                 .yellow_constraints_self_collision_avoidance_weight)},
         {"max_linear_velocity_mps",
          std::to_string(planned_options.planning.max_linear_velocity_mps)},
         {"max_angular_velocity_rps",
@@ -3974,17 +4093,22 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
                           jsonText(manifest));
     const auto status = replay::makeReplayStatus(
         *loaded_replay, execution,
+        replayRunStateName(replay_run_disposition.state),
         recorded_fault.has_value()
-            ? "failed"
-            : (replay_completed ? "succeeded" : "stopped"),
-        recorded_fault.has_value() ? faultSummary(*recorded_fault)
-                                   : std::string{});
+            ? faultSummary(*recorded_fault)
+            : (replay_run_disposition.state == ReplayRunState::Failed
+                   ? replay_primary_max_iter_failure
+                   : std::string{}));
     replay::writeTextFile(planned_options.replay->output_dir / "status.json",
                           jsonText(status));
   }
 
   if (recorded_fault.has_value()) {
     throw std::runtime_error(faultSummary(*recorded_fault));
+  }
+  if (planned_options.replay.has_value() &&
+      replay_run_disposition.fail_process) {
+    throw std::runtime_error(replay_primary_max_iter_failure);
   }
   if (red_stats.recoverable_rejection_count > 0) {
     std::ostringstream detail;

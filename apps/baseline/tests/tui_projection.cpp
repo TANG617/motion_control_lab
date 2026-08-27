@@ -71,14 +71,14 @@ int main()
   const auto document = mcl::makeStandardIkTuiDocument(
       snapshot, presentation, 7, "null", "Baseline", "running");
 
-  require(document.pages.size() == 5U, "baseline projection must produce five pages");
+  require(document.pages.size() == 4U, "baseline projection must produce four pages");
   require(contains(document, "PlaCo production-static baseline"),
           "baseline solver identity missing from TUI document");
   require(contains(document, "position(x2)=scaled/9"),
           "baseline task summary missing from TUI document");
   require(contains(document, "frame_position"),
           "baseline task scale missing from TUI document");
-  require(contains(document, "Run counters"),
+  require(contains(document, "Runs A/O/R"),
           "baseline counters missing from TUI document");
   return EXIT_SUCCESS;
 }

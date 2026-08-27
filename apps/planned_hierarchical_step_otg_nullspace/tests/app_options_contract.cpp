@@ -18,12 +18,19 @@ int main() {
   if (defaults.red_rate_hz != 1000.0 || defaults.yellow_rate_hz != 100.0 ||
       defaults.ui_rate_hz != 100.0 ||
       defaults.deadline_policy != motion_control_lab::DeadlinePolicy::Strict ||
-      defaults.solver.cartesian_preservation_tolerance != 5.0e-4 ||
-      defaults.solver.scale_preservation_tolerance != 1.0e-4 ||
-      defaults.solver.posture_preservation_tolerance != 1.0e-5 ||
-      defaults.solver.elbow_task_weight != 100.0 ||
-      defaults.solver.elbow_servo_gain_per_s != 10.0 ||
-      defaults.solver.elbow_preservation_tolerance_mps != 5.0e-4 ||
+      defaults.solver.red_primary_task_tcp_preservation_tolerance != 5.0e-4 ||
+      defaults.solver
+              .red_primary_task_cartesian_progress_preservation_tolerance !=
+          1.0e-4 ||
+      defaults.solver
+              .red_secondary_task_yellow_posture_coupling_preservation_tolerance !=
+          1.0e-5 ||
+      defaults.solver.red_secondary_task_link4_position_weight != 100.0 ||
+      defaults.solver.red_secondary_task_link4_position_servo_gain_per_s !=
+          10.0 ||
+      defaults.solver
+              .red_secondary_task_link4_position_preservation_tolerance_mps !=
+          5.0e-4 ||
       defaults.solver.yellow_maximum_iterations != 1 ||
       defaults.solver.red_proxqp_maximum_iterations != 200 ||
       !defaults.robot.inactive_joint_names.empty() ||
@@ -40,17 +47,20 @@ int main() {
   char yellow[] = "40";
   char ui_option[] = "--ui";
   char ui[] = "none";
-  char collision_option[] = "--collision-weight";
+  char collision_option[] =
+      "--yellow-constraints-self-collision-avoidance-weight";
   char collision[] = "12";
-  char elbow_option[] = "--elbow-task-weight";
+  char elbow_option[] = "--red-secondary-task-link4-position-weight";
   char elbow[] = "125";
   char *custom_argv[]{program,       urdf_option, urdf,      red_option, red,
                       yellow_option, yellow,      ui_option, ui,
                       collision_option, collision, elbow_option, elbow};
   const auto custom = app::parseHierarchicalOptions(13, custom_argv);
   if (custom.red_rate_hz != 200.0 || custom.yellow_rate_hz != 40.0 ||
-      custom.presentation.enabled || custom.solver.collision_weight != 12.0 ||
-      custom.solver.elbow_task_weight != 125.0) {
+      custom.presentation.enabled ||
+      custom.solver.yellow_constraints_self_collision_avoidance_weight !=
+          12.0 ||
+      custom.solver.red_secondary_task_link4_position_weight != 125.0) {
     return EXIT_FAILURE;
   }
 
@@ -203,7 +213,9 @@ int main() {
                  help.str().find("--replay-elbow-teleop") !=
                      std::string::npos &&
                  help.str().find("--replay-trace") != std::string::npos &&
-                 help.str().find("--elbow-task-weight") != std::string::npos &&
+                 help.str().find(
+                     "--red-secondary-task-link4-position-weight") !=
+                     std::string::npos &&
                  help.str().find("c: switch TCP/link4") != std::string::npos &&
                  help.str().find("--joint-target-mode") != std::string::npos
              ? EXIT_SUCCESS

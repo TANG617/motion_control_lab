@@ -30,6 +30,7 @@ struct SolverHandles {
   mcc::PositionTaskHandle red_left_link4;
   mcc::PositionTaskHandle red_right_link4;
   mcc::PostureTaskHandle red_yellow_posture;
+  mcc::PostureTaskHandle yellow_posture;
   mcc::SelfCollisionAvoidanceHandle yellow_collision;
 };
 

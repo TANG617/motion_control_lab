@@ -146,14 +146,22 @@ realtime、playback rate、pause/resume/step、EOS 和来源诊断。
 `motion_control_lab::tui` 接收通用 `TuiDocument`，只实现布局、页面、滚动、帮助和渲染。
 它不知道 `TargetCommand`、solver backend、task handle、replay pairing 或 Foxglove。
 
-`motion_control_lab::standard_ik_tui` 把 solver-neutral `IkDebugFrame` 格式化为标准的
-Overview、Cartesian Planning、Solver and Quadratic Programming、Joint State、Runtime 和
-Events 页面。它只生成 `TuiDocument`，不依赖 FTXUI、MCC 或具体 app。
+`motion_control_lab::standard_ik_tui` 以 160×72 为主设计尺寸，把 solver-neutral
+`IkDebugFrame` 格式化为稳定的 Monitor、Motion（有 planning capability 时）、Solver、
+Joints 和 System 页面。Solver 采用 pass/violation master-detail；Joints 在 planned OTG
+capability 下把 Raw IK、Target 和 Executed 状态放在同一张链路表中。它只生成
+`TuiDocument`，不依赖 FTXUI、MCC 或具体 app。
 
 每个 app 仍负责把自己的 solver/runtime 状态解释并填入 solver-neutral snapshot。共享的
-planned-grouped TUI presenter 根据 snapshot capability 决定是否增加 Joint Planning、OTG、
-projection 和 clamp 页面；它只格式化数据，不 include MCC、不解释 MCC diagnostics。真正的
-FTXUI 渲染实现只存在一份，也不通过 callback、mode 或配置对象隐藏 app 差异。
+planned-grouped TUI presenter 根据 snapshot capability 丰富 Motion、Joints 和 System，
+而不是复制一组 app 专属页面；projection 和 clamp 作为 System 中的事件表显示。app 专属能力页
+通过共享 `makeStandardCapabilityPage()` 获得相同的 160×72 panel geometry。共享层只格式化
+投影后的数据，不 include MCC、不解释 MCC diagnostics。真正的 FTXUI 渲染实现只存在一份，
+也不通过 callback、mode 或配置对象隐藏 app 差异。
+
+高频数值表通过标题左侧留白预留固定显示槽位，数值的符号和整数位变化不得推动相邻列；
+Joint Chain 同样按各字段的最大显示长度预留列宽。表格单元保持单行，较长的状态、失败说明
+和上下文使用 panel detail rows，由 renderer 按终端宽度换行。
 
 planned-hierarchical apps 的 `options.*` 直接嵌入 `PlannedGroupedTuiConfig`，loop 侧只保留
 短调用；app 先完成 MCC diagnostics 到 solver-neutral snapshot 的解释：

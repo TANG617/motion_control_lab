@@ -1138,7 +1138,7 @@ if(BUILD_TESTING)
             "${Python3_EXECUTABLE}"
             "${CMAKE_CURRENT_SOURCE_DIR}/tests/run_planned_tui_pages_pty.py"
             "$<TARGET_FILE:mcl_planned_hierarchical_step>"
-            6
+            5
             "/workspace/models/Psi_R1_visual_collision.urdf"
         )
         set_tests_properties(
@@ -1154,7 +1154,7 @@ if(BUILD_TESTING)
             "${Python3_EXECUTABLE}"
             "${CMAKE_CURRENT_SOURCE_DIR}/tests/run_planned_tui_pages_pty.py"
             "$<TARGET_FILE:mcl_planned_hierarchical_step_otg>"
-            7
+            5
             "/workspace/products/synrobot/modules/common/robot_description/psi_r1/urdf/Psi_R1_rev1.urdf"
         )
         set_tests_properties(
@@ -1170,7 +1170,7 @@ if(BUILD_TESTING)
             "${Python3_EXECUTABLE}"
             "${CMAKE_CURRENT_SOURCE_DIR}/tests/run_planned_tui_pages_pty.py"
             "$<TARGET_FILE:mcl_planned_hierarchical_step_otg_nullspace>"
-            8
+            6
             "/workspace/products/synrobot/modules/common/robot_description/psi_r1/urdf/Psi_R1_rev1.urdf"
         )
         set_tests_properties(

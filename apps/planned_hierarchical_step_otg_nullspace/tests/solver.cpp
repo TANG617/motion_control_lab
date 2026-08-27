@@ -119,6 +119,43 @@ int main(int argc, char **argv) {
     app::requireOk(runtime.solveYellow(yellow, yellow_solution,
                                        yellow_diagnostics),
                    "Yellow solve");
+    require(yellow_diagnostics.kinematics.posture_errors.size() == 1U,
+            "Yellow posture diagnostics missing");
+    const auto &yellow_posture_error =
+        yellow_diagnostics.kinematics.posture_errors.front();
+    require(yellow_posture_error.handle == handles.yellow_posture,
+            "Yellow posture diagnostic handle mismatch");
+    require(yellow_posture_error.enabled,
+            "Yellow posture diagnostic is disabled");
+    require(yellow_posture_error.role ==
+                motion_control::core::PostureTaskRole::Regularization,
+            "Yellow posture diagnostic role mismatch");
+    const auto yellow_posture_requirement = std::find_if(
+        yellow_diagnostics.kinematics.optimization.requirements.begin(),
+        yellow_diagnostics.kinematics.optimization.requirements.end(),
+        [](const auto &requirement) {
+          return requirement.name == "yellow/task/posture-preference";
+        });
+    require(yellow_posture_requirement !=
+                    yellow_diagnostics.kinematics.optimization.requirements.end() &&
+                yellow_posture_requirement->enabled,
+            "Yellow posture requirement is not enabled");
+
+    auto displaced_state = state;
+    displaced_state.joint_positions(0) += 0.1;
+    yellow.captured_state = {displaced_state, 2U, 2};
+    app::requireOk(runtime.solveYellow(yellow, yellow_solution,
+                                       yellow_diagnostics),
+                   "displaced Yellow solve");
+    require(yellow_solution.kinematics_solution.joint_velocities(0) < 0.0 &&
+                yellow_solution.kinematics_solution.joint_positions(0) <
+                    displaced_state.joint_positions(0),
+            "Yellow posture preference did not restore the nominal pose");
+
+    yellow.captured_state = {state, 3U, 3};
+    app::requireOk(runtime.solveYellow(yellow, yellow_solution,
+                                       yellow_diagnostics),
+                   "reset Yellow solve");
 
     app::SolverRequest red;
     red.reference_frame_name = robot.base_frame;
@@ -311,14 +348,15 @@ int main(int argc, char **argv) {
               "null-space objective did not change the executed joints");
       require(maximum_tcp_position_error <=
                       app_options.interactive.solver
-                          .cartesian_preservation_tolerance &&
+                          .red_primary_task_tcp_preservation_tolerance &&
                   maximum_tcp_orientation_error <=
                       app_options.interactive.solver
-                          .cartesian_preservation_tolerance,
+                          .red_primary_task_tcp_preservation_tolerance,
               "executed TCP drift exceeded the Primary preservation tolerance");
       require(
           maximum_primary_drift <=
-              app_options.interactive.solver.cartesian_preservation_tolerance,
+              app_options.interactive.solver
+                  .red_primary_task_tcp_preservation_tolerance,
           "Secondary changed a Primary residual beyond tolerance");
     }
     return EXIT_SUCCESS;

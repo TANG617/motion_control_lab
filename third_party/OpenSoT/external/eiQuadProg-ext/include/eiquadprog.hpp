@@ -10,7 +10,7 @@
        Luca Di Gaspero, working with ublas data structures. 
 
  The quadprog_solve() function implements the algorithm of Goldfarb and Idnani 
- for the solution of a (convex) Quadratic Programming problem
+ for the solution of a (convex) QP problem
 by means of a dual method.
 	 
 The problem is in the form:

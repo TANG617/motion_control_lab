@@ -3,6 +3,7 @@ add_library(
   solver.cpp
   nullspace.cpp
   planning.cpp
+  rejection_policy.cpp
   telemetry.cpp
   loop.cpp
 )
@@ -135,6 +136,19 @@ if(BUILD_TESTING)
   add_test(
     NAME apps.mcl_planned_hierarchical_step_otg_nullspace_tui_projection
     COMMAND test_planned_hierarchical_step_otg_nullspace_tui_projection
+  )
+
+  add_executable(
+    test_planned_hierarchical_step_otg_nullspace_rejection_policy
+    tests/rejection_policy.cpp
+  )
+  target_link_libraries(
+    test_planned_hierarchical_step_otg_nullspace_rejection_policy
+    PRIVATE motion_control_lab::planned_hierarchical_step_otg_nullspace_support
+  )
+  add_test(
+    NAME apps.mcl_planned_hierarchical_step_otg_nullspace_rejection_policy
+    COMMAND test_planned_hierarchical_step_otg_nullspace_rejection_policy
   )
 
 endif()

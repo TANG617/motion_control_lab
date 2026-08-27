@@ -30,7 +30,7 @@ def main() -> int:
         raise RuntimeError(f"unknown argument: {sys.argv[2]}")
 
     master_fd, slave_fd = pty.openpty()
-    fcntl.ioctl(slave_fd, termios.TIOCSWINSZ, struct.pack("HHHH", 74, 155, 0, 0))
+    fcntl.ioctl(slave_fd, termios.TIOCSWINSZ, struct.pack("HHHH", 72, 160, 0, 0))
     environment = os.environ.copy()
     environment["TERM"] = "xterm-256color"
     environment.pop("NO_COLOR", None)
@@ -61,7 +61,7 @@ def main() -> int:
     deadline = started_at + 10.0
     try:
         while process.poll() is None and time.monotonic() < deadline:
-            ready_marker = b"FAULT HOLD" if fault_hold else b"Cartesian"
+            ready_marker = b"FAULT HOLD" if fault_hold else b"TCP tracking"
             if not expect_exception and ui_ready_at is None and ready_marker in output:
                 ui_ready_at = time.monotonic()
             ready_elapsed = (
@@ -93,26 +93,13 @@ def main() -> int:
                 action_index += 1
             elif not expect_exception and not fault_hold and not replay_controls:
                 actions = (
-                    b"1", b"2", b"3", b"4", b"5", b"6", b"7",
+                    b"1", b"2", b"3", b"4", b"5",
                     b"\x1bOP", b"\x1bOQ", b"\x1bOR", b"\x1bOS",
-                    b"\x1b[15~", b"\x1b[17~", b"\x1b[18~",
-                    b"\t", b"\x1b[Z", b"?", b"?", b"3", b"5", b"\x1b[6~",
+                    b"\x1b[15~", b"\t", b"\x1b[Z", b"?", b"?", b"3", b"5", b"\x1b[6~",
                     b"\x1b[6~", b"w\x1b[C\x1b[Adm0.020\rq 1x",
                 )
                 action_time = 0.12 + 0.10 * action_index
                 if action_index < len(actions) and ready_elapsed >= action_time:
-                    if action_index == 18:
-                        fcntl.ioctl(
-                            master_fd,
-                            termios.TIOCSWINSZ,
-                            struct.pack("HHHH", 24, 100, 0, 0),
-                        )
-                    elif action_index == 19:
-                        fcntl.ioctl(
-                            master_fd,
-                            termios.TIOCSWINSZ,
-                            struct.pack("HHHH", 18, 60, 0, 0),
-                        )
                     os.write(master_fd, actions[action_index])
                     action_index += 1
             readable, _, _ = select.select([master_fd], [], [], 0.05)
@@ -171,8 +158,9 @@ def main() -> int:
             expected_markers = (
                 b"Replay timeline paused",
                 b"Replay single-frame",
-                b"publish sequence=7  replay frame=128/1732",
-                b"publish sequence=7  replay frame=129/1732",
+                b"Pub 7",
+                b"Replay 128/1732",
+                b"Replay 129/1732",
             )
             missing_markers = [
                 marker for marker in expected_markers if marker not in output
@@ -226,41 +214,40 @@ def main() -> int:
             return 0
 
         expected_markers = (
-            b"Overview",
-            b"Cartesian Planning",
-            b"Joint Planning",
-            b"Solver and Quadratic Programming",
-            b"Joint State",
-            b"Runtime",
-            b"Events",
-            b"overview-bottom-marker",
-            b"cartesian-bottom-marker",
-            b"joint-plan-bottom-marker",
+            b"Monitor",
+            b"Motion",
+            b"Solver",
+            b"Joints",
+            b"System",
+            b"monitor-bottom-marker",
+            b"motion-bottom-marker",
             b"solver-bottom-marker",
             b"joints-bottom-marker",
-            b"runtime-bottom-marker",
-            b"events-bottom-marker",
+            b"system-bottom-marker",
             b"Keyboard help",
             b"maximum hard violation",
-            b"Executed joint state",
+            b"Joint chain",
             b"head_yaw",
             b"left_arm_joint7",
             b"Processor affinity",
             b"bound",
             b"disabled",
             b"4101",
-            b"requested processors",
-            b"effective processors",
-            b"IK calculation percentiles",
-            b"90th percentile [ms]",
-            b"95th percentile [ms]",
-            b"99th percentile [ms]",
+            b"requested effective",
+            b"Last-iterate violations",
+            b"P90 [ms]",
+            b"P95 [ms]",
+            b"P99 [ms]",
+            b"MAX_ITER",
+            b"position-braking",
             b"0.160",
-            b"Worker timing",
+            b"Worker runtime",
             b"release lateness",
-            b"Non-Quadratic Programming",
+            b"Non-QP",
             b"Attempts Accepted Rejected",
             b"Current state",
+            b"long-status-start",
+            b"long-status-end",
         )
         missing_markers = [marker for marker in expected_markers if marker not in output]
         if missing_markers:
@@ -272,7 +259,7 @@ def main() -> int:
             )
             return 1
 
-        if b"replay frame=" in output:
+        if b"Replay 128/1732" in output:
             sys.stderr.buffer.write(output)
             sys.stderr.write("teleop TUI unexpectedly rendered replay progress\n")
             return 1
@@ -282,7 +269,7 @@ def main() -> int:
             sys.stderr.write("compact tables rendered a nested square outer border\n")
             return 1
 
-        if b"\x1b[36m\x1b[49m System " not in output:
+        if b"\x1b[36m\x1b[49m TCP tracking " not in output:
             sys.stderr.buffer.write(output)
             sys.stderr.write("section title was not rendered in the accent color\n")
             return 1

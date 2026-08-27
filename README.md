@@ -126,11 +126,11 @@ cmake --build build/no-affinity -j8
 CPU 编号由各 app 的源码常量持有，不提供运行时覆盖；TUI 会显示当前编译版本实际请求和
 生效的 CPU。启用后，若请求 CPU 不在进程启动时的 cgroup/cpuset allowed set 内，app
 会立即失败并打印请求、允许和实际 CPU 集。该能力只限制线程运行位置，不负责 CPU 独占、
-SMT sibling 隔离、IRQ affinity 或实时调度优先级。交互 IK 的 TUI Runtime 页显示每个角色的
+SMT sibling 隔离、IRQ affinity 或实时调度优先级。交互 IK 的 TUI System 页显示每个角色的
 启用状态、线程 ID、requested CPU 和内核核验后的 effective CPU；显式关闭的构建明确显示
 `disabled`，worker 完成绑定前显示 `pending`。
 
-所有交互 IK 的 Solver and Quadratic Programming 与 Runtime 页还会显示 IK calculation time 的
+所有交互 IK 的 Solver 与 System 页还会显示 IK calculation time 的
 90th、95th、99th percentile。
 统计采用 nearest-rank 定义和最近 4096 次实际求解的固定容量滑动窗口，同时显示窗口样本数
 与进程启动后的累计样本数；暂停或 Grouped worker idle 不会生成零耗时样本。

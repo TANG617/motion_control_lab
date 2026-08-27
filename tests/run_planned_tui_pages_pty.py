@@ -14,11 +14,11 @@ import time
 def main() -> int:
     if len(sys.argv) != 4:
         raise RuntimeError(
-            "usage: run_planned_tui_pages_pty.py <app> <6|7|8> <urdf>"
+            "usage: run_planned_tui_pages_pty.py <app> <5|6> <urdf>"
         )
     executable, page_count_text, urdf = sys.argv[1:]
     page_count = int(page_count_text)
-    if page_count not in (6, 7, 8):
+    if page_count not in (5, 6):
         raise RuntimeError(f"unsupported page count: {page_count}")
 
     command = [
@@ -42,11 +42,10 @@ def main() -> int:
     ]
 
     master_fd, slave_fd = pty.openpty()
-    initial_columns = 180 if page_count == 8 else 155
     fcntl.ioctl(
         slave_fd,
         termios.TIOCSWINSZ,
-        struct.pack("HHHH", 74, initial_columns, 0, 0),
+        struct.pack("HHHH", 72, 160, 0, 0),
     )
     environment = os.environ.copy()
     environment["TERM"] = "xterm-256color"
@@ -68,33 +67,25 @@ def main() -> int:
         ("input", b"\t"),
         ("input", b"\x1b[Z"),
     )
-    if page_count == 8:
+    if page_count == 6:
         actions += (
-            ("resize", (24, 100)),
-            ("input", b"8"),
-            ("resize", (24, 60)),
-            ("input", b"8"),
-            ("input", b"c"),
-            ("input", b"w"),
-            ("input", b"x"),
+            ("input", b"6"),
             ("input", b"\x1b"),
         )
     else:
         actions += (
-            ("resize", (24, 80)),
             ("input", b"1"),
-            ("resize", (24, 60)),
             ("input", b"2"),
             ("input", b"x"),
         )
     deadline = time.monotonic() + 15.0
     try:
         while process.poll() is None and time.monotonic() < deadline:
-            if ready_at is None and b"Cartesian tracking" in output:
+            if ready_at is None and b"TCP tracking" in output:
                 ready_at = time.monotonic()
             if ready_at is not None and action_index < len(actions):
                 elapsed = time.monotonic() - ready_at
-                if elapsed >= 0.25 + 0.30 * action_index:
+                if elapsed >= 0.15 + 0.20 * action_index:
                     action, payload = actions[action_index]
                     if action == "input":
                         os.write(master_fd, payload)
@@ -135,43 +126,31 @@ def main() -> int:
             local_flags & termios.ECHO
         )
         expected_markers = [
-            b"Overview",
-            b"Cartesian Planning",
-            b"Solver and Quadratic Programming",
-            b"Joint State",
-            b"Runtime",
-            b"Events",
-            b"Cartesian tracking",
-            b"Cartesian errors",
+            b"Monitor",
+            b"Motion",
+            b"Solver",
+            b"Joints",
+            b"System",
+            b"TCP tracking",
+            b"Tracking error",
             b"Worker runtime",
-            b"Collision safety",
-            b"Errors",
-            b"Requirements and constraints",
-            b"Executed joint state",
+            b"Safety and hold",
+            b"Cartesian states",
+            b"Passes",
+            b"Last-iterate violations",
+            b"Tasks and constraints",
             b"Processor affinity",
-            b"Self-collision pairs",
+            b"Collision pairs",
         ]
-        if page_count >= 7:
-            expected_markers.extend(
-                [
-                    b"Joint Planning",
-                    b"Hierarchical QP pass timing",
-                    b"Execution and limit utilization",
-                    b"Safety",
-                    b"Planning",
-                ]
-            )
-        else:
-            expected_markers.append(b"Reference angular motion")
-        if page_count == 8:
+        if page_count == 6:
             expected_markers.extend(
                 [
                     b"Null-space",
+                    b"Control",
                     b"Secondary objectives",
-                    b"Selected-side null-space evidence",
                     b"Tertiary",
                     b"Terminal",
-                    b"held-link4",
+                    b"held",
                 ]
             )
         missing = [marker for marker in expected_markers if marker not in output]

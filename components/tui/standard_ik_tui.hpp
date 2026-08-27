@@ -17,4 +17,10 @@ TuiDocument makeStandardIkTuiDocument(
   const std::string & title,
   const std::string & input_status);
 
+// Applies the shared 160x72 capability-page geometry to app-projected panels.
+// Apps own the meaning of each panel; the shared TUI owns placement and chrome.
+TuiPage makeStandardCapabilityPage(
+  std::string title,
+  std::vector<TuiSection> panels);
+
 }  // namespace motion_control_lab

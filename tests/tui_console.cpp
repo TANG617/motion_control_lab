@@ -45,54 +45,50 @@ motion_control_lab::TuiDocument makeDocument(bool fault_hold, const std::string 
   document.subtitle = "renderer accepts TuiDocument only";
   document.status = status;
   document.help_lines = {"Keyboard help", "navigation and source input are external"};
-  mcl::TuiPage overview;
-  overview.title = "Overview";
-  overview.column_weights = {3, 2};
-  overview.rows = {{{3, 2}, 3}, {{2, 3}, 2}};
-  overview.sections = {makeSheet("System", "system-ready", 8U),
-                       makeSheet("Solver", "maximum hard violation", 5U, 1U),
-                       makeSheet("Joint execution", "overview-bottom-marker", 7U, 0U, 1U),
-                       makeSheet("Runtime", "runtime-ready", 5U, 1U, 1U)};
-  document.pages.push_back(std::move(overview));
+  mcl::TuiPage monitor;
+  monitor.title = "Monitor";
+  monitor.rows = {{{3, 2}, 3}, {{3, 2}, 2}};
+  monitor.sections = {
+    makeSheet("TCP tracking", "tracking-ready", 5U),
+    makeSheet("Solver", "maximum hard violation", 5U, 1U),
+    makeSheet("Workers", "monitor-bottom-marker", 7U, 0U, 1U),
+    makeSheet("Safety and hold", "safety-ready", 5U, 1U, 1U)};
+  document.pages.push_back(std::move(monitor));
 
-  mcl::TuiPage cartesian;
-  cartesian.title = "Cartesian Planning";
-  cartesian.sections = {makeSheet("Cartesian targets", "cartesian-bottom-marker", 12U)};
-  document.pages.push_back(std::move(cartesian));
-
-  mcl::TuiPage joint_plan;
-  joint_plan.title = "Joint Planning";
-  joint_plan.sections = {makeSheet("IK to OTG chain", "joint-plan-bottom-marker", 20U)};
-  document.pages.push_back(std::move(joint_plan));
+  mcl::TuiPage motion;
+  motion.title = "Motion";
+  motion.sections = {makeSheet("Cartesian states", "motion-bottom-marker", 12U)};
+  document.pages.push_back(std::move(motion));
 
   mcl::TuiPage solver;
-  solver.title = "Solver and Quadratic Programming";
-  solver.sections = {makeSheet("IK calculation percentiles", "solver-bottom-marker", 12U)};
+  solver.title = "Solver";
+  solver.sections = {makeSheet("Last-iterate violations", "solver-bottom-marker", 12U)};
   solver.sections.front().lines = {
-    "90th percentile [ms] 95th percentile [ms] 99th percentile [ms] 0.160"};
+    "P90 [ms] P95 [ms] P99 [ms] MAX_ITER position-braking 0.160"};
   document.pages.push_back(std::move(solver));
 
   mcl::TuiPage joints;
-  joints.title = "Joint State";
-  joints.sections = {makeSheet("Executed joint state", "joints-bottom-marker", 20U)};
+  joints.title = "Joints";
+  joints.sections = {makeSheet("Joint chain", "joints-bottom-marker", 20U)};
   joints.sections.front().lines = {"head_yaw left_arm_joint7"};
   document.pages.push_back(std::move(joints));
 
-  mcl::TuiPage runtime;
-  runtime.title = "Runtime";
-  runtime.column_weights = {3, 2};
-  runtime.sections = {makeSheet("Worker timing", "runtime-bottom-marker", 10U),
-                      makeSheet("Processor affinity", "events-ready", 8U, 1U)};
-  runtime.sections.back().lines = {"bound disabled 4101 requested processors "
-                                   "effective processors release lateness "
-                                   "Non-Quadratic Programming"};
-  document.pages.push_back(std::move(runtime));
-
-  mcl::TuiPage events;
-  events.title = "Events";
-  events.sections = {makeSheet("Current state", "events-bottom-marker", 15U)};
-  events.sections.front().lines = {"Attempts Accepted Rejected"};
-  document.pages.push_back(std::move(events));
+  mcl::TuiPage system;
+  system.title = "System";
+  mcl::TuiSection current_state;
+  current_state.title = "Current state";
+  current_state.style = mcl::TuiSectionStyle::Panel;
+  current_state.rows = {
+    {"Detail",
+     "long-status-start failed candidate diagnostics remain visible while the accepted output "
+     "is held; this sentence intentionally exceeds one terminal row and must wrap before "
+     "long-status-end"}};
+  system.sections = {makeSheet("Worker runtime", "system-bottom-marker", 10U),
+                     makeSheet("Processor affinity", "affinity-ready", 8U),
+                     std::move(current_state)};
+  system.sections.back().lines = {"bound disabled 4101 requested effective release lateness "
+                                  "Non-QP Attempts Accepted Rejected"};
+  document.pages.push_back(std::move(system));
   if (fault_hold) {
     auto & lines = document.pages.front().sections.front().lines;
     lines.insert(lines.end(), {"TARGET REJECTED", "FAULT HOLD", "rejected target revision",
@@ -137,7 +133,7 @@ int run(bool throw_after_render, bool fault_hold, bool replay_controls, bool rep
 
   auto document = makeDocument(fault_hold, input.status());
   if (replay_controls) {
-    document.subtitle = "null  publish sequence=7  replay frame=128/1732";
+    document.subtitle = "Sink null · Pub 7 · Replay 128/1732";
   }
   tui.render(document);
   if (throw_after_render) {
@@ -154,8 +150,7 @@ int run(bool throw_after_render, bool fault_hold, bool replay_controls, bool rep
     for (const auto control : input.consumeSourceControls()) {
       if (control == mcl::SourceControl::Step) {
         single_step_requested = true;
-        document.subtitle =
-            "null  publish sequence=7  replay frame=129/1732";
+        document.subtitle = "Sink null · Pub 7 · Replay 129/1732";
       }
     }
     document.status = input.status();

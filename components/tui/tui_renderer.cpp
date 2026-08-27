@@ -5,6 +5,7 @@
 #include <ftxui/dom/node.hpp>
 #include <ftxui/dom/table.hpp>
 #include <ftxui/screen/screen.hpp>
+#include <ftxui/screen/string.hpp>
 #endif
 
 #include <algorithm>
@@ -32,7 +33,14 @@ bool isFailureText(const std::string & value)
   std::transform(value.begin(), value.end(), std::back_inserter(normalized), [](unsigned char c) {
     return static_cast<char>(std::tolower(c));
   });
-  return normalized.find("fault hold") != std::string::npos ||
+  return normalized.find("fault") != std::string::npos ||
+         normalized.find("max_iter") != std::string::npos ||
+         normalized.find("infeasible") != std::string::npos ||
+         normalized.find("numeric") != std::string::npos ||
+         normalized == "rejected" ||
+         normalized.find("· reject") != std::string::npos ||
+         normalized.find("rejected:") != std::string::npos ||
+         normalized.find("rejected target revision") != std::string::npos ||
          normalized.find("target rejected") != std::string::npos ||
          normalized.find("rejected") != std::string::npos ||
          normalized.find("fatal") != std::string::npos ||
@@ -110,12 +118,18 @@ ftxui::Element renderSection(const TuiSection & section)
 {
   using namespace ftxui;
   Elements body;
+  int row_label_width = 0;
+  for (const auto & row : section.rows) {
+    row_label_width = std::max(row_label_width, ftxui::string_width(row.label));
+  }
   if (!section.title.empty() && section.style != TuiSectionStyle::Panel) {
     body.push_back(text(section.title) | bold | color(Color::Cyan));
   }
   for (const auto & row : section.rows) {
-    body.push_back(hbox({text(row.label + ": ") | bold,
-                         failureEmphasis(paragraph(row.value), row.value)}));
+    body.push_back(hbox({text(row.label + ":") | bold |
+                           size(WIDTH, EQUAL, row_label_width + 1),
+                         text(" "),
+                         failureEmphasis(paragraph(row.value), row.value) | flex}));
   }
   for (const auto & table : section.tables) {
     body.push_back(renderTable(table));
@@ -128,7 +142,7 @@ ftxui::Element renderSection(const TuiSection & section)
     return window(
       text(" " + section.title + " ") | bold | color(Color::Cyan), content, ROUNDED);
   }
-  return section.tables.empty() ? content | borderRounded : content;
+  return content;
 }
 
 ftxui::Element renderColumns(const std::vector<int> & source_weights,
@@ -144,7 +158,7 @@ ftxui::Element renderColumns(const std::vector<int> & source_weights,
       throw std::invalid_argument("TUI section column is outside the page layout");
     }
     auto rendered = renderSection(*section);
-    columns[section->column].push_back(stretch_sections ? rendered | flex : rendered);
+    columns[section->column].push_back(stretch_sections ? rendered | xflex : rendered);
   }
 
   Elements rendered_columns;
@@ -152,7 +166,7 @@ ftxui::Element renderColumns(const std::vector<int> & source_weights,
     if (columns[index].empty()) {
       columns[index].push_back(filler());
     }
-    rendered_columns.push_back(vbox(std::move(columns[index])) | flex |
+    rendered_columns.push_back(vbox(std::move(columns[index])) | xflex |
                                xflex_grow_factor(std::max(weights[index], 1)));
   }
   return hbox(std::move(rendered_columns));
@@ -184,8 +198,7 @@ ftxui::Element renderPageLayout(
   Elements rendered_rows;
   for (std::size_t index = 0; index < rows.size(); ++index) {
     rendered_rows.push_back(
-        renderColumns(rows[index].column_weights, row_sections[index], true) |
-        yflex_grow_factor(std::max(rows[index].height_weight, 1)));
+        renderColumns(rows[index].column_weights, row_sections[index], true));
   }
   return vbox(std::move(rendered_rows));
 }
@@ -304,24 +317,26 @@ void TuiRenderer::render(const TuiDocument & document)
       scroll_offset_, static_cast<std::size_t>(std::numeric_limits<int>::max())));
   auto body = vbox(std::move(sections)) | focusPosition(0, requested_scroll) | yframe |
               vscroll_indicator | flex;
-  Element footer = failureEmphasis(paragraph("status: " + document.status), document.status);
+  Element footer = failureEmphasis(paragraph(document.status), document.status);
   if (!document.footer_hints.empty()) {
-    footer = hbox({failureEmphasis(text("status: " + document.status), document.status) | flex,
+    footer = hbox({failureEmphasis(text(document.status), document.status) | flex,
                    filler(),
                    text(document.footer_hints) | dim});
   }
   Elements header{
       hbox({text(document.title) | bold, filler(), text(document.subtitle) | dim})};
   if (!document.header_left.empty() || !document.header_right.empty()) {
-    header.push_back(hbox({failureEmphasis(text(document.header_left) | bold, document.header_left),
-                           filler(),
-                           text(document.header_right) | dim}));
+    std::string context = document.header_left;
+    if (!document.header_left.empty() && !document.header_right.empty()) {
+      context += " · ";
+    }
+    context += document.header_right;
+    header.push_back(failureEmphasis(paragraph(context) | bold, context));
   }
   auto root = vbox({
                   vbox(std::move(header)), separator(), hbox(std::move(tab_elements)), separator(),
                   std::move(body), separator(), std::move(footer),
-              }) |
-              borderRounded;
+              });
   auto screen = Screen::Create(Dimension::Fixed(width), Dimension::Fixed(height));
   Render(screen, root);
   std::cout << "\x1b[H" << screen.ToString() << std::flush;

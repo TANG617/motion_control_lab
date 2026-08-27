@@ -149,36 +149,33 @@ int main()
   auto frame = makeFrame();
   const auto standard = mcl::makeStandardIkTuiDocument(
     frame, presentation, 7, "null", "Grouped IK", "running");
-  require(standard.subtitle == "null  publish sequence=7",
+  require(standard.subtitle == "Sink null · Pub 7",
           "teleop subtitle must not contain replay progress");
   const std::vector<std::string> expected_standard{
-    "Overview", "Solver and Quadratic Programming", "Joint State", "Runtime", "Events"};
-  require(standard.pages.size() == expected_standard.size(), "standard IK must produce five pages");
+    "Monitor", "Solver", "Joints", "System"};
+  require(standard.pages.size() == expected_standard.size(), "standard IK must produce four pages");
   for (std::size_t index = 0U; index < expected_standard.size(); ++index) {
     require(standard.pages[index].title == expected_standard[index], "standard page order mismatch");
   }
-  const auto & overview = page(standard, "Overview");
+  const auto & overview = page(standard, "Monitor");
   require(
     overview.rows.size() == 2U && overview.rows[0].column_weights == std::vector<int>({3, 2}) &&
-    overview.rows[1].column_weights == std::vector<int>({2, 3}),
-    "Overview must use the reference two-by-two grid");
+    overview.rows[1].column_weights == std::vector<int>({3, 2}),
+    "Monitor must use the shared two-by-two grid");
   requireSingleTableSheets(standard);
-  require(section(overview, "Cartesian errors").column == 0U &&
-            section(overview, "Cartesian errors").row == 0U,
-          "Cartesian errors must be a sibling sheet in the tracking cell");
-  require(section(overview, "Worker runtime").column == 1U &&
-            section(overview, "Worker runtime").row == 1U &&
-            section(overview, "Processor affinity").column == 1U &&
-            section(overview, "Collision safety").column == 1U,
-          "Overview runtime diagnostics must be sibling sheets");
-  const auto & joints = section(overview, "Joint positions").tables.front();
-  require(joints.rows.size() == 4U && joints.rows[2][0] == "Left arm",
-          "joint grouping mapping mismatch");
+  require(section(overview, "TCP tracking · Goal → Reference → Output").column == 0U &&
+            section(overview, "Solver").column == 1U &&
+            section(overview, "Workers").row == 1U &&
+            section(overview, "Safety and hold").column == 1U,
+          "Monitor panels must preserve the shared scan order");
+  const auto & joints = section(page(standard, "Joints"), "Executed state").tables.front();
+  require(joints.rows.size() == 4U && joints.rows[2][0] == "left_arm_joint1",
+          "joint state mapping mismatch");
   require(
-    section(page(standard, "Runtime"), "Processor affinity").tables.front().rows[0][3] == "5",
+    section(page(standard, "System"), "Processor affinity").tables.front().rows[0][3] == "5",
     "processor affinity mapping mismatch");
   require(
-    section(page(standard, "Events"), "Self-collision pairs").tables.front().rows[0][1] ==
+    section(page(standard, "System"), "Collision pairs").tables.front().rows[0][1] ==
       "left_link",
     "collision pair mapping mismatch");
 
@@ -186,13 +183,13 @@ int main()
   const auto replay = mcl::makeStandardIkTuiDocument(
     frame, presentation, 7, "null", "Grouped IK", "running");
   require(replay.subtitle ==
-            "null  publish sequence=7  replay frame=128/1732",
+            "Sink null · Pub 7 · Replay 128/1732",
           "replay subtitle must use one-based paired-timeline progress");
   frame.replay_frame_progress = mcl::ReplayFrameProgressDebug{1731U, 1732U};
   const auto replay_end = mcl::makeStandardIkTuiDocument(
     frame, presentation, 9, "null", "Grouped IK", "end of stream");
   require(replay_end.subtitle ==
-            "null  publish sequence=9  replay frame=1732/1732",
+            "Sink null · Pub 9 · Replay 1732/1732",
           "final replay frame must render as N/N");
   frame.replay_frame_progress.reset();
 
@@ -212,20 +209,26 @@ int main()
   frame.cartesian_planner = std::move(planner);
   const auto planned = mcl::makeStandardIkTuiDocument(
     frame, presentation, 8, "ws://127.0.0.1:8765", "Planned IK", "paused");
-  require(planned.pages.size() == 6U, "planned IK must produce six pages");
+  require(planned.pages.size() == 5U, "planned IK must produce five pages");
   requireSingleTableSheets(planned);
-  require(planned.pages[1].title == "Cartesian Planning", "Cartesian page order mismatch");
+  require(planned.pages[1].title == "Motion", "Motion page order mismatch");
   require(
-    section(page(planned, "Cartesian Planning"), "Pose: Goal to Reference to FK")
+    section(page(planned, "Motion"), "Cartesian states")
         .tables.front().rows.size() == 6U,
     "Cartesian planning pose mapping mismatch");
-  require(planned.subtitle.find("publish sequence=8") != std::string::npos,
-          "publish sequence label must be written in full");
+  const auto & reference_motion =
+    section(page(planned, "Motion"), "Reference twist and acceleration").tables.front();
+  require(reference_motion.columns.at(1).title == "      Vx" &&
+            reference_motion.columns.at(2).title == "      Vy" &&
+            reference_motion.rows.front().at(1) == "0.1000",
+          "reference motion headers must reserve stable sign and precision space");
+  require(planned.subtitle.find("Pub 8") != std::string::npos,
+          "publish sequence must remain visible in the compact header");
   require(planned.status == "paused", "footer status must contain only the concise input state");
 
   const std::vector<std::string> forbidden_labels{
-    "Solver/QP", "Joints", "QP", "P95", "Proj", "Calc", "Exec", "V%", "A%", "J%",
-    "CPU", "TID"};
+    "Overview", "Cartesian Planning", "Joint Planning", "Joint State", "Runtime", "Events",
+    "Solver and Quadratic Programming"};
   for (const auto & label : forbidden_labels) {
     require(!hasUiLabel(planned, label), "standard TUI contains a forbidden abbreviation");
   }

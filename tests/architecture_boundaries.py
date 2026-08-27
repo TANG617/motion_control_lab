@@ -40,7 +40,7 @@ APP_SOURCE_FILES = {
     "hierarchical_step": {"main.cpp", "options.cpp", "options.hpp", "solver.cpp", "solver.hpp", "loop.cpp", "loop.hpp"},
     "planned_hierarchical_step": {"main.cpp", "options.cpp", "options.hpp", "solver.cpp", "solver.hpp", "planning.cpp", "planning.hpp", "loop.cpp", "loop.hpp"},
     "planned_hierarchical_step_otg": {"main.cpp", "options.cpp", "options.hpp", "solver.cpp", "solver.hpp", "planning.cpp", "planning.hpp", "telemetry.cpp", "telemetry.hpp", "loop.cpp", "loop.hpp"},
-    "planned_hierarchical_step_otg_nullspace": {"main.cpp", "options.cpp", "options.hpp", "solver.cpp", "solver.hpp", "nullspace.cpp", "nullspace.hpp", "planning.cpp", "planning.hpp", "telemetry.cpp", "telemetry.hpp", "loop.cpp", "loop.hpp"},
+    "planned_hierarchical_step_otg_nullspace": {"main.cpp", "options.cpp", "options.hpp", "solver.cpp", "solver.hpp", "nullspace.cpp", "nullspace.hpp", "planning.cpp", "planning.hpp", "rejection_policy.cpp", "rejection_policy.hpp", "telemetry.cpp", "telemetry.hpp", "loop.cpp", "loop.hpp"},
     "plot_core_planning": {"main.cpp", "options.cpp", "options.hpp", "planning.cpp", "planning.hpp"},
     "replay_plan": {"main.cpp", "options.cpp", "options.hpp", "loop.cpp", "loop.hpp"},
     "step": {"main.cpp", "options.cpp", "options.hpp", "solver.cpp", "solver.hpp", "loop.cpp", "loop.hpp"},

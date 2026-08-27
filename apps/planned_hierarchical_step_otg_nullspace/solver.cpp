@@ -67,59 +67,59 @@ addCartesianTasks(mcc::HierarchicalKinematicsSolverBuilder &builder,
                   const R1RobotConfig &robot, const SolverOptions &options) {
   CartesianHandles handles;
   mcc::TaskScaleGroupConfig scale;
-  scale.progress_weight = options.cartesian_progress_weight;
-  scale.name = "red-left-cartesian-progress";
+  scale.progress_weight = options.red_primary_task_cartesian_progress_weight;
+  scale.name = "red-primary/task/left-cartesian-progress";
   requireOk(builder.addTaskScaleGroup(mcc::PriorityLevel::Primary, scale,
-                                      options.scale_preservation_tolerance,
+                                      options.red_primary_task_cartesian_progress_preservation_tolerance,
                                       handles.left_scale),
             "register " + scale.name);
-  scale.name = "red-right-cartesian-progress";
+  scale.name = "red-primary/task/right-cartesian-progress";
   requireOk(builder.addTaskScaleGroup(mcc::PriorityLevel::Primary, scale,
-                                      options.scale_preservation_tolerance,
+                                      options.red_primary_task_cartesian_progress_preservation_tolerance,
                                       handles.right_scale),
             "register " + scale.name);
 
   mcc::PositionTaskConfig position;
-  position.name = "red-left-position";
+  position.name = "red-primary/task/left-tcp-position";
   position.enforcement = mcc::ScaledEnforcement{
       handles.left_scale, options.maximum_accepted_hard_violation};
   requireOk(builder.addPositionTask(
                 mcc::PriorityLevel::Primary, robot.left_end_effector_frame,
                 position,
                 Eigen::Vector3d::Constant(
-                    options.cartesian_preservation_tolerance),
+                    options.red_primary_task_tcp_preservation_tolerance),
                 handles.left_position),
             "register " + position.name);
-  position.name = "red-right-position";
+  position.name = "red-primary/task/right-tcp-position";
   position.enforcement = mcc::ScaledEnforcement{
       handles.right_scale, options.maximum_accepted_hard_violation};
   requireOk(builder.addPositionTask(
                 mcc::PriorityLevel::Primary, robot.right_end_effector_frame,
                 position,
                 Eigen::Vector3d::Constant(
-                    options.cartesian_preservation_tolerance),
+                    options.red_primary_task_tcp_preservation_tolerance),
                 handles.right_position),
             "register " + position.name);
 
   mcc::OrientationTaskConfig orientation;
-  orientation.name = "red-left-orientation";
+  orientation.name = "red-primary/task/left-tcp-orientation";
   orientation.enforcement = mcc::ScaledEnforcement{
       handles.left_scale, options.maximum_accepted_hard_violation};
   requireOk(builder.addOrientationTask(
                 mcc::PriorityLevel::Primary, robot.left_end_effector_frame,
                 orientation,
                 Eigen::Vector3d::Constant(
-                    options.cartesian_preservation_tolerance),
+                    options.red_primary_task_tcp_preservation_tolerance),
                 handles.left_orientation),
             "register " + orientation.name);
-  orientation.name = "red-right-orientation";
+  orientation.name = "red-primary/task/right-tcp-orientation";
   orientation.enforcement = mcc::ScaledEnforcement{
       handles.right_scale, options.maximum_accepted_hard_violation};
   requireOk(builder.addOrientationTask(
                 mcc::PriorityLevel::Primary, robot.right_end_effector_frame,
                 orientation,
                 Eigen::Vector3d::Constant(
-                    options.cartesian_preservation_tolerance),
+                    options.red_primary_task_tcp_preservation_tolerance),
                 handles.right_orientation),
             "register " + orientation.name);
   return handles;
@@ -128,6 +128,7 @@ addCartesianTasks(mcc::HierarchicalKinematicsSolverBuilder &builder,
 void addRedLimits(mcc::HierarchicalKinematicsSolverBuilder &builder,
                   const SolverOptions &options) {
   mcc::JointPositionLimitConfig position;
+  position.name = "red-shared/constraints/joint-position-limits";
   position.margin = options.joint_position_margin_rad;
   position.braking_velocity_envelope_enabled =
       options.joint_position_braking_velocity_envelope_enabled;
@@ -137,12 +138,14 @@ void addRedLimits(mcc::HierarchicalKinematicsSolverBuilder &builder,
   requireOk(builder.addJointPositionLimits(position, position_handle),
             "register Red position limits");
   mcc::JointVelocityLimitConfig velocity;
+  velocity.name = "red-shared/constraints/joint-velocity-limits";
   velocity.enforcement =
       mcc::HardEnforcement{options.maximum_accepted_hard_violation};
   mcc::JointVelocityLimitHandle velocity_handle;
   requireOk(builder.addJointVelocityLimits(velocity, velocity_handle),
             "register Red velocity limits");
   mcc::JointAccelerationLimitConfig acceleration;
+  acceleration.name = "red-shared/constraints/joint-acceleration-limits";
   acceleration.enforcement =
       mcc::HardEnforcement{options.maximum_accepted_hard_violation};
   mcc::JointAccelerationLimitHandle acceleration_handle;
@@ -154,6 +157,7 @@ void addRedLimits(mcc::HierarchicalKinematicsSolverBuilder &builder,
 void addYellowLimits(mcc::KinematicsSolverBuilder &builder,
                      const SolverOptions &options) {
   mcc::JointPositionLimitConfig position;
+  position.name = "yellow/constraints/joint-position-limits";
   position.margin = options.joint_position_margin_rad;
   position.enforcement =
       mcc::HardEnforcement{options.maximum_accepted_hard_violation};
@@ -258,29 +262,34 @@ void configureSolver(
       "configure Red HKS");
   handles.red = addCartesianTasks(red_builder, robot, solver_options);
   mcc::PositionTaskConfig elbow;
-  elbow.name = "red-left-link4-position";
+  elbow.name = "red-secondary/task/left-link4-position";
   elbow.enforcement =
-      mcc::squaredL2Penalty(solver_options.elbow_task_weight, 3);
-  elbow.servo_gain_per_s = solver_options.elbow_servo_gain_per_s;
+      mcc::squaredL2Penalty(
+          solver_options.red_secondary_task_link4_position_weight, 3);
+  elbow.servo_gain_per_s =
+      solver_options.red_secondary_task_link4_position_servo_gain_per_s;
   requireOk(
       red_builder.addPositionTask(
           mcc::PriorityLevel::Secondary, robot.left_link4_frame, elbow,
           Eigen::Vector3d::Constant(
-              solver_options.elbow_preservation_tolerance_mps),
+              solver_options
+                  .red_secondary_task_link4_position_preservation_tolerance_mps),
           handles.red_left_link4),
       "register " + elbow.name);
-  elbow.name = "red-right-link4-position";
+  elbow.name = "red-secondary/task/right-link4-position";
   requireOk(
       red_builder.addPositionTask(
           mcc::PriorityLevel::Secondary, robot.right_link4_frame, elbow,
           Eigen::Vector3d::Constant(
-              solver_options.elbow_preservation_tolerance_mps),
+              solver_options
+                  .red_secondary_task_link4_position_preservation_tolerance_mps),
           handles.red_right_link4),
       "register " + elbow.name);
   mcc::PostureTaskConfig coupling;
-  coupling.name = "yellow-posture-preference";
+  coupling.name = "red-secondary/task/yellow-posture-coupling";
   coupling.enforcement =
-      mcc::squaredL2Penalty(solver_options.yellow_to_red_coupling_weight, 1);
+      mcc::squaredL2Penalty(
+          solver_options.red_secondary_task_yellow_posture_coupling_weight, 1);
   coupling.reference_positions = Eigen::VectorXd::Zero(
       static_cast<Eigen::Index>(active_joint_names.size()));
   coupling.role = mcc::PostureTaskRole::Regularization;
@@ -288,7 +297,8 @@ void configureSolver(
                 mcc::PriorityLevel::Secondary, coupling,
                 Eigen::VectorXd::Constant(
                     static_cast<Eigen::Index>(active_joint_names.size()),
-                    solver_options.posture_preservation_tolerance),
+                    solver_options
+                        .red_secondary_task_yellow_posture_coupling_preservation_tolerance),
                 handles.red_yellow_posture),
             "register Secondary Yellow posture preference");
   addRedLimits(red_builder, solver_options);
@@ -298,12 +308,35 @@ void configureSolver(
   requireOk(yellow_builder.configure(model, active_joint_names,
                                      makeYellowConfig(options)),
             "configure Yellow solver");
+  const auto active_joint_full_indices =
+      activeJointFullIndices(robot, options.interactive.robot);
+  mcc::PostureTaskConfig posture;
+  posture.name = "yellow/task/posture-preference";
+  posture.enforcement =
+      mcc::squaredL2Penalty(
+          solver_options.yellow_task_posture_preference_weight, 1);
+  posture.reference_positions.resize(
+      static_cast<Eigen::Index>(active_joint_full_indices.size()));
+  for (std::size_t index = 0; index < active_joint_full_indices.size();
+       ++index) {
+    posture.reference_positions(static_cast<Eigen::Index>(index)) =
+        robot.default_positions.at(active_joint_full_indices[index]);
+  }
+  posture.role = mcc::PostureTaskRole::Regularization;
+  requireOk(yellow_builder.addPostureTask(posture, handles.yellow_posture),
+            "register " + posture.name);
   mcc::SelfCollisionAvoidanceConfig collision;
-  collision.minimum_distance_m = solver_options.minimum_collision_distance_m;
+  collision.name = "yellow/constraints/self-collision-avoidance";
+  collision.minimum_distance_m = solver_options
+                                     .yellow_constraints_self_collision_avoidance_minimum_distance_m;
   collision.influence_distance_m =
-      solver_options.collision_influence_distance_m;
-  collision.damping_gain_per_s = solver_options.collision_damping_gain_per_s;
-  collision.weight = solver_options.collision_weight;
+      solver_options
+          .yellow_constraints_self_collision_avoidance_influence_distance_m;
+  collision.damping_gain_per_s =
+      solver_options
+          .yellow_constraints_self_collision_avoidance_damping_gain_per_s;
+  collision.weight =
+      solver_options.yellow_constraints_self_collision_avoidance_weight;
   requireOk(yellow_builder.addSelfCollisionAvoidance(collision_model, collision,
                                                      handles.yellow_collision),
             "register Yellow self-collision avoidance");
