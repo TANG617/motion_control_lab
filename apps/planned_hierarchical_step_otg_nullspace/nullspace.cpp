@@ -153,6 +153,20 @@ const char *controlPointName(ControlPoint control_point) {
   return control_point == ControlPoint::Tcp ? "TCP" : "link4";
 }
 
+const char *elbowTeleopEventName(ElbowTeleopEventKind kind) {
+  switch (kind) {
+  case ElbowTeleopEventKind::Capture:
+    return "capture";
+  case ElbowTeleopEventKind::Move:
+    return "move";
+  case ElbowTeleopEventKind::SwitchSide:
+    return "switch-side";
+  case ElbowTeleopEventKind::Clear:
+    return "clear";
+  }
+  return "unknown";
+}
+
 bool link4Enabled(const Link4TargetSnapshot &snapshot, ArmSide side) {
   return side == ArmSide::Left ? snapshot.left_enabled
                                : snapshot.right_enabled;
@@ -167,12 +181,14 @@ NullspaceTargetSource::NullspaceTargetSource(
     TerminalFrontend &terminal, KeyboardSourceMode mode,
     CartesianTeleopOptions options, std::vector<ArmTarget> initial_targets,
     const Eigen::Vector3d &initial_left_link4,
-    const Eigen::Vector3d &initial_right_link4, bool allow_side_switching)
+    const Eigen::Vector3d &initial_right_link4, bool allow_side_switching,
+    bool replay_elbow_teleop_enabled)
     : terminal_(terminal), mode_(mode), keyboard_(mode),
       cartesian_(std::move(options), std::move(initial_targets),
                  allow_side_switching),
       executed_left_link4_(initial_left_link4),
-      executed_right_link4_(initial_right_link4) {
+      executed_right_link4_(initial_right_link4),
+      replay_elbow_teleop_enabled_(replay_elbow_teleop_enabled) {
   link4_targets_.left = initial_left_link4;
   link4_targets_.right = initial_right_link4;
   input_status_.detail = cartesian_.status();
@@ -181,7 +197,7 @@ NullspaceTargetSource::NullspaceTargetSource(
 NullspaceTargetSourceUpdate NullspaceTargetSource::poll(double dt) {
   NullspaceTargetSourceUpdate update;
   for (const auto &event : terminal_.poll()) {
-    if (!keyboard_.capturingText() &&
+    if (!capturingText() &&
         router_.route(event) == KeyRoute::Navigation) {
       update.navigation.push_back(event);
       continue;
@@ -193,7 +209,12 @@ NullspaceTargetSourceUpdate NullspaceTargetSource::poll(double dt) {
 
 void NullspaceTargetSource::handleSourceEvent(const KeyEvent &event,
                                               double dt) {
-  if (mode_ == KeyboardSourceMode::Teleop && !keyboard_.capturingText() &&
+  if (mode_ == KeyboardSourceMode::Replay &&
+      replay_elbow_teleop_enabled_ && handleReplayElbowEvent(event, dt)) {
+    return;
+  }
+
+  if (mode_ == KeyboardSourceMode::Teleop && !capturingText() &&
       event.code == KeyCode::Character) {
     const char key = static_cast<char>(
         std::tolower(static_cast<unsigned char>(event.character)));
@@ -207,7 +228,7 @@ void NullspaceTargetSource::handleSourceEvent(const KeyEvent &event,
                            : ControlPoint::Tcp;
       if (control_point_ == ControlPoint::Link4 &&
           !link4Enabled(link4_targets_, selectedSide())) {
-        captureLink4(selectedSide());
+        captureLink4(selectedSide(), ElbowTeleopEventKind::Capture);
       }
       input_status_.detail = std::string{"Editing "} +
                              armSideName(selectedSide()) + " " +
@@ -221,6 +242,87 @@ void NullspaceTargetSource::handleSourceEvent(const KeyEvent &event,
     }
   }
   apply(keyboard_.handle(event), dt);
+}
+
+bool NullspaceTargetSource::capturingText() const noexcept {
+  return keyboard_.capturingText() ||
+         (mode_ == KeyboardSourceMode::Replay &&
+          replay_elbow_teleop_enabled_ && elbow_keyboard_.capturingText());
+}
+
+bool NullspaceTargetSource::handleReplayElbowEvent(const KeyEvent &event,
+                                                   double dt) {
+  if (elbow_keyboard_.capturingText()) {
+    apply(elbow_keyboard_.handle(event), dt);
+    return true;
+  }
+
+  if (event.code == KeyCode::Character) {
+    const char key = static_cast<char>(
+        std::tolower(static_cast<unsigned char>(event.character)));
+    if (key == ' ' || key == '.') {
+      apply(keyboard_.handle(event), dt);
+      return true;
+    }
+    if (key == 'c') {
+      if (paused_) {
+        input_status_.detail =
+            "Replay paused; elbow target unchanged until replay resumes";
+      } else if (!motion_input_enabled_) {
+        input_status_.detail = motion_input_disabled_status_;
+      } else if (link4_targets_.left_enabled ||
+                 link4_targets_.right_enabled) {
+        clearLink4();
+        control_point_ = ControlPoint::Tcp;
+        input_status_.detail = "Disabled replay elbow target";
+      } else {
+        control_point_ = ControlPoint::Link4;
+        captureLink4(selectedSide(), ElbowTeleopEventKind::Capture);
+        input_status_.detail = std::string{"Enabled live replay "} +
+                               armSideName(selectedSide()) + " elbow target";
+      }
+      return true;
+    }
+    if (key == 'x') {
+      if (link4_targets_.left_enabled || link4_targets_.right_enabled) {
+        if (paused_) {
+          input_status_.detail =
+              "Replay paused; elbow target unchanged until replay resumes";
+        } else if (!motion_input_enabled_) {
+          input_status_.detail = motion_input_disabled_status_;
+        } else {
+          clearLink4();
+        }
+      } else {
+        apply(keyboard_.handle(event), dt);
+      }
+      return true;
+    }
+    const bool elbow_character = key == 'w' || key == 's' || key == 'a' ||
+                                 key == 'd' || key == 'q' || key == 'e' ||
+                                 key == 'r' || key == 'm';
+    if (elbow_character) {
+      if (control_point_ != ControlPoint::Link4 && key != 'm') {
+        input_status_.detail = "Replay owns TCP goals; press c to edit elbow";
+      } else {
+        apply(elbow_keyboard_.handle(event), dt);
+      }
+      return true;
+    }
+  }
+
+  const bool elbow_navigation =
+      event.code == KeyCode::ArrowLeft || event.code == KeyCode::ArrowRight ||
+      event.code == KeyCode::ArrowUp || event.code == KeyCode::ArrowDown;
+  if (elbow_navigation) {
+    apply(elbow_keyboard_.handle(event), dt);
+    return true;
+  }
+  if (event.code == KeyCode::Escape) {
+    apply(keyboard_.handle(event), dt);
+    return true;
+  }
+  return false;
 }
 
 void NullspaceTargetSource::apply(const KeyboardAction &action, double dt) {
@@ -267,9 +369,22 @@ void NullspaceTargetSource::apply(const KeyboardAction &action, double dt) {
   }
 
   const auto &intent = *action.teleop;
-  const bool selection_only = intent.kind == TeleopIntentKind::SelectArm;
-  if (!motion_input_enabled_ && !selection_only) {
+  const bool modifies_link4 =
+      control_point_ == ControlPoint::Link4 &&
+      (intent.kind == TeleopIntentKind::SelectArm ||
+       intent.kind == TeleopIntentKind::Translate ||
+       intent.kind == TeleopIntentKind::ResetTarget);
+  const bool disabled_teleop_motion =
+      mode_ == KeyboardSourceMode::Teleop &&
+      intent.kind != TeleopIntentKind::SelectArm;
+  if (!motion_input_enabled_ &&
+      (disabled_teleop_motion || modifies_link4)) {
     input_status_.detail = motion_input_disabled_status_;
+    return;
+  }
+  if (mode_ == KeyboardSourceMode::Replay && paused_ && modifies_link4) {
+    input_status_.detail =
+        "Replay paused; elbow target unchanged until replay resumes";
     return;
   }
 
@@ -279,19 +394,21 @@ void NullspaceTargetSource::apply(const KeyboardAction &action, double dt) {
       cartesian_.apply(intent, dt);
       if (selectedSide() != previous_side ||
           !link4Enabled(link4_targets_, selectedSide())) {
-        captureLink4(selectedSide());
+        captureLink4(selectedSide(), ElbowTeleopEventKind::SwitchSide);
       }
     } else if (intent.kind == TeleopIntentKind::Translate) {
       if (!link4Enabled(link4_targets_, selectedSide())) {
-        captureLink4(selectedSide());
+        captureLink4(selectedSide(), ElbowTeleopEventKind::Capture);
       }
       const double scale = intent.discrete ? cartesian_.stepMetres() : dt;
       mutableLink4Target(selectedSide()) += intent.translation * scale;
       ++link4_targets_.revision;
+      recordElbowEvent(ElbowTeleopEventKind::Move, selectedSide(),
+                       link4Target(link4_targets_, selectedSide()));
       input_status_.detail = std::string{"Moved "} +
                              armSideName(selectedSide()) + " link4";
     } else if (intent.kind == TeleopIntentKind::ResetTarget) {
-      captureLink4(selectedSide());
+      captureLink4(selectedSide(), ElbowTeleopEventKind::Capture);
       input_status_.detail = std::string{"Captured current "} +
                              armSideName(selectedSide()) + " link4";
     } else if (intent.kind == TeleopIntentKind::Rotate ||
@@ -302,6 +419,14 @@ void NullspaceTargetSource::apply(const KeyboardAction &action, double dt) {
       input_status_.detail = cartesian_.status();
     }
   } else {
+    if (mode_ == KeyboardSourceMode::Replay &&
+        intent.kind != TeleopIntentKind::SelectArm &&
+        intent.kind != TeleopIntentKind::IncreaseStep &&
+        intent.kind != TeleopIntentKind::DecreaseStep &&
+        intent.kind != TeleopIntentKind::SetStep) {
+      input_status_.detail = "Replay owns TCP goals; press c to edit elbow";
+      return;
+    }
     if (const auto reset = cartesian_.apply(intent, dt)) {
       reset_request_ = reset;
     }
@@ -309,19 +434,33 @@ void NullspaceTargetSource::apply(const KeyboardAction &action, double dt) {
   }
 }
 
-void NullspaceTargetSource::captureLink4(ArmSide side) {
+void NullspaceTargetSource::captureLink4(ArmSide side,
+                                         ElbowTeleopEventKind kind) {
   link4_targets_.left_enabled = side == ArmSide::Left;
   link4_targets_.right_enabled = side == ArmSide::Right;
   mutableLink4Target(side) = side == ArmSide::Left ? executed_left_link4_
                                                    : executed_right_link4_;
   ++link4_targets_.revision;
+  recordElbowEvent(kind, side, link4Target(link4_targets_, side));
 }
 
 void NullspaceTargetSource::clearLink4() {
+  const auto held_side = heldLink4Side();
+  const Eigen::Vector3d held_target =
+      held_side.has_value() ? link4Target(link4_targets_, *held_side)
+                            : Eigen::Vector3d::Zero();
   link4_targets_.left_enabled = false;
   link4_targets_.right_enabled = false;
   ++link4_targets_.revision;
+  recordElbowEvent(ElbowTeleopEventKind::Clear, held_side, held_target);
   input_status_.detail = "Cleared held link4 target; press x again to exit";
+}
+
+void NullspaceTargetSource::recordElbowEvent(
+    ElbowTeleopEventKind kind, std::optional<ArmSide> side,
+    const Eigen::Vector3d &target) {
+  elbow_events_.push_back({kind, link4_targets_.revision, side, target});
+  ++elbow_edit_count_;
 }
 
 Eigen::Vector3d &NullspaceTargetSource::mutableLink4Target(ArmSide side) {
@@ -359,6 +498,18 @@ std::optional<ArmSide> NullspaceTargetSource::heldLink4Side() const noexcept {
   return std::nullopt;
 }
 
+double NullspaceTargetSource::stepMetres() const noexcept {
+  return cartesian_.stepMetres();
+}
+
+bool NullspaceTargetSource::replayElbowTeleopEnabled() const noexcept {
+  return replay_elbow_teleop_enabled_;
+}
+
+std::size_t NullspaceTargetSource::elbowEditCount() const noexcept {
+  return elbow_edit_count_;
+}
+
 bool NullspaceTargetSource::paused() const noexcept { return paused_; }
 
 bool NullspaceTargetSource::stopRequested() const noexcept {
@@ -371,12 +522,28 @@ const std::string &NullspaceTargetSource::status() const noexcept {
 
 std::string NullspaceTargetSource::headerContext() const {
   const auto held = heldLink4Side();
-  return std::string{"control="} + controlPointName(control_point_) +
-         "  held-link4=" + (held.has_value() ? armSideName(*held) : "none");
+  const std::string input_mode =
+      mode_ == KeyboardSourceMode::Replay
+          ? (replay_elbow_teleop_enabled_ ? "replay+elbow-teleop" : "replay")
+          : "keyboard-teleop";
+  return "input=" + input_mode + "  control=" +
+         controlPointName(control_point_) + "  selected=" +
+         armSideName(selectedSide()) + "  held-link4=" +
+         (held.has_value() ? armSideName(*held) : "none") + "  step=" +
+         fixed(stepMetres(), 4) + "m";
 }
 
 std::string NullspaceTargetSource::footerHints() const {
   if (mode_ == KeyboardSourceMode::Replay) {
+    if (replay_elbow_teleop_enabled_) {
+      if (paused_) {
+        return "Space resume · . step · elbow edits paused · ? help · Esc exit";
+      }
+      if (control_point_ == ControlPoint::Link4) {
+        return "c disable elbow · ←/→ arm · wasd/qe move · x clear · ? help";
+      }
+      return "Space pause · . step · c enable elbow · 1–8 pages · ? help";
+    }
     return "Space pause · . step · 1–8 pages · ? help · x exit";
   }
   if (control_point_ == ControlPoint::Link4) {
@@ -386,6 +553,18 @@ std::string NullspaceTargetSource::footerHints() const {
 }
 
 std::vector<std::string> NullspaceTargetSource::helpLines() const {
+  if (mode_ == KeyboardSourceMode::Replay) {
+    if (!replay_elbow_teleop_enabled_) {
+      return {"Space: pause/resume; .: single replay frame; x or Esc: exit",
+              "Replay elbow editing is disabled; enable --replay-elbow-teleop on"};
+    }
+    return {
+        "Replay: Space pauses/resumes; . advances one frame; Esc exits",
+        "Elbow: c enables/disables one link4 target; Left/Right selects its arm",
+        "Elbow: w/s +/-x; a/d +/-y; q/e +/-z in base_link",
+        "Elbow: Up/Down or m changes step; r captures executed link4; x clears/exits",
+        "Paused replay accepts navigation and replay controls, not elbow edits"};
+  }
   return {
       "Arrow Left/Right: select arm; c: switch TCP/link4 edit focus",
       "w/s: +/-x; a/d: +/-y; q/e: +/-z; Arrow Up/Down or m: step size",
@@ -433,6 +612,13 @@ std::optional<ArmSide> NullspaceTargetSource::consumeResetRequest() {
 std::vector<SourceControl> NullspaceTargetSource::consumeSourceControls() {
   auto result = std::move(source_controls_);
   source_controls_.clear();
+  return result;
+}
+
+std::vector<ElbowTeleopEvent>
+NullspaceTargetSource::consumeElbowTeleopEvents() {
+  auto result = std::move(elbow_events_);
+  elbow_events_.clear();
   return result;
 }
 

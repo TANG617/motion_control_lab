@@ -38,6 +38,22 @@ struct NullspaceTargetSourceUpdate {
   std::vector<KeyEvent> navigation;
 };
 
+enum class ElbowTeleopEventKind {
+  Capture,
+  Move,
+  SwitchSide,
+  Clear,
+};
+
+const char *elbowTeleopEventName(ElbowTeleopEventKind kind);
+
+struct ElbowTeleopEvent {
+  ElbowTeleopEventKind kind{ElbowTeleopEventKind::Capture};
+  std::uint64_t revision{0};
+  std::optional<ArmSide> side;
+  Eigen::Vector3d target{Eigen::Vector3d::Zero()};
+};
+
 class NullspaceTargetSource {
 public:
   NullspaceTargetSource(TerminalFrontend &terminal, KeyboardSourceMode mode,
@@ -45,7 +61,8 @@ public:
                         std::vector<ArmTarget> initial_targets,
                         const Eigen::Vector3d &initial_left_link4,
                         const Eigen::Vector3d &initial_right_link4,
-                        bool allow_side_switching);
+                        bool allow_side_switching,
+                        bool replay_elbow_teleop_enabled = false);
 
   NullspaceTargetSourceUpdate poll(double dt);
   void handleSourceEvent(const KeyEvent &event, double dt);
@@ -55,6 +72,9 @@ public:
   ArmSide selectedSide() const noexcept;
   ControlPoint controlPoint() const noexcept;
   std::optional<ArmSide> heldLink4Side() const noexcept;
+  double stepMetres() const noexcept;
+  bool replayElbowTeleopEnabled() const noexcept;
+  std::size_t elbowEditCount() const noexcept;
   bool paused() const noexcept;
   bool stopRequested() const noexcept;
   const std::string &status() const noexcept;
@@ -69,17 +89,24 @@ public:
   void setTargetPose(ArmSide side, const Pose &pose, std::string status);
   std::optional<ArmSide> consumeResetRequest();
   std::vector<SourceControl> consumeSourceControls();
+  std::vector<ElbowTeleopEvent> consumeElbowTeleopEvents();
 
 private:
+  bool capturingText() const noexcept;
+  bool handleReplayElbowEvent(const KeyEvent &event, double dt);
   void apply(const KeyboardAction &action, double dt);
-  void captureLink4(ArmSide side);
+  void captureLink4(ArmSide side, ElbowTeleopEventKind kind);
   void clearLink4();
+  void recordElbowEvent(ElbowTeleopEventKind kind,
+                        std::optional<ArmSide> side,
+                        const Eigen::Vector3d &target);
   Eigen::Vector3d &mutableLink4Target(ArmSide side);
 
   TerminalFrontend &terminal_;
   KeyboardSourceMode mode_;
   KeyRouter router_;
   KeyboardTeleop keyboard_;
+  KeyboardTeleop elbow_keyboard_{KeyboardSourceMode::Teleop};
   CartesianTeleop cartesian_;
   InputStatus input_status_;
   Link4TargetSnapshot link4_targets_;
@@ -89,9 +116,12 @@ private:
   bool paused_{false};
   bool stop_requested_{false};
   bool motion_input_enabled_{true};
+  bool replay_elbow_teleop_enabled_{false};
+  std::size_t elbow_edit_count_{0U};
   std::string motion_input_disabled_status_{"Motion controls disabled"};
   std::optional<ArmSide> reset_request_;
   std::vector<SourceControl> source_controls_;
+  std::vector<ElbowTeleopEvent> elbow_events_;
 };
 
 struct NullspaceTuiDebug {

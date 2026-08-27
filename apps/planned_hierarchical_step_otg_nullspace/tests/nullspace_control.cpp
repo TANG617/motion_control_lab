@@ -86,5 +86,154 @@ int main() {
           "first x did not clear link4 without exiting");
   source.handleSourceEvent(character('x'), 0.01);
   require(source.stopRequested(), "second x did not exit after link4 clear");
+
+  mcl::TerminalFrontend disabled_teleop_terminal({false, false});
+  app::NullspaceTargetSource disabled_teleop(
+      disabled_teleop_terminal, mcl::KeyboardSourceMode::Teleop, options,
+      {{mcl::ArmSide::Left, mcl::Pose::Identity()},
+       {mcl::ArmSide::Right, mcl::Pose::Identity()}},
+      Eigen::Vector3d{1.0, 2.0, 3.0}, Eigen::Vector3d{-1.0, -2.0, -3.0},
+      true);
+  const auto disabled_tcp_revision = disabled_teleop.targetFrame().revision;
+  disabled_teleop.setMotionInputEnabled(false, "fault hold");
+  disabled_teleop.handleSourceEvent(character('w'), 0.01);
+  require(disabled_teleop.targetFrame().revision == disabled_tcp_revision,
+          "disabled teleop motion changed the TCP target");
+
+  mcl::TerminalFrontend replay_disabled_terminal({false, false});
+  app::NullspaceTargetSource replay_disabled(
+      replay_disabled_terminal, mcl::KeyboardSourceMode::Replay, options,
+      {{mcl::ArmSide::Left, mcl::Pose::Identity()},
+       {mcl::ArmSide::Right, mcl::Pose::Identity()}},
+      Eigen::Vector3d{1.0, 2.0, 3.0}, Eigen::Vector3d{-1.0, -2.0, -3.0},
+      true, false);
+  replay_disabled.setMotionInputEnabled(false,
+                                        "Replay motion editing is disabled");
+  replay_disabled.handleSourceEvent(character('c'), 0.01);
+  replay_disabled.handleSourceEvent(character('w'), 0.01);
+  require(replay_disabled.controlPoint() == app::ControlPoint::Tcp &&
+              replay_disabled.link4Targets().revision == 0U &&
+              replay_disabled.elbowEditCount() == 0U,
+          "feature-off replay accepted elbow edits");
+  replay_disabled.handleSourceEvent(character(' '), 0.01);
+  const auto disabled_controls = replay_disabled.consumeSourceControls();
+  require(disabled_controls.size() == 1U &&
+              disabled_controls.front() == mcl::SourceControl::TogglePause &&
+              replay_disabled.paused(),
+          "feature-off replay pause control regressed");
+
+  mcl::TerminalFrontend replay_terminal({false, false});
+  app::NullspaceTargetSource replay(
+      replay_terminal, mcl::KeyboardSourceMode::Replay, options,
+      {{mcl::ArmSide::Left, mcl::Pose::Identity()},
+       {mcl::ArmSide::Right, mcl::Pose::Identity()}},
+      Eigen::Vector3d{1.0, 2.0, 3.0}, Eigen::Vector3d{-1.0, -2.0, -3.0},
+      true, true);
+  const auto replay_tcp_revision = replay.targetFrame().revision;
+  replay.handleSourceEvent(character('c'), 0.01);
+  replay.handleSourceEvent(character('w'), 0.01);
+  require(replay.controlPoint() == app::ControlPoint::Link4 &&
+              replay.link4Targets().left_enabled &&
+              !replay.link4Targets().right_enabled &&
+              replay.link4Targets().left.x() == 1.005 &&
+              replay.targetFrame().revision == replay_tcp_revision,
+          "live replay elbow edit changed the wrong target state");
+  auto replay_events = replay.consumeElbowTeleopEvents();
+  require(replay_events.size() == 2U &&
+              replay_events.at(0).kind == app::ElbowTeleopEventKind::Capture &&
+              replay_events.at(1).kind == app::ElbowTeleopEventKind::Move,
+          "live replay elbow events were not recorded");
+
+  replay.setExecutedLink4Positions(Eigen::Vector3d{4.0, 5.0, 6.0},
+                                   Eigen::Vector3d{-4.0, -5.0, -6.0});
+  replay.handleSourceEvent({mcl::KeyCode::ArrowRight, '\0'}, 0.01);
+  require(!replay.link4Targets().left_enabled &&
+              replay.link4Targets().right_enabled &&
+              replay.link4Targets().right.isApprox(
+                  Eigen::Vector3d{-4.0, -5.0, -6.0}),
+          "live replay arm switch did not preserve single-side activation");
+  replay_events = replay.consumeElbowTeleopEvents();
+  require(replay_events.size() == 1U &&
+              replay_events.front().kind ==
+                  app::ElbowTeleopEventKind::SwitchSide,
+          "live replay side-switch event was not recorded");
+
+  replay.handleSourceEvent(character('m'), 0.01);
+  replay.handleSourceEvent(character('0'), 0.01);
+  replay.handleSourceEvent(character('.'), 0.01);
+  replay.handleSourceEvent(character('0'), 0.01);
+  replay.handleSourceEvent(character('1'), 0.01);
+  replay.handleSourceEvent({mcl::KeyCode::Enter, '\0'}, 0.01);
+  require(replay.stepMetres() == 0.01 &&
+              replay.consumeSourceControls().empty(),
+          "replay elbow numeric step entry collided with single-step");
+
+  replay.handleSourceEvent(character(' '), 0.01);
+  auto replay_controls = replay.consumeSourceControls();
+  require(replay_controls.size() == 1U &&
+              replay_controls.front() == mcl::SourceControl::TogglePause &&
+              replay.paused(),
+          "hybrid replay pause control regressed");
+  const auto paused_revision = replay.link4Targets().revision;
+  const auto paused_target = replay.link4Targets().right;
+  replay.handleSourceEvent(character('w'), 0.01);
+  replay.handleSourceEvent(character('r'), 0.01);
+  replay.handleSourceEvent(character('c'), 0.01);
+  require(replay.link4Targets().revision == paused_revision &&
+              replay.link4Targets().right.isApprox(paused_target) &&
+              replay.controlPoint() == app::ControlPoint::Link4 &&
+              replay.consumeElbowTeleopEvents().empty(),
+          "paused replay mutated the elbow target");
+  replay.handleSourceEvent(character('.'), 0.01);
+  replay_controls = replay.consumeSourceControls();
+  require(replay_controls.size() == 1U &&
+              replay_controls.front() == mcl::SourceControl::Step,
+          "hybrid replay single-frame control regressed");
+  replay.handleSourceEvent(character(' '), 0.01);
+  (void)replay.consumeSourceControls();
+  replay.handleSourceEvent(character('w'), 0.01);
+  require(replay.link4Targets().right.x() == paused_target.x() + 0.01,
+          "resumed replay did not apply the configured elbow step");
+
+  require(replay.headerContext().find("replay+elbow-teleop") !=
+                  std::string::npos &&
+              replay.headerContext().find("step=0.0100m") !=
+                  std::string::npos &&
+              replay.footerHints().find("c disable elbow") !=
+                  std::string::npos &&
+              replay.helpLines().at(1).find("enables/disables") !=
+                  std::string::npos &&
+              replay.helpLines().back().find("Paused replay") !=
+                  std::string::npos,
+          "hybrid replay TUI context is not discoverable");
+  replay.handleSourceEvent(character('c'), 0.01);
+  require(replay.controlPoint() == app::ControlPoint::Tcp &&
+              !replay.link4Targets().left_enabled &&
+              !replay.link4Targets().right_enabled &&
+              !replay.stopRequested(),
+          "hybrid replay c did not disable the elbow target");
+  replay_events = replay.consumeElbowTeleopEvents();
+  require(replay_events.size() == 2U &&
+              replay_events.front().kind ==
+                  app::ElbowTeleopEventKind::Move &&
+              replay_events.back().kind == app::ElbowTeleopEventKind::Clear,
+          "hybrid replay c disable event was not recorded");
+  replay.handleSourceEvent(character('c'), 0.01);
+  require(replay.controlPoint() == app::ControlPoint::Link4 &&
+              !replay.link4Targets().left_enabled &&
+              replay.link4Targets().right_enabled,
+          "hybrid replay c did not recapture and enable the elbow target");
+  replay_events = replay.consumeElbowTeleopEvents();
+  require(replay_events.size() == 1U &&
+              replay_events.front().kind ==
+                  app::ElbowTeleopEventKind::Capture,
+          "hybrid replay c enable event was not recorded");
+  replay.handleSourceEvent(character('x'), 0.01);
+  require(!replay.link4Targets().left_enabled &&
+              !replay.link4Targets().right_enabled &&
+              !replay.stopRequested(),
+          "hybrid replay x did not clear elbow before exit");
+  replay.handleSourceEvent(character('x'), 0.01);
+  require(replay.stopRequested(), "hybrid replay x did not exit after clear");
   return EXIT_SUCCESS;
 }

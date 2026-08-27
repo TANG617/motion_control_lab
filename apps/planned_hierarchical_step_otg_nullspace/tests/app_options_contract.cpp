@@ -25,7 +25,8 @@ int main() {
       defaults.solver.elbow_servo_gain_per_s != 10.0 ||
       defaults.solver.elbow_preservation_tolerance_mps != 5.0e-4 ||
       defaults.solver.yellow_maximum_iterations != 1 ||
-      defaults.robot.inactive_joint_names.size() != 2U ||
+      defaults.solver.red_proxqp_maximum_iterations != 200 ||
+      !defaults.robot.inactive_joint_names.empty() ||
       defaults.robot.joint_stream.joint_names.size() != 20U ||
       defaults.robot.joint_stream.max_acceleration_rad_per_s2[10] != 24.3 ||
       defaults.robot.self_collision_link_pairs.size() != 4U ||
@@ -60,6 +61,7 @@ int main() {
   const auto planned = app::parseOptions(6, planned_argv);
   if (planned.joint_target.mode != app::JointTargetMode::IkPv ||
       !planned.replay_trace_enabled ||
+      planned.replay_elbow_teleop_enabled ||
       planned.interactive.red_rate_hz != 1000.0 ||
       planned.interactive.yellow_rate_hz != 100.0 ||
       planned.planning.cartesian_synchronization !=
@@ -96,7 +98,8 @@ int main() {
                       replay_trace_off};
   const auto replay_options = app::parseOptions(14, replay_argv);
   if (replay_options.source_mode != app::SourceMode::Replay ||
-      replay_options.replay_trace_enabled) {
+      replay_options.replay_trace_enabled ||
+      replay_options.replay_elbow_teleop_enabled) {
     return EXIT_FAILURE;
   }
   char replay_trace_invalid[] = "sometimes";
@@ -108,6 +111,62 @@ int main() {
     invalid_replay_trace_rejected = true;
   }
   if (!invalid_replay_trace_rejected) {
+    return EXIT_FAILURE;
+  }
+  replay_argv[13] = replay_trace_off;
+
+  char execution_option[] = "--execution-mode";
+  char realtime[] = "realtime";
+  char terminal_input_option[] = "--terminal-input";
+  char on[] = "on";
+  char elbow_teleop_option[] = "--replay-elbow-teleop";
+  char *interactive_replay_argv[]{
+      program,               replay,
+      urdf_option,           urdf,
+      input_option,          input,
+      left_stream_option,    left_stream,
+      right_stream_option,   right_stream,
+      target_period_option,  target_period,
+      execution_option,      realtime,
+      terminal_input_option, on,
+      elbow_teleop_option,   on};
+  const auto interactive_replay = app::parseOptions(18, interactive_replay_argv);
+  if (!interactive_replay.replay_elbow_teleop_enabled ||
+      !interactive_replay.replay->terminal_input_enabled ||
+      interactive_replay.replay->execution_mode !=
+          motion_control_lab::data::ExecutionMode::Realtime) {
+    return EXIT_FAILURE;
+  }
+
+  auto expectPlannedFailure = [&](int argc, char **argv) {
+    try {
+      (void)app::parseOptions(argc, argv);
+      return false;
+    } catch (const std::runtime_error &) {
+      return true;
+    }
+  };
+  char off[] = "off";
+  char batch[] = "batch";
+  interactive_replay_argv[15] = off;
+  if (!expectPlannedFailure(18, interactive_replay_argv)) {
+    return EXIT_FAILURE;
+  }
+  interactive_replay_argv[15] = on;
+  interactive_replay_argv[13] = batch;
+  if (!expectPlannedFailure(18, interactive_replay_argv)) {
+    return EXIT_FAILURE;
+  }
+  interactive_replay_argv[13] = realtime;
+  char sometimes[] = "sometimes";
+  interactive_replay_argv[17] = sometimes;
+  if (!expectPlannedFailure(18, interactive_replay_argv)) {
+    return EXIT_FAILURE;
+  }
+  interactive_replay_argv[17] = on;
+  char *teleop_elbow_argv[]{program, teleop, urdf_option, urdf,
+                            elbow_teleop_option, on};
+  if (!expectPlannedFailure(6, teleop_elbow_argv)) {
     return EXIT_FAILURE;
   }
 
@@ -141,6 +200,8 @@ int main() {
   return help.str().find("default: 1000") != std::string::npos &&
                  help.str().find("default: 100") != std::string::npos &&
                  help.str().find("--start-paused") != std::string::npos &&
+                 help.str().find("--replay-elbow-teleop") !=
+                     std::string::npos &&
                  help.str().find("--replay-trace") != std::string::npos &&
                  help.str().find("--elbow-task-weight") != std::string::npos &&
                  help.str().find("c: switch TCP/link4") != std::string::npos &&

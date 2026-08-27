@@ -176,7 +176,7 @@ int main()
   frame.self_collisions.push_back(std::move(collision));
 
   mcl::PlannedGroupedJointOtgTuiDebug app;
-  app.source_mode = "mcap replay";
+  app.source_mode = "mcap replay + elbow teleop";
   app.target_mode = "future-o1-pv";
   app.feedback_topology = "split IK reference / OTG execution";
   app.left_task_scale = 0.9;
@@ -250,9 +250,17 @@ int main()
   snapshot.title = "Planned OTG Null-space";
   snapshot.input_status = "paused";
   snapshot.extra_pages = {nsapp::makeNullspaceTuiPage(nullspace)};
-  snapshot.header_context = "control=link4  held-link4=right";
-  snapshot.footer_hints = "c TCP/link4 · x clear · Esc exit · ? help";
-  snapshot.help_lines = {"c: switch TCP/link4 edit focus"};
+  snapshot.header_context =
+      "input=replay+elbow-teleop  control=link4  selected=right  "
+      "held-link4=right  step=0.0050m";
+  snapshot.footer_hints =
+      "c disable elbow · ←/→ arm · wasd/qe move · x clear · ? help";
+  snapshot.help_lines = {
+      "Replay: Space pauses/resumes; . advances one frame; Esc exits",
+      "Elbow: c enables/disables one link4 target; Left/Right selects its arm",
+      "Elbow: w/s +/-x; a/d +/-y; q/e +/-z in base_link",
+      "Elbow: Up/Down or m changes step; r captures executed link4; x clears/exits",
+      "Paused replay accepts navigation and replay controls, not elbow edits"};
   const auto document = mcl::makePlannedGroupedTuiDocument(snapshot);
 
   const std::vector<std::string> expected_titles{
@@ -261,11 +269,26 @@ int main()
   require(document.pages.size() == expected_titles.size(), "projection must produce eight pages");
   require(document.footer_hints.find("? help") != std::string::npos,
           "footer must expose the conventional help key");
-  require(document.header_left.find("control=link4") != std::string::npos,
-          "header must expose the edit focus");
-  require(document.help_lines.size() == 2U &&
-              document.help_lines.back().find("TCP/link4") != std::string::npos,
-          "help must use the app-local null-space key map");
+  require(document.header_right.find("mcap replay + elbow teleop") !=
+              std::string::npos &&
+              document.header_left.find("input=replay+elbow-teleop") !=
+                  std::string::npos &&
+              document.header_left.find("control=link4") != std::string::npos &&
+              document.header_left.find("selected=right") !=
+                  std::string::npos &&
+              document.header_left.find("step=0.0050m") != std::string::npos,
+          "80-column header context must expose hybrid replay state");
+  require(document.help_lines.size() == 6U &&
+              document.help_lines.at(1).find("Space") != std::string::npos &&
+              document.help_lines.at(2).find("enables/disables") !=
+                  std::string::npos &&
+              document.help_lines.at(3).find("base_link") !=
+                  std::string::npos &&
+              document.help_lines.at(4).find("captures executed link4") !=
+                  std::string::npos &&
+              document.help_lines.back().find("not elbow edits") !=
+                  std::string::npos,
+          "help must expose the complete app-local hybrid replay key map");
   for (std::size_t index = 0U; index < expected_titles.size(); ++index) {
     require(document.pages[index].title == expected_titles[index], "page order mismatch");
   }
@@ -300,6 +323,14 @@ int main()
   require(nullspace_page.responsive_layouts.at(2).sections.front().title ==
               "Selected-side null-space evidence",
           "narrow layout must retain selected-side evidence");
+  const auto &narrow_evidence =
+      nullspace_page.responsive_layouts.at(2).sections.front().tables.front();
+  require(narrow_evidence.rows.at(0).at(1) == "right" &&
+              narrow_evidence.rows.at(3).at(0) ==
+                  "Link4 executed error [m]" &&
+              narrow_evidence.rows.at(7).at(0) == "Primary drift" &&
+              narrow_evidence.rows.at(8).at(0) == "Secondary",
+          "60-column layout must retain selected-side elbow and Primary evidence");
 
   const auto & overview_cartesian = section(overview, "Cartesian tracking");
   require(overview_cartesian.row == 0U && overview_cartesian.column == 0U &&

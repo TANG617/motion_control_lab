@@ -43,6 +43,7 @@ exec "${lab_root}/scripts/launch_app.sh" "${binary}" replay --urdf "${urdf}" \
   --max-angular-jerk-rps3 "${MCL_MAX_ANGULAR_JERK_RPS3:-300.0}" \
   --ui "${MCL_UI:-tui}" \
   --terminal-input "${MCL_TERMINAL_INPUT:-on}" \
+  --replay-elbow-teleop "${MCL_REPLAY_ELBOW_TELEOP:-on}" \
   --replay-trace "${MCL_REPLAY_TRACE:-on}" \
   --viz "${MCL_VIZ:-foxglove}" \
   --host "${MCL_VIZ_HOST:-127.0.0.1}" \

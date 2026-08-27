@@ -1123,6 +1123,25 @@ std::string traceStdVector(const std::vector<double> &values) {
   return output.str();
 }
 
+std::string elbowTeleopEventDetail(
+    const mcl::planned_hierarchical_step_otg_nullspace::ElbowTeleopEvent &event,
+    std::uint64_t run_time_ns, std::optional<std::size_t> replay_source_index) {
+  std::ostringstream output;
+  output << "action=" << elbowTeleopEventName(event.kind)
+         << " revision=" << event.revision << " run_time_ns=" << run_time_ns
+         << " replay_source_index=";
+  if (replay_source_index.has_value()) {
+    output << *replay_source_index;
+  } else {
+    output << "none";
+  }
+  output << " side="
+         << (event.side.has_value() ? mcl::armSideName(*event.side) : "none")
+         << " target_xyz_m=[" << std::setprecision(17) << event.target.x()
+         << ',' << event.target.y() << ',' << event.target.z() << ']';
+  return output.str();
+}
+
 std::string tracePose(const mcc::Pose &pose) {
   const Eigen::Quaterniond orientation(pose.linear());
   std::ostringstream output;
@@ -1819,10 +1838,15 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
                               {{mcl::ArmSide::Left, initial_target.left},
                                {mcl::ArmSide::Right, initial_target.right}},
                               initial_link4_target.left,
-                              initial_link4_target.right, true);
+                              initial_link4_target.right, true,
+                              planned_options.replay_elbow_teleop_enabled);
   mcl::PlannedGroupedTui tui(options.presentation);
   if (planned_options.source_mode == SourceMode::Replay) {
-    input.setMotionInputEnabled(false, "Replay motion editing is disabled");
+    if (!planned_options.replay_elbow_teleop_enabled) {
+      input.setMotionInputEnabled(false, "Replay motion editing is disabled");
+    } else {
+      input.setStatus("Replay owns TCP goals; press c to edit elbow");
+    }
     if (planned_options.start_paused) {
       input.setPaused(true, "Replay timeline paused; press space to start");
     }
@@ -1877,7 +1901,14 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
            "joint_planner_state,joint_trajectory_duration_s,"
            "joint_plan_time_ms,joint_step_time_ms,projection_events,"
            "projection_event_count,projection_cycle_count,deadline_miss_count,"
-           "skipped_release_count,replay_settled_cycles\n";
+           "skipped_release_count,replay_settled_cycles,elbow_revision,"
+           "elbow_active_side,elbow_left_enabled,elbow_right_enabled,"
+           "elbow_target_left_xyz,elbow_target_right_xyz,elbow_raw_left_xyz,"
+           "elbow_raw_right_xyz,elbow_executed_left_xyz,"
+           "elbow_executed_right_xyz,elbow_left_raw_error_m,"
+           "elbow_right_raw_error_m,elbow_left_executed_error_m,"
+           "elbow_right_executed_error_m,primary_maximum_preservation_drift,"
+           "elbow_task_error_m,replay_source_index\n";
   }
 
   visualization_sink->open();
@@ -2044,11 +2075,36 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
     }
 
     const auto makeReplayRow = [&](std::uint64_t attempt_revision) {
-      std::vector<std::string> row(48U);
+      std::vector<std::string> row(65U);
       row[0] = std::to_string(attempt_revision);
       row[14] =
           mcl::planned_hierarchical_step_otg_nullspace::jointTargetModeName(
               planned_options.joint_target.mode);
+      row[48] = std::to_string(link4_target.revision);
+      row[49] = link4_target.left_enabled
+                    ? "left"
+                    : (link4_target.right_enabled ? "right" : "none");
+      row[50] = link4_target.left_enabled ? "true" : "false";
+      row[51] = link4_target.right_enabled ? "true" : "false";
+      row[52] = traceEigenVector(link4_target.left);
+      row[53] = traceEigenVector(link4_target.right);
+      row[54] = traceEigenVector(output.raw_left_link4_pose.translation());
+      row[55] = traceEigenVector(output.raw_right_link4_pose.translation());
+      row[56] = traceEigenVector(output.left_link4_pose.translation());
+      row[57] = traceEigenVector(output.right_link4_pose.translation());
+      row[58] = std::to_string(
+          (link4_target.left - output.raw_left_link4_pose.translation()).norm());
+      row[59] = std::to_string(
+          (link4_target.right - output.raw_right_link4_pose.translation()).norm());
+      row[60] = std::to_string(
+          (link4_target.left - output.left_link4_pose.translation()).norm());
+      row[61] = std::to_string(
+          (link4_target.right - output.right_link4_pose.translation()).norm());
+      row[62] = std::to_string(output.primary_maximum_preservation_drift);
+      row[63] = std::to_string(output.link4_task_error_m);
+      row[64] = target.replay_source_index.has_value()
+                    ? std::to_string(*target.replay_source_index)
+                    : "";
       if (!loaded_replay.has_value() ||
           !target.replay_source_index.has_value()) {
         return row;
@@ -2722,6 +2778,7 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
   std::optional<RedAttemptSnapshot> last_recoverable_rejection;
   std::optional<mcl::GroupedWorkerFault> held_fault;
   std::optional<std::string> pending_fault_event;
+  std::vector<TelemetryRecord> ui_telemetry_records;
   std::uint64_t handled_rejected_target_revision = 0;
   std::size_t publish_count = 0;
   bool replay_completed = false;
@@ -2756,7 +2813,9 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
   frame.self_collisions = {initial_collision_debug};
   mcl::PlannedGroupedJointOtgTuiDebug tui_debug;
   tui_debug.source_mode = planned_options.source_mode == SourceMode::Replay
-                              ? "mcap replay"
+                              ? (planned_options.replay_elbow_teleop_enabled
+                                     ? "mcap replay + elbow teleop"
+                                     : "mcap replay")
                               : "keyboard teleop";
   tui_debug.target_mode =
       mcl::planned_hierarchical_step_otg_nullspace::jointTargetModeName(
@@ -2876,12 +2935,31 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
             false, std::string{"FAULT HOLD: "} +
                        mcl::workerGroupName(recorded_fault->group) + " " +
                        mcl::workerFailureName(recorded_fault->failure));
+        if (planned_options.source_mode == SourceMode::Replay &&
+            !options.presentation.enabled) {
+          break;
+        }
       }
     }
 
     const auto input_update = input.poll(schedule->dt);
     for (const auto &event : input_update.navigation) {
       tui.handleNavigation(event);
+    }
+    for (const auto &event : input.consumeElbowTeleopEvents()) {
+      if (!telemetry_enabled) {
+        continue;
+      }
+      const auto stamp = telemetry_clock->sample();
+      const auto source_index = replay_source.has_value()
+                                    ? std::optional<std::size_t>{
+                                          replay_source->sourceIndex()}
+                                    : std::nullopt;
+      ui_telemetry_records.push_back(TelemetryRecord::log(
+          stamp, contracts::mcl_telemetry_v1::kEventsTopic,
+          motion_control::viz::LogLevel::Info,
+          std::string{"elbow-teleop-"} + elbowTeleopEventName(event.kind),
+          elbowTeleopEventDetail(event, stamp.run_time_ns, source_index)));
     }
     if (!held_fault.has_value()) {
       if (const auto reset_side = input.consumeResetRequest()) {
@@ -3340,9 +3418,13 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
         const std::size_t queue_depth =
             red_telemetry->depth() + yellow_telemetry->depth();
         std::vector<TelemetryRecord> records;
-        records.reserve(queue_depth);
+        records.reserve(queue_depth + ui_telemetry_records.size());
         drainTelemetryQueue(*red_telemetry, records);
         drainTelemetryQueue(*yellow_telemetry, records);
+        for (auto &record : ui_telemetry_records) {
+          records.push_back(std::move(record));
+        }
+        ui_telemetry_records.clear();
         double oldest_sample_age_ms = 0.0;
         for (const auto &record : records) {
           if (emit_stamp.timestamp_ns >= record.stamp.timestamp_ns) {
@@ -3372,8 +3454,11 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
           run_info.set_run_id(telemetry_run_id);
           run_info.set_app_id(kProgramId);
           run_info.set_source_mode(
-              planned_options.source_mode == SourceMode::Replay ? "replay"
-                                                                : "teleop");
+              planned_options.source_mode == SourceMode::Replay
+                  ? (planned_options.replay_elbow_teleop_enabled
+                         ? "replay+elbow-teleop"
+                         : "replay")
+                  : "teleop");
           run_info.set_base_frame_id(robot.base_frame);
           for (const auto &name : joint_names) {
             run_info.add_joint_names(name);
@@ -3395,6 +3480,13 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
                      latest_red_attempt.solver_debug.joint_limit_policy);
           add_option("joint_target_mode",
                      jointTargetModeName(planned_options.joint_target.mode));
+          add_option("replay_elbow_teleop",
+                     planned_options.replay_elbow_teleop_enabled ? "on"
+                                                                  : "off");
+          add_option("evidence_class",
+                     planned_options.replay_elbow_teleop_enabled
+                         ? "interactive-noncanonical"
+                         : "canonical-replay");
           add_option("cartesian_algorithm", "jerk_limited");
           add_option("joint_algorithm", "jerk_limited");
           add_option("cartesian_synchronization",
@@ -3733,6 +3825,8 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
          std::to_string(options.solver.elbow_servo_gain_per_s)},
         {"elbow_preservation_tolerance_mps",
          std::to_string(options.solver.elbow_preservation_tolerance_mps)},
+        {"red_proxqp_maximum_iterations",
+         std::to_string(options.solver.red_proxqp_maximum_iterations)},
         {"red_proxqp_absolute_tolerance",
          std::to_string(options.solver.red_proxqp_absolute_tolerance)},
         {"red_proxqp_primal_infeasibility_tolerance",
@@ -3752,10 +3846,59 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
         {"joint_target_mode",
          mcl::planned_hierarchical_step_otg_nullspace::jointTargetModeName(
              planned_options.joint_target.mode)},
+        {"replay_elbow_teleop",
+         planned_options.replay_elbow_teleop_enabled ? "on" : "off"},
+        {"evidence_class",
+         planned_options.replay_elbow_teleop_enabled
+             ? "interactive-noncanonical"
+             : "canonical-replay"},
         {"replay_trace", planned_options.replay_trace_enabled ? "on" : "off"},
     };
     auto manifest = replay::makeReplayManifest(
         *planned_options.replay, *loaded_replay, execution, trace_sha256);
+    manifest["execution"]["interactive_overlay"] =
+        planned_options.replay_elbow_teleop_enabled;
+    manifest["execution"]["canonical_replay"] =
+        !planned_options.replay_elbow_teleop_enabled;
+    auto &elbow_teleop = manifest["elbow_teleop"];
+    elbow_teleop["enabled"] = planned_options.replay_elbow_teleop_enabled;
+    elbow_teleop["reference_frame"] = robot.base_frame;
+    elbow_teleop["active_side_policy"] = "single-side";
+    elbow_teleop["edit_count"] = Json::UInt64(input.elbowEditCount());
+    const auto final_elbow_side = input.heldLink4Side();
+    elbow_teleop["final_active_side"] =
+        final_elbow_side.has_value() ? mcl::armSideName(*final_elbow_side)
+                                     : "none";
+    elbow_teleop["final_revision"] =
+        Json::UInt64(input.link4Targets().revision);
+    for (const double value : input.link4Targets().left) {
+      elbow_teleop["final_left_target_xyz_m"].append(value);
+    }
+    for (const double value : input.link4Targets().right) {
+      elbow_teleop["final_right_target_xyz_m"].append(value);
+    }
+    elbow_teleop["final_left_enabled"] =
+        input.link4Targets().left_enabled;
+    elbow_teleop["final_right_enabled"] =
+        input.link4Targets().right_enabled;
+    elbow_teleop["final_left_raw_error_m"] =
+        (input.link4Targets().left -
+         latest_output.raw_left_link4_pose.translation())
+            .norm();
+    elbow_teleop["final_right_raw_error_m"] =
+        (input.link4Targets().right -
+         latest_output.raw_right_link4_pose.translation())
+            .norm();
+    elbow_teleop["final_left_executed_error_m"] =
+        (input.link4Targets().left - latest_output.left_link4_pose.translation())
+            .norm();
+    elbow_teleop["final_right_executed_error_m"] =
+        (input.link4Targets().right -
+         latest_output.right_link4_pose.translation())
+            .norm();
+    elbow_teleop["final_task_error_m"] = latest_output.link4_task_error_m;
+    elbow_teleop["final_primary_maximum_preservation_drift"] =
+        latest_output.primary_maximum_preservation_drift;
     if (!planned_options.replay_trace_enabled) {
       manifest["artifacts"].removeMember("trace.csv");
     }

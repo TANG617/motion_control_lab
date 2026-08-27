@@ -44,15 +44,16 @@ int main(int argc, char **argv) {
     const app::RobotOptions options;
     const auto names = app::activeJointNames(robot, options);
     const auto indices = app::activeJointFullIndices(robot, options);
-    require(names.size() == 18U && indices.size() == 18U,
+    require(names.size() == 20U && indices.size() == 20U,
             "wrong active joint count");
     for (std::size_t index = 0; index < indices.size(); ++index) {
       require(names[index] ==
                   robot.joint_names[static_cast<std::size_t>(indices[index])],
               "active joint mapping mismatch");
-      require(indices[index] != 4 && indices[index] != 5,
-              "waist fixed joints were not excluded");
     }
+    require(std::find(indices.begin(), indices.end(), 4U) != indices.end() &&
+                std::find(indices.begin(), indices.end(), 5U) != indices.end(),
+            "default active joint policy unexpectedly excludes waist joints");
 
     auto custom_options = options;
     custom_options.inactive_joint_names = {"head_yaw_joint"};

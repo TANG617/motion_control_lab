@@ -39,6 +39,16 @@ bool optionIn(const std::string &option,
       [&](const char *candidate) { return option == candidate; });
 }
 
+bool parseOnOff(const std::string &argument, const std::string &value) {
+  if (value == "on") {
+    return true;
+  }
+  if (value == "off") {
+    return false;
+  }
+  throw std::runtime_error(argument + " must be either 'on' or 'off'");
+}
+
 bool parseSolverOption(const std::string &argument, const std::string &value,
                        SolverOptions &options) {
   const double parsed = parsePositiveDouble(argument, value);
@@ -216,6 +226,8 @@ void printPlannedUsage(const char *program, SourceMode source_mode) {
     std::cout << "\nReplay startup:\n"
               << "  --start-paused  Hold the replay at timeline zero until "
                  "space is pressed\n"
+              << "  --replay-elbow-teleop <on|off> Allow realtime link4 "
+                 "Secondary target editing (default: off)\n"
               << "  --replay-trace <on|off> Write detailed per-Red-tick "
                  "trace.csv (default: on)\n";
   }
@@ -385,14 +397,15 @@ Options parseOptions(int argc, char **argv) {
       if (result.source_mode != SourceMode::Replay) {
         throw std::runtime_error("--replay-trace is only valid with replay");
       }
-      const auto value = requireValue(index, argc, argv, argument);
-      if (value == "on") {
-        result.replay_trace_enabled = true;
-      } else if (value == "off") {
-        result.replay_trace_enabled = false;
-      } else {
-        throw std::runtime_error("--replay-trace must be either 'on' or 'off'");
+      result.replay_trace_enabled =
+          parseOnOff(argument, requireValue(index, argc, argv, argument));
+    } else if (argument == "--replay-elbow-teleop") {
+      if (result.source_mode != SourceMode::Replay) {
+        throw std::runtime_error(
+            "--replay-elbow-teleop is only valid with replay");
       }
+      result.replay_elbow_teleop_enabled =
+          parseOnOff(argument, requireValue(index, argc, argv, argument));
     } else if (argument == "--joint-target-mode") {
       const auto value = requireValue(index, argc, argv, argument);
       if (value == "future-o1-pv") {
@@ -475,6 +488,16 @@ Options parseOptions(int argc, char **argv) {
         result.replay->visualization_enabled;
     if (result.start_paused && !result.replay->terminal_input_enabled) {
       throw std::runtime_error("--start-paused requires --terminal-input on");
+    }
+    if (result.replay_elbow_teleop_enabled &&
+        !result.replay->terminal_input_enabled) {
+      throw std::runtime_error(
+          "--replay-elbow-teleop on requires --terminal-input on");
+    }
+    if (result.replay_elbow_teleop_enabled &&
+        result.replay->execution_mode != data::ExecutionMode::Realtime) {
+      throw std::runtime_error(
+          "--replay-elbow-teleop on requires --execution-mode realtime");
     }
   }
   return result;

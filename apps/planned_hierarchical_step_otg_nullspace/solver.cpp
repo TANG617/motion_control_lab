@@ -51,6 +51,8 @@ mcc::HierarchicalKinematicsSolverConfig makeRedConfig(const Options &options) {
   config.servo_period = 1.0 / app.red_rate_hz;
   config.joint_limit_policy =
       mcc::KinematicsJointLimitPolicy::ExplicitRequirements;
+  config.proxqp.maximum_iterations =
+      app.solver.red_proxqp_maximum_iterations;
   config.proxqp.absolute_tolerance = app.solver.red_proxqp_absolute_tolerance;
   config.proxqp.primal_infeasibility_tolerance =
       app.solver.red_proxqp_primal_infeasibility_tolerance;
