@@ -65,13 +65,17 @@ std::vector<TuiSection> nullspacePanels(const NullspaceTuiDebug &debug) {
         debug.secondary_attempted
             ? (debug.secondary_succeeded ? "succeeded" : "failed")
             : "not attempted"},
+       {"Tertiary pass",
+        debug.tertiary_attempted
+            ? (debug.tertiary_succeeded ? "succeeded" : "failed")
+            : "not attempted"},
        {"Highest priority", debug.highest_completed_priority},
        {"Fallback", debug.fallback_priority},
        {"Left primary scale", fixed(debug.left_task_scale)},
        {"Right primary scale", fixed(debug.right_task_scale)}},
       0U));
   sections.push_back(tableSection(
-      "Primary TCP preservation",
+      "TCP hierarchy status",
       {textColumn("Arm"), numberColumn("Position error [m]"),
        numberColumn("Orientation error [rad]")},
       {{"left", fixed(debug.left_tcp_position_error_m),
@@ -82,7 +86,7 @@ std::vector<TuiSection> nullspacePanels(const NullspaceTuiDebug &debug) {
         "tolerance " + fixed(debug.primary_preservation_tolerance)}},
       0U));
   sections.push_back(tableSection(
-      "Secondary objectives",
+      "Tertiary objectives",
       {textColumn("Objective"), textColumn("Enabled"),
        numberColumn("Weight"), numberColumn("Target error")},
       {{"left link4", yesNo(debug.link4_target.left_enabled),
@@ -91,9 +95,8 @@ std::vector<TuiSection> nullspacePanels(const NullspaceTuiDebug &debug) {
        {"right link4", yesNo(debug.link4_target.right_enabled),
         fixed(debug.link4_weight, 2),
         debug.link4_target.right_enabled ? fixed(debug.link4_task_error_m) : "-"},
-       {"Yellow qY posture", "yes", fixed(debug.yellow_weight, 2),
+       {"Yellow posture coupling", "yes", fixed(debug.yellow_weight, 2),
         fixed(debug.yellow_posture_error_rad)},
-       {"Tertiary", debug.tertiary_attempted ? "attempted" : "not attempted", "-", "-"},
        {"Terminal", debug.terminal_attempted ? "attempted" : "not attempted",
         "-", debug.terminal_status}},
       1U));

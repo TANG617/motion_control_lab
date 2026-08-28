@@ -70,6 +70,10 @@ std::string statusToken(const std::string & value)
   std::transform(value.begin(), value.end(), std::back_inserter(normalized), [](unsigned char c) {
     return static_cast<char>(std::tolower(c));
   });
+  if (normalized.find("not-run") != std::string::npos ||
+      normalized.find("not run") != std::string::npos) {
+    return "NOT RUN";
+  }
   if (normalized.find("maximum") != std::string::npos ||
       normalized.find("max_iter") != std::string::npos) {
     return "MAX_ITER";
@@ -404,7 +408,7 @@ TuiPage makeSolverPage(const IkDebugFrame & frame)
 {
   TuiPage page;
   page.title = "Solver";
-  page.rows = {{{1}, 1}, {{1}, 2}, {{3, 2}, 2}, {{1}, 1}};
+  page.rows = {{{1}, 1}, {{1}, 2}, {{3, 2}, 2}};
 
   std::vector<std::vector<std::string>> pass_rows;
   std::vector<RankedViolation> violations;
@@ -567,30 +571,102 @@ TuiPage makeSolverPage(const IkDebugFrame & frame)
   page.sections.push_back(sheet(
     "Attempt summary", std::move(attempt_columns), std::move(attempt_rows), 1U, 2U));
 
-  std::vector<std::vector<std::string>> task_rows;
-  for (const auto & solver : frame.solvers) {
-    for (const auto & scale : solver.task_scales) {
-      task_rows.push_back(
-        {solver.label, "task", scale.name, scale.active ? "active" : "idle",
-         fixed(scale.scale, 5), fixed(scale.cost, 5),
-         scale.degraded ? "degraded" : scale.stuck ? "stuck" : "-"});
+  return page;
+}
+
+bool acceptedEvidence(const std::string & evidence)
+{
+  return evidence == "last-accepted";
+}
+
+TuiPage makeRequirementsPage(const IkDebugFrame & frame)
+{
+  TuiPage page;
+  page.title = "Requirements";
+  page.rows = {{{1}, 1}, {{1}, 1}, {{1}, 1}, {{1}, 1}, {{1}, 1}, {{1}, 1}};
+
+  for (const bool accepted : {true, false}) {
+    const std::string partition = accepted ? "last accepted" : "failed candidate";
+    const std::size_t base_row = accepted ? 0U : 1U;
+
+    std::vector<std::vector<std::string>> scale_rows;
+    for (const auto & solver : frame.solvers) {
+      for (const auto & scale : solver.task_scales) {
+        if (acceptedEvidence(scale.evidence) != accepted) {
+          continue;
+        }
+        const std::string state = !scale.evaluated
+                                    ? "not-run"
+                                    : scale.stuck ? "stuck" : scale.degraded ? "degraded" : "full";
+        scale_rows.push_back(
+          {scale.evidence, solver.label, scale.pass, scale.name, state,
+           scale.evaluated ? fixed(scale.scale, 6) : "-",
+           scale.evaluated ? fixed(scale.cost, 7) : "-"});
+      }
     }
-    for (const auto & requirement : solver.requirements) {
-      task_rows.push_back(
-        {solver.label, "constraint", requirement.name,
-         requirement.active ? "active" : requirement.enabled ? "enabled" : "off",
-         fixed(requirement.maximum_violation, 7) + " " + requirement.unit,
-         fixed(requirement.cost, 5), requirement.source});
+    if (scale_rows.empty()) {
+      scale_rows.push_back(noneRow(7U));
     }
+    page.sections.push_back(sheet(
+      "Scale groups · " + partition,
+      {textColumn("Evidence", 20), textColumn("Solver", 8), textColumn("Pass", 10),
+       textColumn("Name", 42), textColumn("State", 9), numberColumn("Scale", 10),
+       numberColumn("Cost", 12)},
+      std::move(scale_rows), 0U, base_row));
+
+    std::vector<std::vector<std::string>> task_rows;
+    for (const auto & solver : frame.solvers) {
+      for (const auto & task : solver.tasks) {
+        if (acceptedEvidence(task.evidence) != accepted) {
+          continue;
+        }
+        task_rows.push_back(
+          {task.evidence, solver.label, task.pass, task.kind, task.enforcement,
+           task.name, task.state,
+           task.residual_available ? fixed(task.residual_norm, 7) : "-",
+           task.residual_available ? fixed(task.maximum_violation, 7) : "-",
+           task.cost_available ? fixed(task.cost, 7) : "-", task.unit});
+      }
+    }
+    if (task_rows.empty()) {
+      task_rows.push_back(noneRow(11U));
+    }
+    page.sections.push_back(sheet(
+      "Task costs · " + partition,
+      {textColumn("Evidence", 20), textColumn("Solver", 8), textColumn("Pass", 10),
+       textColumn("Kind", 11), textColumn("Enforcement", 12), textColumn("Name", 42),
+       textColumn("State", 9),
+       numberColumn("Residual", 12), numberColumn("Violation", 12), numberColumn("Cost", 12),
+       textColumn("Unit", 8)},
+      std::move(task_rows), 0U, base_row + 2U));
+
+    std::vector<std::vector<std::string>> constraint_rows;
+    for (const auto & solver : frame.solvers) {
+      for (const auto & constraint : solver.requirements) {
+        if (acceptedEvidence(constraint.evidence) != accepted) {
+          continue;
+        }
+        constraint_rows.push_back(
+          {constraint.evidence, solver.label, constraint.pass, constraint.kind,
+           constraint.name, constraint.source, constraint.component, constraint.side,
+           constraint.state,
+           constraint.slack_available ? fixed(constraint.minimum_slack, 9) : "-",
+           fixed(constraint.maximum_violation, 9),
+           constraint.cost_available ? fixed(constraint.cost, 7) : "-", constraint.unit});
+      }
+    }
+    if (constraint_rows.empty()) {
+      constraint_rows.push_back(noneRow(13U));
+    }
+    page.sections.push_back(sheet(
+      "Constraint status and slack · " + partition,
+      {textColumn("Evidence", 20), textColumn("Solver", 8), textColumn("Pass", 10),
+       textColumn("Kind", 14), textColumn("Name", 38), textColumn("Source", 18),
+       textColumn("Component", 22), textColumn("Side", 6),
+       textColumn("State", 9), numberColumn("Min slack", 13),
+       numberColumn("Max violation", 14), numberColumn("Cost", 12), textColumn("Unit", 8)},
+      std::move(constraint_rows), 0U, base_row + 4U));
   }
-  if (task_rows.empty()) {
-    task_rows.push_back(noneRow(7U));
-  }
-  page.sections.push_back(sheet(
-    "Tasks and constraints",
-    {textColumn("Solver"), textColumn("Type"), textColumn("Name"), textColumn("State"),
-     numberColumn("Scale / violation"), numberColumn("Cost"), textColumn("Source / flag")},
-    std::move(task_rows), 0U, 3U));
   return page;
 }
 
@@ -718,7 +794,6 @@ TuiDocument makeStandardIkTuiDocument(
   const std::string & title,
   const std::string & input_status)
 {
-  static_cast<void>(presentation);
   TuiDocument document;
   document.title = title;
   document.subtitle = "Sink " + sink_status + " · Pub " + std::to_string(publish_count);
@@ -745,6 +820,9 @@ TuiDocument makeStandardIkTuiDocument(
     document.pages.push_back(makeMotionPage(frame));
   }
   document.pages.push_back(makeSolverPage(frame));
+  if (presentation.requirements_page_enabled) {
+    document.pages.push_back(makeRequirementsPage(frame));
+  }
   document.pages.push_back(makeJointsPage(frame));
   document.pages.push_back(makeSystemPage(frame, input_status));
 

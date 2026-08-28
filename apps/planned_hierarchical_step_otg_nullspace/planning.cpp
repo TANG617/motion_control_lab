@@ -11,6 +11,8 @@ namespace {
 motion_control::core::TrajectorySynchronization
 toCoreSynchronization(PlanningSynchronization value) {
   switch (value) {
+  case PlanningSynchronization::None:
+    return motion_control::core::TrajectorySynchronization::None;
   case PlanningSynchronization::Time:
     return motion_control::core::TrajectorySynchronization::Time;
   case PlanningSynchronization::Phase:

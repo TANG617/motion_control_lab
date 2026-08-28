@@ -18,18 +18,25 @@ int main() {
   if (defaults.red_rate_hz != 1000.0 || defaults.yellow_rate_hz != 100.0 ||
       defaults.ui_rate_hz != 100.0 ||
       defaults.deadline_policy != motion_control_lab::DeadlinePolicy::Strict ||
-      defaults.solver.red_primary_task_tcp_preservation_tolerance != 5.0e-4 ||
+      defaults.solver.red_primary_task_tcp_position_preservation_tolerance_mps !=
+          5.0e-4 ||
       defaults.solver
-              .red_primary_task_cartesian_progress_preservation_tolerance !=
+              .red_primary_task_tcp_position_progress_preservation_tolerance !=
           1.0e-4 ||
       defaults.solver
-              .red_secondary_task_yellow_posture_coupling_preservation_tolerance !=
+              .red_secondary_task_tcp_orientation_preservation_tolerance_radps !=
+          5.0e-4 ||
+      defaults.solver
+              .red_secondary_task_tcp_orientation_progress_preservation_tolerance !=
+          1.0e-4 ||
+      defaults.solver
+              .red_tertiary_task_yellow_posture_coupling_preservation_tolerance !=
           1.0e-5 ||
-      defaults.solver.red_secondary_task_link4_position_weight != 100.0 ||
-      defaults.solver.red_secondary_task_link4_position_servo_gain_per_s !=
+      defaults.solver.red_tertiary_task_link4_position_weight != 100.0 ||
+      defaults.solver.red_tertiary_task_link4_position_servo_gain_per_s !=
           10.0 ||
       defaults.solver
-              .red_secondary_task_link4_position_preservation_tolerance_mps !=
+              .red_tertiary_task_link4_position_preservation_tolerance_mps !=
           5.0e-4 ||
       defaults.solver.yellow_maximum_iterations != 1 ||
       defaults.solver.red_proxqp_maximum_iterations != 200 ||
@@ -50,25 +57,36 @@ int main() {
   char collision_option[] =
       "--yellow-constraints-self-collision-avoidance-weight";
   char collision[] = "12";
-  char elbow_option[] = "--red-secondary-task-link4-position-weight";
+  char elbow_option[] = "--red-tertiary-task-link4-position-weight";
   char elbow[] = "125";
+  char joint_weights_option[] =
+      "--yellow-task-posture-preference-joint-weight-multipliers";
+  char joint_weights[] = "left_arm_joint6=2.5,torso_yaw_joint=0.25";
   char *custom_argv[]{program,       urdf_option, urdf,      red_option, red,
                       yellow_option, yellow,      ui_option, ui,
-                      collision_option, collision, elbow_option, elbow};
-  const auto custom = app::parseHierarchicalOptions(13, custom_argv);
+                      collision_option, collision, elbow_option, elbow,
+                      joint_weights_option, joint_weights};
+  const auto custom = app::parseHierarchicalOptions(15, custom_argv);
   if (custom.red_rate_hz != 200.0 || custom.yellow_rate_hz != 40.0 ||
       custom.presentation.enabled ||
       custom.solver.yellow_constraints_self_collision_avoidance_weight !=
           12.0 ||
-      custom.solver.red_secondary_task_link4_position_weight != 125.0) {
+      custom.solver.red_tertiary_task_link4_position_weight != 125.0 ||
+      custom.solver.yellow_task_posture_preference_joint_weight_multipliers.size() !=
+          2U ||
+      custom.solver.yellow_task_posture_preference_joint_weight_multipliers[0] !=
+          std::pair<std::string, double>{"left_arm_joint6", 2.5}) {
     return EXIT_FAILURE;
   }
 
   char teleop[] = "teleop";
   char mode_option[] = "--joint-target-mode";
   char mode[] = "ik-pv";
-  char *planned_argv[]{program, teleop, urdf_option, urdf, mode_option, mode};
-  const auto planned = app::parseOptions(6, planned_argv);
+  char synchronization_option[] = "--joint-synchronization";
+  char synchronization[] = "none";
+  char *planned_argv[]{program, teleop, urdf_option, urdf, mode_option, mode,
+                       synchronization_option, synchronization};
+  const auto planned = app::parseOptions(8, planned_argv);
   if (planned.joint_target.mode != app::JointTargetMode::IkPv ||
       !planned.replay_trace_enabled ||
       planned.replay_elbow_teleop_enabled ||
@@ -77,7 +95,9 @@ int main() {
       planned.planning.cartesian_synchronization !=
           app::PlanningSynchronization::Time ||
       planned.planning.joint_synchronization !=
-          app::PlanningSynchronization::Phase) {
+          app::PlanningSynchronization::None ||
+      app::makeJointPlannerConfig(planned.planning).synchronization !=
+          motion_control::core::TrajectorySynchronization::None) {
     return EXIT_FAILURE;
   }
 
@@ -198,8 +218,12 @@ int main() {
   char equal[] = "20";
   char *bad_rate_argv[]{program, urdf_option,   urdf, red_option,
                         equal,   yellow_option, equal};
+  char bad_joint_weights[] = "not_an_r1_joint=2";
+  char *bad_joint_weights_argv[]{program, urdf_option, urdf,
+                                  joint_weights_option, bad_joint_weights};
   if (!expectFailure(4, unknown_argv) || !expectFailure(4, missing_argv) ||
-      !expectFailure(5, bad_policy_argv) || !expectFailure(7, bad_rate_argv)) {
+      !expectFailure(5, bad_policy_argv) || !expectFailure(7, bad_rate_argv) ||
+      !expectFailure(5, bad_joint_weights_argv)) {
     return EXIT_FAILURE;
   }
 
@@ -214,10 +238,15 @@ int main() {
                      std::string::npos &&
                  help.str().find("--replay-trace") != std::string::npos &&
                  help.str().find(
-                     "--red-secondary-task-link4-position-weight") !=
+                     "--red-tertiary-task-link4-position-weight") !=
+                     std::string::npos &&
+                 help.str().find(
+                     "--yellow-task-posture-preference-joint-weight-multipliers") !=
                      std::string::npos &&
                  help.str().find("c: switch TCP/link4") != std::string::npos &&
-                 help.str().find("--joint-target-mode") != std::string::npos
+                 help.str().find("--joint-target-mode") != std::string::npos &&
+                 help.str().find("--joint-synchronization") !=
+                     std::string::npos
              ? EXIT_SUCCESS
              : EXIT_FAILURE;
 }

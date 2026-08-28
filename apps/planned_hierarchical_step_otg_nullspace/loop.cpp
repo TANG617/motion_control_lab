@@ -10,6 +10,7 @@
 #include <initializer_list>
 #include <iomanip>
 #include <iostream>
+#include <iterator>
 #include <limits>
 #include <memory>
 #include <motion_control_core/motion_control_core.hpp>
@@ -216,6 +217,129 @@ const char *hierarchicalBoundSideName(mcc::HierarchicalBoundSide value) {
   return "unknown";
 }
 
+const char *hierarchicalDiagnosticStateName(
+    mcc::HierarchicalDiagnosticState value) {
+  switch (value) {
+  case mcc::HierarchicalDiagnosticState::NotRun:
+    return "not-run";
+  case mcc::HierarchicalDiagnosticState::Satisfied:
+    return "satisfied";
+  case mcc::HierarchicalDiagnosticState::Active:
+    return "active";
+  case mcc::HierarchicalDiagnosticState::Violated:
+    return "violated";
+  }
+  return "unknown";
+}
+
+bool taskSemanticName(const std::string &name) {
+  return name.find("/task/") != std::string::npos;
+}
+
+bool softConstraintSemanticName(const std::string &name) {
+  return name == "yellow/constraints/self-collision-avoidance";
+}
+
+const char *hierarchicalTaskKindName(mcc::HierarchicalTaskKind value) {
+  switch (value) {
+  case mcc::HierarchicalTaskKind::Position:
+    return "position";
+  case mcc::HierarchicalTaskKind::Orientation:
+    return "orientation";
+  case mcc::HierarchicalTaskKind::Posture:
+    return "posture";
+  }
+  return "unknown";
+}
+
+const char *hierarchicalTaskUnit(mcc::HierarchicalTaskKind value) {
+  return value == mcc::HierarchicalTaskKind::Position ? "m/s" : "rad/s";
+}
+
+const char *hierarchicalTaskEnforcementName(
+    mcc::HierarchicalTaskEnforcement value) {
+  return value == mcc::HierarchicalTaskEnforcement::Scaled ? "scaled"
+                                                           : "soft";
+}
+
+template <typename Value>
+std::vector<Value> evidenceRows(const std::vector<Value> &values,
+                                std::string_view evidence) {
+  std::vector<Value> output;
+  std::copy_if(values.begin(), values.end(), std::back_inserter(output),
+               [&](const Value &value) { return value.evidence == evidence; });
+  return output;
+}
+
+void appendHierarchicalEvidence(
+    mcl::SolverDebug &output,
+    const std::vector<mcc::HierarchicalTaskDiagnostics> &tasks,
+    const std::vector<mcc::HierarchicalTaskScaleDiagnostics> &task_scales,
+    const std::vector<mcc::HierarchicalConstraintDiagnostics> &constraints,
+    std::string_view evidence, std::optional<std::string_view> pass_override) {
+  for (const auto &source : tasks) {
+    mcl::TaskDebug task;
+    task.name = source.name;
+    task.kind = hierarchicalTaskKindName(source.kind);
+    task.unit = hierarchicalTaskUnit(source.kind);
+    task.pass = priorityName(source.priority);
+    task.evidence = evidence;
+    task.state = hierarchicalDiagnosticStateName(source.state);
+    task.enabled = source.enabled;
+    task.residual_norm = source.residual_norm;
+    task.maximum_violation = source.maximum_violation;
+    task.cost = source.objective_cost.value_or(0.0);
+    task.cost_available = source.objective_cost.has_value();
+    task.residual_available =
+        source.state != mcc::HierarchicalDiagnosticState::NotRun;
+    task.enforcement = hierarchicalTaskEnforcementName(source.enforcement);
+    output.tasks.push_back(std::move(task));
+  }
+
+  for (const auto &source : task_scales) {
+    mcl::TaskScaleDebug task_scale;
+    task_scale.name = source.name;
+    task_scale.active = source.active;
+    task_scale.scale = source.weighted_progress_scale;
+    task_scale.cost = source.objective_cost;
+    task_scale.degraded = source.degraded;
+    task_scale.stuck = source.stuck;
+    task_scale.pass = priorityName(source.priority);
+    task_scale.evidence = evidence;
+    task_scale.evaluated = source.evaluated;
+    output.task_scales.push_back(std::move(task_scale));
+  }
+
+  for (const auto &source : constraints) {
+    mcl::RequirementDebug constraint;
+    constraint.name = source.name;
+    constraint.unit = source.unit;
+    constraint.source = hierarchicalBoundSourceName(source.bound_source);
+    constraint.enabled = source.state != mcc::HierarchicalDiagnosticState::NotRun;
+    constraint.active =
+        source.state == mcc::HierarchicalDiagnosticState::Active ||
+        source.state == mcc::HierarchicalDiagnosticState::Violated;
+    constraint.maximum_violation = source.maximum_violation;
+    if (source.priority.has_value()) {
+      constraint.pass = priorityName(*source.priority);
+    } else if (pass_override.has_value()) {
+      constraint.pass = *pass_override;
+    } else {
+      constraint.pass = "Shared";
+    }
+    constraint.evidence = evidence;
+    constraint.state = hierarchicalDiagnosticStateName(source.state);
+    constraint.component = source.component_name;
+    constraint.minimum_slack = source.minimum_slack;
+    constraint.cost_available = false;
+    constraint.slack_available =
+        source.state != mcc::HierarchicalDiagnosticState::NotRun;
+    constraint.kind = hierarchicalConstraintKindName(source.kind);
+    constraint.side = hierarchicalBoundSideName(source.bound_side);
+    output.requirements.push_back(std::move(constraint));
+  }
+}
+
 const char *hierarchicalViolationUnit(
     const mcc::HierarchicalConstraintViolation &violation) {
   if (violation.kind == mcc::HierarchicalConstraintKind::TaskScaleBound) {
@@ -281,6 +405,17 @@ void updateSolverDebug(mcl::SolverDebug &output,
                        const SolverDiagnostics &diagnostics,
                        mcc::ResultDisposition disposition) {
   if (diagnostics.hierarchical) {
+    const bool rejected = !mcc::isAccepted(disposition);
+    auto accepted_tasks =
+        rejected ? evidenceRows(output.tasks, "last-accepted")
+                 : std::vector<mcl::TaskDebug>{};
+    auto accepted_task_scales =
+        rejected ? evidenceRows(output.task_scales, "last-accepted")
+                 : std::vector<mcl::TaskScaleDebug>{};
+    auto accepted_constraints =
+        rejected ? evidenceRows(output.requirements, "last-accepted")
+                 : std::vector<mcl::RequirementDebug>{};
+
     output.disposition = resultDispositionName(disposition);
     output.joint_limit_policy =
         jointLimitPolicyName(diagnostics.hierarchy.joint_limit_policy);
@@ -335,16 +470,37 @@ void updateSolverDebug(mcl::SolverDebug &output,
              violation.lower, violation.upper, violation.violation});
       }
     }
-    output.task_scales.resize(diagnostics.hierarchy.task_scales.size());
-    for (std::size_t index = 0;
-         index < diagnostics.hierarchy.task_scales.size(); ++index) {
-      const auto &source = diagnostics.hierarchy.task_scales[index];
-      output.task_scales[index] = {
-          source.name, source.active,   source.weighted_progress_scale,
-          0.0,         source.degraded, source.stuck};
+    output.tasks = std::move(accepted_tasks);
+    output.task_scales = std::move(accepted_task_scales);
+    output.requirements = std::move(accepted_constraints);
+    if (!rejected) {
+      appendHierarchicalEvidence(
+          output, diagnostics.hierarchy.tasks,
+          diagnostics.hierarchy.task_scales, diagnostics.hierarchy.constraints,
+          "last-accepted", std::nullopt);
+    } else {
+      for (const auto &pass : diagnostics.hierarchy.passes) {
+        if (!pass.attempted || pass.succeeded ||
+            !pass.last_iterate_available) {
+          continue;
+        }
+        appendHierarchicalEvidence(
+            output, pass.last_iterate_tasks, pass.last_iterate_task_scales,
+            pass.last_iterate_constraints, "failed-last-iterate",
+            hierarchicalPassName(pass.pass));
+      }
     }
-    output.requirements.clear();
   } else {
+    const bool rejected = !mcc::isAccepted(disposition);
+    auto accepted_tasks =
+        rejected ? evidenceRows(output.tasks, "last-accepted")
+                 : std::vector<mcl::TaskDebug>{};
+    auto accepted_task_scales =
+        rejected ? evidenceRows(output.task_scales, "last-accepted")
+                 : std::vector<mcl::TaskScaleDebug>{};
+    auto accepted_constraints =
+        rejected ? evidenceRows(output.requirements, "last-accepted")
+                 : std::vector<mcl::RequirementDebug>{};
     const auto &local = diagnostics.kinematics;
     output.disposition = resultDispositionName(disposition);
     output.joint_limit_policy = jointLimitPolicyName(local.joint_limit_policy);
@@ -368,21 +524,64 @@ void updateSolverDebug(mcl::SolverDebug &output,
     output.active_set_size = optimization.active_set_size;
     output.warm_start_used = optimization.warm_start_used;
     output.qp_passes.clear();
-    output.task_scales.resize(optimization.task_scales.size());
-    for (std::size_t index = 0; index < optimization.task_scales.size();
-         ++index) {
-      const auto &source = optimization.task_scales[index];
-      output.task_scales[index] = {source.name, source.active,   source.scale,
-                                   source.cost, source.degraded, source.stuck};
+    output.tasks = std::move(accepted_tasks);
+    output.task_scales = std::move(accepted_task_scales);
+    output.requirements = std::move(accepted_constraints);
+    for (const auto &source : optimization.task_scales) {
+      mcl::TaskScaleDebug task_scale;
+      task_scale.name = source.name;
+      task_scale.active = source.active;
+      task_scale.scale = source.scale;
+      task_scale.cost = source.cost;
+      task_scale.degraded = source.degraded;
+      task_scale.stuck = source.stuck;
+      task_scale.pass = "Solve";
+      task_scale.evidence = rejected ? "failed-current" : "last-accepted";
+      task_scale.evaluated = source.active;
+      output.task_scales.push_back(std::move(task_scale));
     }
-    output.requirements.resize(optimization.requirements.size());
-    for (std::size_t index = 0; index < optimization.requirements.size();
-         ++index) {
-      const auto &source = optimization.requirements[index];
-      output.requirements[index] = {source.name,   source.unit,
-                                    source.source, source.enabled,
-                                    source.active, source.maximum_violation,
-                                    source.cost};
+    for (const auto &source : optimization.requirements) {
+      const std::string evidence =
+          rejected ? "failed-current" : "last-accepted";
+      if (taskSemanticName(source.name)) {
+        mcl::TaskDebug task;
+        task.name = source.name;
+        task.kind = "soft";
+        task.unit = source.unit;
+        task.pass = "Solve";
+        task.evidence = evidence;
+        task.state = !source.enabled
+                         ? "not-run"
+                         : (source.active ? "active" : "satisfied");
+        task.enabled = source.enabled;
+        task.maximum_violation = source.maximum_violation;
+        task.cost = source.cost;
+        task.cost_available = true;
+        task.enforcement = "soft";
+        output.tasks.push_back(std::move(task));
+        continue;
+      }
+      mcl::RequirementDebug requirement;
+      requirement.name = source.name;
+      requirement.unit = source.unit;
+      requirement.source = source.source;
+      requirement.enabled = source.enabled;
+      requirement.active = source.active;
+      requirement.maximum_violation = source.maximum_violation;
+      requirement.cost = source.cost;
+      requirement.pass = "Solve";
+      requirement.evidence = evidence;
+      requirement.state = !source.enabled
+                              ? "not-run"
+                              : (source.maximum_violation > 0.0
+                                     ? "violated"
+                                     : (source.active ? "active"
+                                                      : "satisfied"));
+      requirement.cost_available = softConstraintSemanticName(source.name);
+      requirement.kind = requirement.cost_available ? "soft-constraint"
+                                                    : "joint-bound";
+      requirement.side = "-";
+      output.requirements.push_back(std::move(requirement));
     }
   }
   if (!output.grouped_attempt.has_value()) {
@@ -400,6 +599,31 @@ void updateSolverDebug(mcl::SolverDebug &output,
   attempt.captured_state_sequence = diagnostics.captured_state_sequence;
   attempt.captured_state_time_nanoseconds =
       diagnostics.captured_state_time_nanoseconds;
+}
+
+void markSolverNotRun(mcl::SolverDebug &output, std::string detail) {
+  output.disposition = "not-run";
+  output.termination_reason = std::move(detail);
+  output.ik_iterations = 0;
+  output.converged = false;
+  output.ik_solve_time_ms = 0.0;
+  output.saturated_joints.clear();
+  output.qp_status = "not-run";
+  output.native_status.clear();
+  output.has_qp_diagnostics = false;
+  output.objective_value = 0.0;
+  output.primal_residual = 0.0;
+  output.dual_residual = 0.0;
+  output.maximum_hard_violation = 0.0;
+  output.qp_solve_time_ms = 0.0;
+  output.qp_iterations = 0;
+  output.active_set_size = 0;
+  output.warm_start_used = false;
+  output.qp_passes.clear();
+  output.task_scales = evidenceRows(output.task_scales, "last-accepted");
+  output.tasks = evidenceRows(output.tasks, "last-accepted");
+  output.requirements = evidenceRows(output.requirements, "last-accepted");
+  output.grouped_attempt.reset();
 }
 
 mcl::SolverDebug makeSolverDebug(std::string label,
@@ -701,16 +925,17 @@ int passNumber(mcc::HierarchicalSolvePass pass) {
   return static_cast<int>(pass) + 1;
 }
 
-const char *hierarchicalTaskKindName(mcc::HierarchicalTaskKind kind) {
-  switch (kind) {
-  case mcc::HierarchicalTaskKind::Position:
-    return "position";
-  case mcc::HierarchicalTaskKind::Orientation:
-    return "orientation";
-  case mcc::HierarchicalTaskKind::Posture:
-    return "posture";
+int presentationPriorityNumber(std::string_view pass) {
+  if (pass == "Primary") {
+    return priorityNumber(mcc::PriorityLevel::Primary);
   }
-  return "unknown";
+  if (pass == "Secondary") {
+    return priorityNumber(mcc::PriorityLevel::Secondary);
+  }
+  if (pass == "Tertiary") {
+    return priorityNumber(mcc::PriorityLevel::Tertiary);
+  }
+  return 0;
 }
 
 const char *hierarchicalTaskTargetUnit(mcc::HierarchicalTaskKind kind) {
@@ -725,14 +950,17 @@ double hierarchicalTaskTolerance(const mcc::HierarchicalTaskDiagnostics &task,
                                  const SolverOptions &options) {
   if (task.kind == mcc::HierarchicalTaskKind::Posture) {
     return options
-        .red_secondary_task_yellow_posture_coupling_preservation_tolerance;
+        .red_tertiary_task_yellow_posture_coupling_preservation_tolerance;
   }
   if (task.kind == mcc::HierarchicalTaskKind::Position &&
-      task.priority == mcc::PriorityLevel::Secondary) {
+      task.priority == mcc::PriorityLevel::Tertiary) {
     return options
-        .red_secondary_task_link4_position_preservation_tolerance_mps;
+        .red_tertiary_task_link4_position_preservation_tolerance_mps;
   }
-  return options.red_primary_task_tcp_preservation_tolerance;
+  if (task.kind == mcc::HierarchicalTaskKind::Orientation) {
+    return options.red_secondary_task_tcp_orientation_preservation_tolerance_radps;
+  }
+  return options.red_primary_task_tcp_position_preservation_tolerance_mps;
 }
 
 proto::AttemptOutcome attemptOutcome(mcl::WorkerIterationOutcome outcome) {
@@ -818,38 +1046,6 @@ proto::SolverTelemetry makeSolverTelemetry(const proto::SampleContext &context,
       }
       pass->set_maximum_constraint_violation(maximum_violation);
     }
-    for (const auto &source : diagnostics.hierarchy.tasks) {
-      auto *task = message.add_tasks();
-      task->set_name(source.name);
-      task->set_kind(hierarchicalTaskKindName(source.kind));
-      task->set_priority(priorityNumber(source.priority));
-      task->set_enabled(source.enabled);
-      task->set_target_error(source.target_error_norm);
-      task->set_target_error_unit(hierarchicalTaskTargetUnit(source.kind));
-      for (Eigen::Index index = 0; index < source.residual_optimum.size();
-           ++index) {
-        auto *component = task->add_components();
-        component->set_label(source.name + "[" + std::to_string(index) + "]");
-        component->set_residual_optimum(source.residual_optimum[index]);
-        if (index < source.actual_preservation_drift.size()) {
-          component->set_preservation_drift(
-              source.actual_preservation_drift[index]);
-        }
-        component->set_preservation_tolerance(
-            hierarchicalTaskTolerance(source, options));
-        component->set_residual_unit(hierarchicalTaskResidualUnit(source.kind));
-      }
-    }
-    for (const auto &source : diagnostics.hierarchy.task_scales) {
-      auto *scale = message.add_task_scales();
-      scale->set_label(source.name);
-      scale->set_priority(priorityNumber(source.priority));
-      scale->set_active(source.active);
-      scale->set_scale(source.weighted_progress_scale);
-      scale->set_preservation_drift(source.actual_preservation_drift);
-      scale->set_degraded(source.degraded);
-      scale->set_stuck(source.stuck);
-    }
   } else {
     auto *pass = message.add_passes();
     pass->set_label("solve");
@@ -864,25 +1060,92 @@ proto::SolverTelemetry makeSolverTelemetry(const proto::SampleContext &context,
     pass->set_primal_residual(debug.primal_residual);
     pass->set_dual_residual(debug.dual_residual);
     pass->set_maximum_constraint_violation(debug.maximum_hard_violation);
-    for (const auto &source : debug.task_scales) {
-      auto *scale = message.add_task_scales();
-      scale->set_label(source.name);
-      scale->set_active(source.active);
-      scale->set_scale(source.scale);
-      scale->set_cost(source.cost);
-      scale->set_degraded(source.degraded);
-      scale->set_stuck(source.stuck);
+  }
+
+  for (const auto &source : debug.tasks) {
+    auto *task = message.add_tasks();
+    task->set_name(source.name);
+    task->set_kind(source.kind);
+    task->set_priority(presentationPriorityNumber(source.pass));
+    task->set_enabled(source.enabled);
+    task->set_evidence(source.evidence);
+    task->set_pass_label(source.pass);
+    task->set_state(source.state);
+    task->set_residual_norm(source.residual_norm);
+    task->set_maximum_violation(source.maximum_violation);
+    task->set_cost(source.cost);
+    task->set_cost_available(source.cost_available);
+    task->set_residual_available(source.residual_available);
+    task->set_enforcement(source.enforcement);
+
+    if (!diagnostics.hierarchical || source.evidence != "last-accepted") {
+      continue;
     }
-    for (const auto &source : debug.requirements) {
-      auto *requirement = message.add_requirements();
-      requirement->set_label(source.name);
-      requirement->set_unit(source.unit);
-      requirement->set_source(source.source);
-      requirement->set_enabled(source.enabled);
-      requirement->set_active(source.active);
-      requirement->set_maximum_violation(source.maximum_violation);
-      requirement->set_cost(source.cost);
+    const auto match = std::find_if(
+        diagnostics.hierarchy.tasks.begin(), diagnostics.hierarchy.tasks.end(),
+        [&](const auto &candidate) { return candidate.name == source.name; });
+    if (match == diagnostics.hierarchy.tasks.end()) {
+      continue;
     }
+    task->set_target_error(match->target_error_norm);
+    task->set_target_error_unit(hierarchicalTaskTargetUnit(match->kind));
+    for (Eigen::Index index = 0; index < match->residual_optimum.size();
+         ++index) {
+      auto *component = task->add_components();
+      component->set_label(match->name + "[" + std::to_string(index) + "]");
+      component->set_residual_optimum(match->residual_optimum[index]);
+      if (index < match->actual_preservation_drift.size()) {
+        component->set_preservation_drift(
+            match->actual_preservation_drift[index]);
+      }
+      component->set_preservation_tolerance(
+          hierarchicalTaskTolerance(*match, options));
+      component->set_residual_unit(hierarchicalTaskResidualUnit(match->kind));
+    }
+  }
+
+  for (const auto &source : debug.task_scales) {
+    auto *scale = message.add_task_scales();
+    scale->set_label(source.name);
+    scale->set_priority(presentationPriorityNumber(source.pass));
+    scale->set_active(source.active);
+    scale->set_scale(source.scale);
+    scale->set_cost(source.cost);
+    scale->set_degraded(source.degraded);
+    scale->set_stuck(source.stuck);
+    scale->set_evidence(source.evidence);
+    scale->set_pass_label(source.pass);
+    scale->set_evaluated(source.evaluated);
+    if (diagnostics.hierarchical && source.evidence == "last-accepted") {
+      const auto match = std::find_if(
+          diagnostics.hierarchy.task_scales.begin(),
+          diagnostics.hierarchy.task_scales.end(),
+          [&](const auto &candidate) { return candidate.name == source.name; });
+      if (match != diagnostics.hierarchy.task_scales.end()) {
+        scale->set_preservation_drift(match->actual_preservation_drift);
+      }
+    }
+  }
+
+  for (const auto &source : debug.requirements) {
+    auto *requirement = message.add_requirements();
+    requirement->set_label(source.name);
+    requirement->set_priority(presentationPriorityNumber(source.pass));
+    requirement->set_unit(source.unit);
+    requirement->set_source(source.source);
+    requirement->set_enabled(source.enabled);
+    requirement->set_active(source.active);
+    requirement->set_maximum_violation(source.maximum_violation);
+    requirement->set_cost(source.cost);
+    requirement->set_evidence(source.evidence);
+    requirement->set_pass_label(source.pass);
+    requirement->set_state(source.state);
+    requirement->set_component(source.component);
+    requirement->set_minimum_slack(source.minimum_slack);
+    requirement->set_cost_available(source.cost_available);
+    requirement->set_slack_available(source.slack_available);
+    requirement->set_kind(source.kind);
+    requirement->set_side(source.side);
   }
   return message;
 }
@@ -1127,6 +1390,21 @@ std::string traceStdVector(const std::vector<double> &values) {
   return output.str();
 }
 
+std::string jointWeightMultipliersString(
+    const std::vector<std::pair<std::string, double>> &multipliers) {
+  if (multipliers.empty()) {
+    return "all=1";
+  }
+  std::ostringstream output;
+  for (std::size_t index = 0; index < multipliers.size(); ++index) {
+    if (index != 0U) {
+      output << ',';
+    }
+    output << multipliers[index].first << '=' << multipliers[index].second;
+  }
+  return output.str();
+}
+
 std::string elbowTeleopEventDetail(
     const mcl::planned_hierarchical_step_otg_nullspace::ElbowTeleopEvent &event,
     std::uint64_t run_time_ns, std::optional<std::size_t> replay_source_index) {
@@ -1300,18 +1578,35 @@ std::string rejectedAttemptDetail(const mcc::Status &status,
                                   const SolverDiagnostics &diagnostics) {
   if (diagnostics.hierarchical) {
     std::ostringstream output;
+    const auto *scale_diagnostics = &diagnostics.hierarchy.task_scales;
+    const char *scale_provenance =
+        scale_diagnostics->empty() ? "unavailable" : "accepted";
+    if (scale_diagnostics->empty()) {
+      for (const auto &pass : diagnostics.hierarchy.passes) {
+        if (pass.attempted && !pass.succeeded &&
+            pass.last_iterate_available &&
+            !pass.last_iterate_task_scales.empty()) {
+          scale_diagnostics = &pass.last_iterate_task_scales;
+          scale_provenance = "failed-last-iterate";
+          break;
+        }
+      }
+    }
     output << statusDetail(status) << std::scientific << std::setprecision(9)
            << " maximum_hard_violation=" << diagnostics.maximum_hard_violation
+           << " task_scales_provenance=" << scale_provenance
            << " task_scales=[";
-    for (std::size_t index = 0;
-         index < diagnostics.hierarchy.task_scales.size(); ++index) {
+    for (std::size_t index = 0; index < scale_diagnostics->size(); ++index) {
       if (index != 0) {
         output << ',';
       }
-      const auto &scale = diagnostics.hierarchy.task_scales[index];
+      const auto &scale = scale_diagnostics->at(index);
       output << "{name=\"" << scale.name << "\",active=" << std::boolalpha
              << scale.active
+             << ",evaluated=" << scale.evaluated
              << ",weighted_progress_scale=" << scale.weighted_progress_scale
+             << ",cost=" << scale.objective_cost
+             << ",degraded=" << scale.degraded << ",stuck=" << scale.stuck
              << '}';
     }
     output << "] failed_pass_evidence=[";
@@ -1829,8 +2124,9 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
   collision_to_ui.publish(initial_collision_debug);
   yellow_solver_to_ui.publish(initial_yellow_solver_debug);
 
-  const auto presentation =
+  auto presentation =
       mcl::makeArmPresentation(robot, mcl::foxgloveIkVisualizationChannels());
+  presentation.requirements_page_enabled = true;
   mcl::TerminalFrontend terminal(
       {planned_options.source_mode == SourceMode::Teleop ||
            (planned_options.replay.has_value() &&
@@ -2241,6 +2537,7 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
               attempt.target = target;
               attempt.detail =
                   "Cartesian replan failed: " + planning_status.message;
+              markSolverNotRun(attempt.solver_debug, attempt.detail);
               recordFailure("cartesian-replan", attempt.detail);
               red_attempt_to_ui.publish(attempt);
               if (attempt.state == RedAttemptState::RecoverableRejected) {
@@ -2289,6 +2586,7 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
               attempt.target = target;
               attempt.detail =
                   "Cartesian planner step failed: " + planning_status.message;
+              markSolverNotRun(attempt.solver_debug, attempt.detail);
               recordFailure("cartesian-step", attempt.detail);
               red_attempt_to_ui.publish(attempt);
               if (telemetry_enabled) {
@@ -3199,9 +3497,13 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
            yellow_stats.latest_overrun_ms, yellow_stats.latest_solver_ms,
            yellow_stats.latest_non_solver_execution_ms}};
       const std::string clamp_detail = retargetClampDetail(latest_red_attempt);
+      const bool holding_last_accepted =
+          held_fault.has_value() ||
+          latest_red_attempt.state != RedAttemptState::Accepted;
       if (held_fault.has_value()) {
         frame.runtime_state = mcl::IkRuntimeState::FaultHold;
-        frame.ik_status = "fault hold " + taskScaleStatus(latest_output);
+        frame.ik_status =
+            "fault hold; last accepted " + taskScaleStatus(latest_output);
         frame.status = faultSummary(*held_fault);
       } else if (latest_red_attempt.state ==
                  RedAttemptState::RecoverableRejected) {
@@ -3258,7 +3560,8 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
               .cwiseAbs()
               .maxCoeff();
       frame.ik_status +=
-          " joint_otg=" +
+          (holding_last_accepted ? " joint_otg(last-accepted)="
+                                 : " joint_otg=") +
           std::string{
               mcl::planned_hierarchical_step_otg_nullspace::jointTargetModeName(
                   planned_options.joint_target.mode)} +
@@ -3273,7 +3576,8 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
           " projection_events=" +
           std::to_string(latest_output.projection_event_count);
       frame.status +=
-          " | JointPlanner " +
+          (holding_last_accepted ? " | JointPlanner last-accepted "
+                                 : " | JointPlanner ") +
           std::string{mcl::planned_hierarchical_step_otg_nullspace::
                           planningSynchronizationName(
                               planned_options.planning.joint_synchronization)} +
@@ -3546,6 +3850,19 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
           add_option("solver_backend", latest_red_attempt.solver_debug.backend);
           add_option("joint_limit_policy",
                      latest_red_attempt.solver_debug.joint_limit_policy);
+          add_option("joint_position_margin_rad",
+                     std::to_string(options.solver.joint_position_margin_rad));
+          add_option(
+              "joint_position_braking_velocity_envelope_enabled",
+              options.solver.joint_position_braking_velocity_envelope_enabled
+                  ? "true"
+                  : "false");
+          add_option(
+              "red_proxqp_maximum_iterations",
+              std::to_string(options.solver.red_proxqp_maximum_iterations));
+          add_option("red_proxqp_warm_start_enabled",
+                     options.solver.red_proxqp_warm_start_enabled ? "true"
+                                                                  : "false");
           add_option("joint_target_mode",
                      jointTargetModeName(planned_options.joint_target.mode));
           add_option("replay_elbow_teleop",
@@ -3555,6 +3872,78 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
                      planned_options.replay_elbow_teleop_enabled
                          ? "interactive-noncanonical"
                          : "canonical-replay");
+          add_option(
+              "red_primary_task_tcp_position_progress_weight",
+              std::to_string(
+                  options.solver.red_primary_task_tcp_position_progress_weight));
+          add_option(
+              "red_primary_task_tcp_position_preservation_tolerance_mps",
+              std::to_string(options.solver
+                                 .red_primary_task_tcp_position_preservation_tolerance_mps));
+          add_option(
+              "red_primary_task_tcp_position_progress_preservation_tolerance",
+              std::to_string(
+                  options.solver
+                      .red_primary_task_tcp_position_progress_preservation_tolerance));
+          add_option(
+              "red_secondary_task_tcp_orientation_progress_weight",
+              std::to_string(options.solver
+                                 .red_secondary_task_tcp_orientation_progress_weight));
+          add_option(
+              "red_secondary_task_tcp_orientation_preservation_tolerance_radps",
+              std::to_string(
+                  options.solver
+                      .red_secondary_task_tcp_orientation_preservation_tolerance_radps));
+          add_option(
+              "red_secondary_task_tcp_orientation_progress_preservation_tolerance",
+              std::to_string(
+                  options.solver
+                      .red_secondary_task_tcp_orientation_progress_preservation_tolerance));
+          add_option(
+              "red_tertiary_task_link4_position_weight",
+              std::to_string(
+                  options.solver.red_tertiary_task_link4_position_weight));
+          add_option(
+              "red_tertiary_task_link4_position_servo_gain_per_s",
+              std::to_string(options.solver
+                                 .red_tertiary_task_link4_position_servo_gain_per_s));
+          add_option(
+              "red_tertiary_task_link4_position_preservation_tolerance_mps",
+              std::to_string(
+                  options.solver
+                      .red_tertiary_task_link4_position_preservation_tolerance_mps));
+          add_option(
+              "yellow_task_posture_preference_weight",
+              std::to_string(
+                  options.solver.yellow_task_posture_preference_weight));
+          add_option(
+              "yellow_task_posture_preference_servo_gain_per_s",
+              std::to_string(options.solver
+                                 .yellow_task_posture_preference_servo_gain_per_s));
+          add_option(
+              "red_tertiary_task_yellow_posture_coupling_weight",
+              std::to_string(options.solver
+                                 .red_tertiary_task_yellow_posture_coupling_weight));
+          add_option(
+              "red_tertiary_task_yellow_posture_coupling_servo_gain_per_s",
+              std::to_string(
+                  options.solver
+                      .red_tertiary_task_yellow_posture_coupling_servo_gain_per_s));
+          add_option(
+              "red_tertiary_task_yellow_posture_coupling_preservation_tolerance",
+              std::to_string(
+                  options.solver
+                      .red_tertiary_task_yellow_posture_coupling_preservation_tolerance));
+          add_option(
+              "yellow_task_posture_preference_joint_weight_multipliers",
+              jointWeightMultipliersString(
+                  options.solver
+                      .yellow_task_posture_preference_joint_weight_multipliers));
+          add_option(
+              "red_tertiary_task_yellow_posture_coupling_joint_weight_multipliers",
+              jointWeightMultipliersString(
+                  options.solver
+                      .red_tertiary_task_yellow_posture_coupling_joint_weight_multipliers));
           add_option("cartesian_algorithm", "jerk_limited");
           add_option("joint_algorithm", "jerk_limited");
           add_option("cartesian_synchronization",
@@ -3810,14 +4199,15 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
       nullspace_debug.primary_maximum_preservation_drift =
           latest_output.primary_maximum_preservation_drift;
       nullspace_debug.primary_preservation_tolerance =
-          options.solver.red_primary_task_tcp_preservation_tolerance;
+          options.solver
+              .red_primary_task_tcp_position_preservation_tolerance_mps;
       nullspace_debug.link4_task_error_m = latest_output.link4_task_error_m;
       nullspace_debug.yellow_posture_error_rad =
           latest_output.yellow_posture_error_rad;
       nullspace_debug.link4_weight =
-          options.solver.red_secondary_task_link4_position_weight;
+          options.solver.red_tertiary_task_link4_position_weight;
       nullspace_debug.yellow_weight =
-          options.solver.red_secondary_task_yellow_posture_coupling_weight;
+          options.solver.red_tertiary_task_yellow_posture_coupling_weight;
       nullspace_debug.left_task_scale = latest_output.left_scale.scale;
       nullspace_debug.right_task_scale = latest_output.right_scale.scale;
       if (latest_output.highest_completed_priority.has_value()) {
@@ -3832,6 +4222,7 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
       nullspace_debug.secondary_attempted = latest_output.pass_attempted[1];
       nullspace_debug.secondary_succeeded = latest_output.pass_succeeded[1];
       nullspace_debug.tertiary_attempted = latest_output.pass_attempted[2];
+      nullspace_debug.tertiary_succeeded = latest_output.pass_succeeded[2];
       nullspace_debug.terminal_attempted = latest_output.pass_attempted[3];
       nullspace_debug.terminal_status =
           qpStatusName(latest_output.terminal_status);
@@ -3915,19 +4306,44 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
         {"regularization", std::to_string(options.solver.regularization)},
         {"maximum_hard_violation",
          std::to_string(options.solver.maximum_accepted_hard_violation)},
-        {"red_primary_task_cartesian_progress_weight",
+        {"joint_position_margin_rad",
+         std::to_string(options.solver.joint_position_margin_rad)},
+        {"joint_position_braking_velocity_envelope_enabled",
+         options.solver.joint_position_braking_velocity_envelope_enabled
+             ? "true"
+             : "false"},
+        {"red_primary_task_tcp_position_progress_weight",
          std::to_string(
-             options.solver.red_primary_task_cartesian_progress_weight)},
-        {"red_secondary_task_link4_position_weight",
-         std::to_string(
-             options.solver.red_secondary_task_link4_position_weight)},
-        {"red_secondary_task_link4_position_servo_gain_per_s",
-         std::to_string(options.solver
-                            .red_secondary_task_link4_position_servo_gain_per_s)},
-        {"red_secondary_task_link4_position_preservation_tolerance_mps",
+             options.solver.red_primary_task_tcp_position_progress_weight)},
+        {"red_primary_task_tcp_position_preservation_tolerance_mps",
          std::to_string(
              options.solver
-                 .red_secondary_task_link4_position_preservation_tolerance_mps)},
+                 .red_primary_task_tcp_position_preservation_tolerance_mps)},
+        {"red_primary_task_tcp_position_progress_preservation_tolerance",
+         std::to_string(
+             options.solver
+                 .red_primary_task_tcp_position_progress_preservation_tolerance)},
+        {"red_secondary_task_tcp_orientation_progress_weight",
+         std::to_string(
+             options.solver.red_secondary_task_tcp_orientation_progress_weight)},
+        {"red_secondary_task_tcp_orientation_preservation_tolerance_radps",
+         std::to_string(
+             options.solver
+                 .red_secondary_task_tcp_orientation_preservation_tolerance_radps)},
+        {"red_secondary_task_tcp_orientation_progress_preservation_tolerance",
+         std::to_string(
+             options.solver
+                 .red_secondary_task_tcp_orientation_progress_preservation_tolerance)},
+        {"red_tertiary_task_link4_position_weight",
+         std::to_string(
+             options.solver.red_tertiary_task_link4_position_weight)},
+        {"red_tertiary_task_link4_position_servo_gain_per_s",
+         std::to_string(options.solver
+                            .red_tertiary_task_link4_position_servo_gain_per_s)},
+        {"red_tertiary_task_link4_position_preservation_tolerance_mps",
+         std::to_string(
+             options.solver
+                 .red_tertiary_task_link4_position_preservation_tolerance_mps)},
         {"red_proxqp_maximum_iterations",
          std::to_string(options.solver.red_proxqp_maximum_iterations)},
         {"red_proxqp_absolute_tolerance",
@@ -3935,13 +4351,34 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
         {"red_proxqp_primal_infeasibility_tolerance",
          std::to_string(
              options.solver.red_proxqp_primal_infeasibility_tolerance)},
+        {"red_proxqp_warm_start_enabled",
+         options.solver.red_proxqp_warm_start_enabled ? "true" : "false"},
         {"yellow_task_posture_preference_weight",
          std::to_string(
              options.solver.yellow_task_posture_preference_weight)},
-        {"red_secondary_task_yellow_posture_coupling_weight",
+        {"yellow_task_posture_preference_servo_gain_per_s",
+         std::to_string(
+             options.solver.yellow_task_posture_preference_servo_gain_per_s)},
+        {"yellow_task_posture_preference_joint_weight_multipliers",
+         jointWeightMultipliersString(
+             options.solver
+                 .yellow_task_posture_preference_joint_weight_multipliers)},
+        {"red_tertiary_task_yellow_posture_coupling_weight",
          std::to_string(
              options.solver
-                 .red_secondary_task_yellow_posture_coupling_weight)},
+                 .red_tertiary_task_yellow_posture_coupling_weight)},
+        {"red_tertiary_task_yellow_posture_coupling_servo_gain_per_s",
+         std::to_string(
+             options.solver
+                 .red_tertiary_task_yellow_posture_coupling_servo_gain_per_s)},
+        {"red_tertiary_task_yellow_posture_coupling_preservation_tolerance",
+         std::to_string(
+             options.solver
+                 .red_tertiary_task_yellow_posture_coupling_preservation_tolerance)},
+        {"red_tertiary_task_yellow_posture_coupling_joint_weight_multipliers",
+         jointWeightMultipliersString(
+             options.solver
+                 .red_tertiary_task_yellow_posture_coupling_joint_weight_multipliers)},
         {"yellow_constraints_self_collision_avoidance_minimum_distance_m",
          std::to_string(
              options.solver

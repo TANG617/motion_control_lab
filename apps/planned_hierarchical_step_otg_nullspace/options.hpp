@@ -4,6 +4,7 @@
 #include <cstddef>
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "adapters/replay/replay_support.hpp"
@@ -35,12 +36,15 @@ inline const char *jointTargetModeName(JointTargetMode mode) {
 }
 
 enum class PlanningSynchronization {
+  None,
   Time,
   Phase,
 };
 
 inline const char *planningSynchronizationName(PlanningSynchronization value) {
   switch (value) {
+  case PlanningSynchronization::None:
+    return "None";
   case PlanningSynchronization::Time:
     return "Time";
   case PlanningSynchronization::Phase:
@@ -70,21 +74,29 @@ struct SolverOptions {
   double maximum_accepted_hard_violation{1.0e-4};
   double joint_position_margin_rad{1.0e-2};
   bool joint_position_braking_velocity_envelope_enabled{true};
-  double red_primary_task_cartesian_progress_weight{100.0};
-  double red_primary_task_tcp_preservation_tolerance{5.0e-4};
-  double red_primary_task_cartesian_progress_preservation_tolerance{1.0e-4};
-  double red_secondary_task_yellow_posture_coupling_preservation_tolerance{
-      1.0e-5};
-  double red_secondary_task_link4_position_weight{100.0};
-  double red_secondary_task_link4_position_servo_gain_per_s{10.0};
-  double red_secondary_task_link4_position_preservation_tolerance_mps{5.0e-4};
+  double red_primary_task_tcp_position_progress_weight{100.0};
+  double red_primary_task_tcp_position_preservation_tolerance_mps{5.0e-4};
+  double red_primary_task_tcp_position_progress_preservation_tolerance{1.0e-4};
+  double red_secondary_task_tcp_orientation_progress_weight{100.0};
+  double red_secondary_task_tcp_orientation_preservation_tolerance_radps{5.0e-4};
+  double red_secondary_task_tcp_orientation_progress_preservation_tolerance{1.0e-4};
+  double red_tertiary_task_yellow_posture_coupling_preservation_tolerance{1.0e-5};
+  double red_tertiary_task_link4_position_weight{100.0};
+  double red_tertiary_task_link4_position_servo_gain_per_s{10.0};
+  double red_tertiary_task_link4_position_preservation_tolerance_mps{5.0e-4};
   int yellow_maximum_iterations{1};
   int red_proxqp_maximum_iterations{200};
   double red_proxqp_absolute_tolerance{2.0e-5};
   double red_proxqp_primal_infeasibility_tolerance{1.0e-12};
   bool red_proxqp_warm_start_enabled{false};
   double yellow_task_posture_preference_weight{1.0};
-  double red_secondary_task_yellow_posture_coupling_weight{1.0};
+  double yellow_task_posture_preference_servo_gain_per_s{10.0};
+  std::vector<std::pair<std::string, double>>
+      yellow_task_posture_preference_joint_weight_multipliers;
+  double red_tertiary_task_yellow_posture_coupling_weight{1.0};
+  double red_tertiary_task_yellow_posture_coupling_servo_gain_per_s{10.0};
+  std::vector<std::pair<std::string, double>>
+      red_tertiary_task_yellow_posture_coupling_joint_weight_multipliers;
   double yellow_constraints_self_collision_avoidance_minimum_distance_m{0.1};
   double yellow_constraints_self_collision_avoidance_influence_distance_m{0.15};
   double yellow_constraints_self_collision_avoidance_damping_gain_per_s{2.0};

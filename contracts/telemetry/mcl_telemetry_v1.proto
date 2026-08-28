@@ -78,6 +78,45 @@ message CartesianTracking {
   repeated CartesianArmTracking arms = 2;
 }
 
+message CartesianWrench {
+  Vector3 force_n = 1;
+  Vector3 torque_nm = 2;
+}
+
+message CartesianComplianceArm {
+  string side = 1;
+  CartesianError nominal_to_command = 2;
+  Vector3 nominal_linear_velocity_mps = 3;
+  Vector3 nominal_angular_velocity_radps = 4;
+  Vector3 nominal_linear_acceleration_mps2 = 5;
+  Vector3 nominal_angular_acceleration_radps2 = 6;
+  Vector3 command_linear_velocity_mps = 7;
+  Vector3 command_angular_velocity_radps = 8;
+  Vector3 command_linear_acceleration_mps2 = 9;
+  Vector3 command_angular_acceleration_radps2 = 10;
+  CartesianWrench raw_wrench = 11;
+  CartesianWrench filtered_wrench = 12;
+  CartesianWrench applied_wrench = 13;
+  Vector3 compliance_translation_m = 14;
+  Vector3 compliance_rotation_vector_rad = 15;
+  Vector3 compliance_linear_velocity_mps = 16;
+  Vector3 compliance_angular_velocity_radps = 17;
+  Vector3 compliance_linear_acceleration_mps2 = 18;
+  Vector3 compliance_angular_acceleration_radps2 = 19;
+  repeated bool velocity_saturated = 20;
+  repeated bool offset_saturated = 21;
+  bool drag_active = 22;
+  Vector3 actual_linear_velocity_mps = 23;
+  Vector3 actual_angular_velocity_radps = 24;
+  string reference_frame_name = 25;
+  string control_point_frame_name = 26;
+}
+
+message CartesianCompliance {
+  SampleContext context = 1;
+  repeated CartesianComplianceArm arms = 2;
+}
+
 enum ProjectionKind {
   PROJECTION_KIND_UNSPECIFIED = 0;
   PROJECTION_KIND_VELOCITY_LIMIT = 1;
@@ -165,6 +204,15 @@ message SolverTask {
   double target_error = 5;
   string target_error_unit = 6;
   repeated TaskComponent components = 7;
+  string evidence = 8;
+  string pass_label = 9;
+  string state = 10;
+  double residual_norm = 11;
+  double maximum_violation = 12;
+  double cost = 13;
+  bool cost_available = 14;
+  bool residual_available = 15;
+  string enforcement = 16;
 }
 
 message TaskScale {
@@ -176,6 +224,9 @@ message TaskScale {
   bool degraded = 6;
   bool stuck = 7;
   double preservation_drift = 8;
+  string evidence = 9;
+  string pass_label = 10;
+  bool evaluated = 11;
 }
 
 message SolverRequirement {
@@ -187,6 +238,15 @@ message SolverRequirement {
   bool active = 6;
   double maximum_violation = 7;
   double cost = 8;
+  string evidence = 9;
+  string pass_label = 10;
+  string state = 11;
+  string component = 12;
+  double minimum_slack = 13;
+  bool cost_available = 14;
+  bool slack_available = 15;
+  string kind = 16;
+  string side = 17;
 }
 
 message SolverTelemetry {

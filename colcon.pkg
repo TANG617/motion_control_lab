@@ -3,6 +3,7 @@
   "type": "cmake",
   "dependencies": [
     "motion_control_core",
+    "motion_control_sim",
     "motion_control_viz"
   ],
   "cmake-args": [
@@ -14,6 +15,7 @@
     "-DMCL_BUILD_PLANNED_HIERARCHICAL_STEP=ON",
     "-DMCL_BUILD_PLANNED_HIERARCHICAL_STEP_OTG=ON",
     "-DMCL_BUILD_PLANNED_HIERARCHICAL_STEP_OTG_NULLSPACE=ON",
+    "-DMCL_BUILD_PLANNED_HIERARCHICAL_STEP_OTG_NULLSPACE_ADMITTANCE_KINEMATIC_SIM=ON",
     "-DMCL_BUILD_E03_REPLAY_VISUALIZATION=ON",
     "-DMCL_BUILD_MCC_PLOTS=OFF",
     "-DMCL_BUILD_CARTESIAN_PLANNING=ON"

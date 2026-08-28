@@ -156,8 +156,29 @@ int main()
     }
     solver.grouped_attempt =
         mcl::GroupedAttemptDebug{"none", 2, 10, 9, "active", 8, 77, 1000};
-    solver.task_scales.push_back({"arm", true, 0.95, 4.0, false, false});
-    solver.requirements.push_back({"joint_velocity", "rad/s", "model", true, true, 0.001, 2.0});
+    solver.task_scales.push_back(
+      {"red-primary/task/left-tcp-position-progress", true, 0.95, 4.0, false, false,
+       "Primary", "last-accepted", true});
+    solver.tasks.push_back(
+      {"yellow/task/posture-preference", "posture", "rad/s", "Solve", "last-accepted",
+       "active", true, 0.02, 0.0, 1.5, true, true, "soft"});
+    solver.requirements.push_back(
+      {"red-shared/constraints/joint-position-limits", "rad/s", "position-braking", true,
+       true, 0.0, 0.0, "Shared", "last-accepted", "active", "left_arm_joint6",
+       2.0e-5, false, true});
+    if (label == "Red") {
+      solver.task_scales.push_back(
+        {"red-primary/task/left-tcp-position-progress", true, 0.25, 28.125, true, false,
+         "Primary", "failed-last-iterate", true});
+      solver.tasks.push_back(
+        {"red-primary/task/left-tcp-position", "position", "m/s", "Primary",
+         "failed-last-iterate", "violated", true, 7.5e-4, 5.0e-4, 0.0, false, true,
+         "scaled"});
+      solver.requirements.push_back(
+        {"red-shared/constraints/joint-position-limits", "rad/s", "position-braking", true,
+         true, 7.5e-4, 0.0, "Primary", "failed-last-iterate", "violated",
+         "left_arm_joint6", -7.5e-4, false, true});
+    }
     frame.solvers.push_back(std::move(solver));
   }
   frame.workers.push_back({"Red", 1000.0, 100, 1, 0, 2, 0.1, 0.8, 0.9, 0.0, 0.2, 3, 0.6, 0.01, 0.5,
@@ -210,11 +231,12 @@ int main()
 
   mcl::InteractiveIkPresentation presentation;
   presentation.base_frame_id = "base_link";
+  presentation.requirements_page_enabled = true;
   const mcl::PlannedGroupedTuiSnapshot servo_snapshot{
       &frame, &presentation, std::nullopt, 37, "ws://127.0.0.1:8765", "Planned Servo", "paused"};
   const auto servo_document = mcl::makePlannedGroupedTuiDocument(servo_snapshot);
-  require(servo_document.pages.size() == 5U,
-          "snapshot without Joint-OTG capability must produce five pages");
+  require(servo_document.pages.size() == 6U,
+          "snapshot with Requirements but without Joint-OTG must produce six pages");
   require(!hasUiLabel(servo_document, "Joint Planning"),
           "snapshot without Joint-OTG capability must not produce an N/A page");
 
@@ -236,10 +258,12 @@ int main()
   nullspace.yellow_posture_error_rad = 0.2;
   nullspace.link4_weight = 100.0;
   nullspace.yellow_weight = 1.0;
-  nullspace.highest_completed_priority = "Secondary";
+  nullspace.highest_completed_priority = "Tertiary";
   nullspace.primary_attempted = true;
   nullspace.secondary_attempted = true;
   nullspace.secondary_succeeded = true;
+  nullspace.tertiary_attempted = true;
+  nullspace.tertiary_succeeded = true;
 
   mcl::PlannedGroupedTuiSnapshot snapshot;
   snapshot.frame = &frame;
@@ -263,8 +287,8 @@ int main()
   const auto document = mcl::makePlannedGroupedTuiDocument(snapshot);
 
   const std::vector<std::string> expected_titles{
-      "Monitor", "Motion", "Solver", "Joints", "System", "Null-space"};
-  require(document.pages.size() == expected_titles.size(), "projection must produce six pages");
+      "Monitor", "Motion", "Solver", "Requirements", "Joints", "System", "Null-space"};
+  require(document.pages.size() == expected_titles.size(), "projection must produce seven pages");
   require(document.footer_hints.find("? help") != std::string::npos,
           "footer must expose the conventional help key");
   require(document.header_left.find("source mcap replay + elbow teleop") !=
@@ -274,6 +298,21 @@ int main()
               document.header_left.find("step 0.0050 m") != std::string::npos &&
               document.header_right.find("Red Primary MAX_ITER") != std::string::npos,
           "compact header must expose mode, focus, step, and solver exit");
+  auto planner_fault_frame = frame;
+  auto &planner_fault_solver = planner_fault_frame.solvers.at(0);
+  planner_fault_solver.disposition = "not-run";
+  planner_fault_solver.termination_reason =
+      "Cartesian replan failed: Cartesian trajectory time synchronization failed";
+  planner_fault_solver.qp_status = "not-run";
+  planner_fault_solver.native_status.clear();
+  planner_fault_solver.qp_passes.clear();
+  mcl::PlannedGroupedTuiSnapshot planner_fault_snapshot = snapshot;
+  planner_fault_snapshot.frame = &planner_fault_frame;
+  const auto planner_fault_document =
+      mcl::makePlannedGroupedTuiDocument(planner_fault_snapshot);
+  require(planner_fault_document.header_right.find("Red NOT RUN") !=
+              std::string::npos,
+          "a pre-IK Cartesian failure must not expose stale Red QP status");
   require(document.help_lines.size() == 6U &&
               document.help_lines.at(1).find("Space") != std::string::npos &&
               document.help_lines.at(2).find("enables/disables") !=
@@ -307,8 +346,8 @@ int main()
           "null-space must use the shared fixed 160x72 capability-page geometry");
   require(section(nullspace_page, "Control").style == mcl::TuiSectionStyle::Panel &&
               section(nullspace_page, "Control").tables.front().rows.at(0).at(1) == "right" &&
-              section(nullspace_page, "Primary TCP preservation").column == 1U &&
-              section(nullspace_page, "Secondary objectives").row == 1U,
+              section(nullspace_page, "TCP hierarchy status").column == 1U &&
+              section(nullspace_page, "Tertiary objectives").row == 1U,
           "null-space semantics must be projected into shared panels");
 
   const auto & overview_cartesian =
@@ -362,6 +401,23 @@ int main()
               failed_constraints.rows.at(0).at(4) == "y" &&
               failed_constraints.rows.at(0).at(9) == "0.000750000",
           "ranked last-iterate constraint evidence was not preserved");
+  const auto & accepted_tasks =
+      section(page(document, "Requirements"), "Task costs · last accepted")
+          .tables.at(0);
+  require(accepted_tasks.rows.front().at(0) == "last-accepted" &&
+              accepted_tasks.rows.front().at(9) == "1.5000000",
+          "accepted task provenance and cost were not preserved");
+  const auto & rejected_constraints =
+      section(page(document, "Requirements"),
+              "Constraint status and slack · failed candidate")
+          .tables.at(0);
+  require(rejected_constraints.rows.front().at(0) ==
+              "failed-last-iterate" &&
+              rejected_constraints.rows.front().at(6) ==
+                  "left_arm_joint6" &&
+              rejected_constraints.rows.front().at(9) == "-0.000750000" &&
+              rejected_constraints.rows.front().at(11) == "-",
+          "failed constraint provenance, slack, and unavailable cost were not preserved");
   const auto & projection =
       section(page(document, "System"), "Projection events").tables.at(0);
   require(projection.rows.at(0).at(0) == "joint_3" && projection.rows.at(0).at(2) == "12.000000" &&

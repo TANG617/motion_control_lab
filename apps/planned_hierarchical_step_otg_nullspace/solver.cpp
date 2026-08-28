@@ -13,6 +13,22 @@ bool isInactiveJoint(const std::string &name, const RobotOptions &options) {
                    name) != options.inactive_joint_names.end();
 }
 
+Eigen::VectorXd jointWeightMultipliers(
+    const mcc::JointNames &active_joint_names,
+    const std::vector<std::pair<std::string, double>> &overrides) {
+  Eigen::VectorXd result = Eigen::VectorXd::Ones(
+      static_cast<Eigen::Index>(active_joint_names.size()));
+  for (const auto &[name, weight] : overrides) {
+    const auto found =
+        std::find(active_joint_names.begin(), active_joint_names.end(), name);
+    if (found != active_joint_names.end()) {
+      result(static_cast<Eigen::Index>(
+          std::distance(active_joint_names.begin(), found))) = weight;
+    }
+  }
+  return result;
+}
+
 mcc::SelfCollisionModelDescription
 collisionModelDescription(const RobotOptions &options) {
   mcc::SelfCollisionModelDescription description;
@@ -67,59 +83,74 @@ addCartesianTasks(mcc::HierarchicalKinematicsSolverBuilder &builder,
                   const R1RobotConfig &robot, const SolverOptions &options) {
   CartesianHandles handles;
   mcc::TaskScaleGroupConfig scale;
-  scale.progress_weight = options.red_primary_task_cartesian_progress_weight;
-  scale.name = "red-primary/task/left-cartesian-progress";
+  scale.progress_weight = options.red_primary_task_tcp_position_progress_weight;
+  scale.name = "red-primary/task/left-tcp-position-progress";
   requireOk(builder.addTaskScaleGroup(mcc::PriorityLevel::Primary, scale,
-                                      options.red_primary_task_cartesian_progress_preservation_tolerance,
-                                      handles.left_scale),
+                                      options.red_primary_task_tcp_position_progress_preservation_tolerance,
+                                      handles.left_position_scale),
             "register " + scale.name);
-  scale.name = "red-primary/task/right-cartesian-progress";
+  scale.name = "red-primary/task/right-tcp-position-progress";
   requireOk(builder.addTaskScaleGroup(mcc::PriorityLevel::Primary, scale,
-                                      options.red_primary_task_cartesian_progress_preservation_tolerance,
-                                      handles.right_scale),
+                                      options.red_primary_task_tcp_position_progress_preservation_tolerance,
+                                      handles.right_position_scale),
+            "register " + scale.name);
+
+  scale.progress_weight =
+      options.red_secondary_task_tcp_orientation_progress_weight;
+  scale.name = "red-secondary/task/left-tcp-orientation-progress";
+  requireOk(builder.addTaskScaleGroup(
+                mcc::PriorityLevel::Secondary, scale,
+                options.red_secondary_task_tcp_orientation_progress_preservation_tolerance,
+                handles.left_orientation_scale),
+            "register " + scale.name);
+  scale.name = "red-secondary/task/right-tcp-orientation-progress";
+  requireOk(builder.addTaskScaleGroup(
+                mcc::PriorityLevel::Secondary, scale,
+                options.red_secondary_task_tcp_orientation_progress_preservation_tolerance,
+                handles.right_orientation_scale),
             "register " + scale.name);
 
   mcc::PositionTaskConfig position;
   position.name = "red-primary/task/left-tcp-position";
   position.enforcement = mcc::ScaledEnforcement{
-      handles.left_scale, options.maximum_accepted_hard_violation};
+      handles.left_position_scale, options.maximum_accepted_hard_violation};
   requireOk(builder.addPositionTask(
                 mcc::PriorityLevel::Primary, robot.left_end_effector_frame,
                 position,
                 Eigen::Vector3d::Constant(
-                    options.red_primary_task_tcp_preservation_tolerance),
+                    options.red_primary_task_tcp_position_preservation_tolerance_mps),
                 handles.left_position),
             "register " + position.name);
   position.name = "red-primary/task/right-tcp-position";
   position.enforcement = mcc::ScaledEnforcement{
-      handles.right_scale, options.maximum_accepted_hard_violation};
+      handles.right_position_scale, options.maximum_accepted_hard_violation};
   requireOk(builder.addPositionTask(
                 mcc::PriorityLevel::Primary, robot.right_end_effector_frame,
                 position,
                 Eigen::Vector3d::Constant(
-                    options.red_primary_task_tcp_preservation_tolerance),
+                    options.red_primary_task_tcp_position_preservation_tolerance_mps),
                 handles.right_position),
             "register " + position.name);
 
   mcc::OrientationTaskConfig orientation;
-  orientation.name = "red-primary/task/left-tcp-orientation";
+  orientation.name = "red-secondary/task/left-tcp-orientation";
   orientation.enforcement = mcc::ScaledEnforcement{
-      handles.left_scale, options.maximum_accepted_hard_violation};
+      handles.left_orientation_scale, options.maximum_accepted_hard_violation};
   requireOk(builder.addOrientationTask(
-                mcc::PriorityLevel::Primary, robot.left_end_effector_frame,
+                mcc::PriorityLevel::Secondary, robot.left_end_effector_frame,
                 orientation,
                 Eigen::Vector3d::Constant(
-                    options.red_primary_task_tcp_preservation_tolerance),
+                    options.red_secondary_task_tcp_orientation_preservation_tolerance_radps),
                 handles.left_orientation),
             "register " + orientation.name);
-  orientation.name = "red-primary/task/right-tcp-orientation";
+  orientation.name = "red-secondary/task/right-tcp-orientation";
   orientation.enforcement = mcc::ScaledEnforcement{
-      handles.right_scale, options.maximum_accepted_hard_violation};
+      handles.right_orientation_scale, options.maximum_accepted_hard_violation};
   requireOk(builder.addOrientationTask(
-                mcc::PriorityLevel::Primary, robot.right_end_effector_frame,
+                mcc::PriorityLevel::Secondary, robot.right_end_effector_frame,
                 orientation,
                 Eigen::Vector3d::Constant(
-                    options.red_primary_task_tcp_preservation_tolerance),
+                    options.red_secondary_task_tcp_orientation_preservation_tolerance_radps),
                 handles.right_orientation),
             "register " + orientation.name);
   return handles;
@@ -262,45 +293,51 @@ void configureSolver(
       "configure Red HKS");
   handles.red = addCartesianTasks(red_builder, robot, solver_options);
   mcc::PositionTaskConfig elbow;
-  elbow.name = "red-secondary/task/left-link4-position";
+  elbow.name = "red-tertiary/task/left-link4-position";
   elbow.enforcement =
       mcc::squaredL2Penalty(
-          solver_options.red_secondary_task_link4_position_weight, 3);
+          solver_options.red_tertiary_task_link4_position_weight, 3);
   elbow.servo_gain_per_s =
-      solver_options.red_secondary_task_link4_position_servo_gain_per_s;
+      solver_options.red_tertiary_task_link4_position_servo_gain_per_s;
   requireOk(
       red_builder.addPositionTask(
-          mcc::PriorityLevel::Secondary, robot.left_link4_frame, elbow,
+          mcc::PriorityLevel::Tertiary, robot.left_link4_frame, elbow,
           Eigen::Vector3d::Constant(
               solver_options
-                  .red_secondary_task_link4_position_preservation_tolerance_mps),
+                  .red_tertiary_task_link4_position_preservation_tolerance_mps),
           handles.red_left_link4),
       "register " + elbow.name);
-  elbow.name = "red-secondary/task/right-link4-position";
+  elbow.name = "red-tertiary/task/right-link4-position";
   requireOk(
       red_builder.addPositionTask(
-          mcc::PriorityLevel::Secondary, robot.right_link4_frame, elbow,
+          mcc::PriorityLevel::Tertiary, robot.right_link4_frame, elbow,
           Eigen::Vector3d::Constant(
               solver_options
-                  .red_secondary_task_link4_position_preservation_tolerance_mps),
+                  .red_tertiary_task_link4_position_preservation_tolerance_mps),
           handles.red_right_link4),
       "register " + elbow.name);
   mcc::PostureTaskConfig coupling;
-  coupling.name = "red-secondary/task/yellow-posture-coupling";
+  coupling.name = "red-tertiary/task/yellow-posture-coupling";
   coupling.enforcement =
       mcc::squaredL2Penalty(
-          solver_options.red_secondary_task_yellow_posture_coupling_weight, 1);
+          solver_options.red_tertiary_task_yellow_posture_coupling_weight, 1);
   coupling.reference_positions = Eigen::VectorXd::Zero(
       static_cast<Eigen::Index>(active_joint_names.size()));
+  coupling.servo_gain_per_s =
+      solver_options.red_tertiary_task_yellow_posture_coupling_servo_gain_per_s;
+  coupling.joint_weight_multipliers = jointWeightMultipliers(
+      active_joint_names,
+      solver_options
+          .red_tertiary_task_yellow_posture_coupling_joint_weight_multipliers);
   coupling.role = mcc::PostureTaskRole::Regularization;
   requireOk(red_builder.addPostureTask(
-                mcc::PriorityLevel::Secondary, coupling,
+                mcc::PriorityLevel::Tertiary, coupling,
                 Eigen::VectorXd::Constant(
                     static_cast<Eigen::Index>(active_joint_names.size()),
                     solver_options
-                        .red_secondary_task_yellow_posture_coupling_preservation_tolerance),
+                        .red_tertiary_task_yellow_posture_coupling_preservation_tolerance),
                 handles.red_yellow_posture),
-            "register Secondary Yellow posture preference");
+            "register Tertiary Yellow posture coupling");
   addRedLimits(red_builder, solver_options);
   requireOk(red_builder.finalize(runtime.redSolver()), "finalize Red HKS");
 
@@ -322,6 +359,11 @@ void configureSolver(
     posture.reference_positions(static_cast<Eigen::Index>(index)) =
         robot.default_positions.at(active_joint_full_indices[index]);
   }
+  posture.servo_gain_per_s =
+      solver_options.yellow_task_posture_preference_servo_gain_per_s;
+  posture.joint_weight_multipliers = jointWeightMultipliers(
+      active_joint_names,
+      solver_options.yellow_task_posture_preference_joint_weight_multipliers);
   posture.role = mcc::PostureTaskRole::Regularization;
   requireOk(yellow_builder.addPostureTask(posture, handles.yellow_posture),
             "register " + posture.name);

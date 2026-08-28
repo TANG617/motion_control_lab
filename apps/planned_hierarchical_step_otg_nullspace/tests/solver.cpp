@@ -179,14 +179,16 @@ int main(int argc, char **argv) {
             "Primary pass did not succeed");
     require(passes[1].attempted && passes[1].succeeded,
             "Secondary pass did not succeed");
-    require(!passes[2].attempted, "Tertiary pass must remain disabled");
+    require(passes[2].attempted && passes[2].succeeded,
+            "Tertiary pass did not succeed");
     require(!passes[3].attempted, "Terminal pass must remain disabled");
     require(red_diagnostics.hierarchy.highest_completed_priority ==
-                motion_control::core::PriorityLevel::Secondary,
-            "highest completed priority is not Secondary");
+                motion_control::core::PriorityLevel::Tertiary,
+            "highest completed priority is not Tertiary");
 
     std::size_t enabled_primary = 0U;
     std::size_t enabled_secondary = 0U;
+    std::size_t enabled_tertiary = 0U;
     bool left_link4_enabled = false;
     bool right_link4_disabled = false;
     bool yellow_posture_enabled = false;
@@ -199,6 +201,10 @@ int main(int argc, char **argv) {
           task.priority == motion_control::core::PriorityLevel::Secondary) {
         ++enabled_secondary;
       }
+      if (task.enabled &&
+          task.priority == motion_control::core::PriorityLevel::Tertiary) {
+        ++enabled_tertiary;
+      }
       if (task.handle_value == handles.red_left_link4.value) {
         left_link4_enabled = task.enabled;
       }
@@ -209,13 +215,15 @@ int main(int argc, char **argv) {
         yellow_posture_enabled = task.enabled;
       }
     }
-    require(enabled_primary == 4U,
-            "Primary must contain two TCP position and orientation pairs");
+    require(enabled_primary == 2U,
+            "Primary must contain the two TCP position tasks");
     require(enabled_secondary == 2U,
-            "Secondary must contain one link4 and the Yellow posture target");
+            "Secondary must contain the two TCP orientation tasks");
+    require(enabled_tertiary == 2U,
+            "Tertiary must contain one link4 and the Yellow posture target");
     require(left_link4_enabled && right_link4_disabled &&
                 yellow_posture_enabled,
-            "Secondary task enablement mismatch");
+            "Tertiary task enablement mismatch");
 
     for (const bool exercise_left : {true, false}) {
       runtime.beginRun(exercise_left ? 2U : 3U);
@@ -239,6 +247,7 @@ int main(int argc, char **argv) {
       const auto joint_limits = app::makeJointTargetLimits(
           *model, robot, app_options.interactive.robot.joint_stream);
       double maximum_primary_drift = 0.0;
+      double maximum_secondary_drift = 0.0;
 
       for (std::uint64_t tick = 1; tick <= 400; ++tick) {
         motion_control::core::RobotState yellow_state;
@@ -258,15 +267,22 @@ int main(int argc, char **argv) {
                        "iterated Red solve");
         require(red_diagnostics.hierarchy.passes[0].succeeded &&
                     red_diagnostics.hierarchy.passes[1].succeeded &&
-                    !red_diagnostics.hierarchy.passes[2].attempted &&
+                    red_diagnostics.hierarchy.passes[2].succeeded &&
                     !red_diagnostics.hierarchy.passes[3].attempted,
-                "iterated solve changed the two-pass hierarchy");
+                "iterated solve changed the three-pass hierarchy");
         for (const auto &task : red_diagnostics.hierarchy.tasks) {
           if (task.enabled &&
               task.priority == motion_control::core::PriorityLevel::Primary &&
               task.actual_preservation_drift.size() != 0) {
             maximum_primary_drift =
                 std::max(maximum_primary_drift,
+                         task.actual_preservation_drift.maxCoeff());
+          }
+          if (task.enabled &&
+              task.priority == motion_control::core::PriorityLevel::Secondary &&
+              task.actual_preservation_drift.size() != 0) {
+            maximum_secondary_drift =
+                std::max(maximum_secondary_drift,
                          task.actual_preservation_drift.maxCoeff());
           }
         }
@@ -348,16 +364,21 @@ int main(int argc, char **argv) {
               "null-space objective did not change the executed joints");
       require(maximum_tcp_position_error <=
                       app_options.interactive.solver
-                          .red_primary_task_tcp_preservation_tolerance &&
+                          .red_primary_task_tcp_position_preservation_tolerance_mps &&
                   maximum_tcp_orientation_error <=
                       app_options.interactive.solver
-                          .red_primary_task_tcp_preservation_tolerance,
-              "executed TCP drift exceeded the Primary preservation tolerance");
+                          .red_secondary_task_tcp_orientation_preservation_tolerance_radps,
+              "executed TCP drift exceeded its hierarchy preservation tolerance");
       require(
           maximum_primary_drift <=
               app_options.interactive.solver
-                  .red_primary_task_tcp_preservation_tolerance,
-          "Secondary changed a Primary residual beyond tolerance");
+                  .red_primary_task_tcp_position_preservation_tolerance_mps,
+          "a lower pass changed a Primary position residual beyond tolerance");
+      require(
+          maximum_secondary_drift <=
+              app_options.interactive.solver
+                  .red_secondary_task_tcp_orientation_preservation_tolerance_radps,
+          "Tertiary changed a Secondary orientation residual beyond tolerance");
     }
     return EXIT_SUCCESS;
   } catch (const std::exception &error) {

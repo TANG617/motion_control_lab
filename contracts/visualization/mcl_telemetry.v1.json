@@ -4,6 +4,7 @@
     {"topic": "/mcl/run/info", "foxglove_schema": "mcl.telemetry.v1.RunInfo", "role": "run_info", "required": true, "semantics": "Resolved run identity and telemetry metadata."},
     {"topic": "/mcl/events", "foxglove_schema": "foxglove.Log", "role": "events", "required": false, "semantics": "Edge-triggered runtime events."},
     {"topic": "/mcl/telemetry/tracking/cartesian", "foxglove_schema": "mcl.telemetry.v1.CartesianTracking", "role": "cartesian_tracking", "required": true, "semantics": "Per-control-attempt Cartesian tracking chain."},
+    {"topic": "/mcl/telemetry/compliance/cartesian", "foxglove_schema": "mcl.telemetry.v1.CartesianCompliance", "role": "cartesian_compliance", "required": false, "semantics": "Per-control-attempt nominal and compliant TCP P/V/A, TCP wrench, offset and saturation diagnostics; each arm names its calculation frame and TCP control-point frame."},
     {"topic": "/mcl/telemetry/tracking/joints", "foxglove_schema": "mcl.telemetry.v1.JointTracking", "role": "joint_tracking", "required": true, "semantics": "Per-commit joint IK, target, projected and execution chain."},
     {"topic": "/mcl/telemetry/solver/ik", "foxglove_schema": "mcl.telemetry.v1.SolverTelemetry", "role": "ik_solver", "required": true, "semantics": "IK or hierarchical IK diagnostics."},
     {"topic": "/mcl/telemetry/solver/avoidance", "foxglove_schema": "mcl.telemetry.v1.SolverTelemetry", "role": "avoidance_solver", "required": true, "semantics": "Avoidance solver diagnostics."},

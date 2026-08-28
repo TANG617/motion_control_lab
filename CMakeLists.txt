@@ -55,6 +55,11 @@ option(
   ON
 )
 option(
+  MCL_BUILD_PLANNED_HIERARCHICAL_STEP_OTG_NULLSPACE_ADMITTANCE_KINEMATIC_SIM
+  "Build the planned null-space admittance kinematic MuJoCo application"
+  ON
+)
+option(
   MCL_BUILD_MCC_PLOTS
   "Build the optional motion_control_core matplotlib renderer"
   OFF
@@ -115,7 +120,8 @@ set(MCL_BUILD_ANY_INTERACTIVE_IK OFF)
 if(MCL_BUILD_SINGLE_ARM_STEP OR MCL_BUILD_STEP OR
    MCL_BUILD_TARGET OR MCL_BUILD_BASELINE OR MCL_BUILD_HIERARCHICAL_STEP OR
    MCL_BUILD_PLANNED_HIERARCHICAL_STEP OR MCL_BUILD_PLANNED_HIERARCHICAL_STEP_OTG OR
-   MCL_BUILD_PLANNED_HIERARCHICAL_STEP_OTG_NULLSPACE)
+   MCL_BUILD_PLANNED_HIERARCHICAL_STEP_OTG_NULLSPACE OR
+   MCL_BUILD_PLANNED_HIERARCHICAL_STEP_OTG_NULLSPACE_ADMITTANCE_KINEMATIC_SIM)
   set(MCL_BUILD_ANY_INTERACTIVE_IK ON)
 endif()
 
@@ -221,7 +227,8 @@ target_include_directories(
 )
 
 if(MCL_BUILD_PLANNED_HIERARCHICAL_STEP_OTG OR
-   MCL_BUILD_PLANNED_HIERARCHICAL_STEP_OTG_NULLSPACE)
+   MCL_BUILD_PLANNED_HIERARCHICAL_STEP_OTG_NULLSPACE OR
+   MCL_BUILD_PLANNED_HIERARCHICAL_STEP_OTG_NULLSPACE_ADMITTANCE_KINEMATIC_SIM)
   find_package(Protobuf REQUIRED)
   set(MCL_TELEMETRY_PROTO
       "${CMAKE_CURRENT_SOURCE_DIR}/contracts/telemetry/mcl_telemetry_v1.proto")
@@ -248,6 +255,10 @@ endif()
 if(MCL_BUILD_ANY_INTERACTIVE_IK OR MCL_BUILD_MCC_PLOTS OR MCL_BUILD_CARTESIAN_PLANNING OR
    MCL_BUILD_E03_BATCH_REPLAY_IK)
   find_package(motion_control_core CONFIG REQUIRED)
+endif()
+
+if(MCL_BUILD_PLANNED_HIERARCHICAL_STEP_OTG_NULLSPACE_ADMITTANCE_KINEMATIC_SIM)
+  find_package(motion_control_sim 0.1 CONFIG REQUIRED)
 endif()
 
 if(MCL_BUILD_ANY_INTERACTIVE_IK OR MCL_BUILD_CARTESIAN_PLANNING OR
@@ -515,7 +526,75 @@ if(MCL_BUILD_ANY_INTERACTIVE_IK)
   if(MCL_BUILD_PLANNED_HIERARCHICAL_STEP_OTG_NULLSPACE)
     add_subdirectory(apps/planned_hierarchical_step_otg_nullspace)
   endif()
+
+  if(MCL_BUILD_PLANNED_HIERARCHICAL_STEP_OTG_NULLSPACE_ADMITTANCE_KINEMATIC_SIM)
+    add_test(
+      NAME scripts.planned_nullspace_admittance_source_launcher_path_resolution
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        --unset=MCL_BINARY
+        "PATH=$<TARGET_FILE_DIR:mcl_planned_hierarchical_step_otg_nullspace_admittance_kinematic_sim>:$ENV{PATH}"
+        "MCL_UI=none"
+        "MCL_VIZ=none"
+        "MCL_MUJOCO_VIEWER=off"
+        "${CMAKE_CURRENT_SOURCE_DIR}/apps/planned_hierarchical_step_otg_nullspace_admittance_kinematic_sim/scripts/run_keyboard.sh"
+        --help
+    )
+    add_test(
+      NAME scripts.planned_nullspace_admittance_mcap_preset_smoke
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        "MCL_BINARY=${MCL_TRUE_EXECUTABLE}"
+        "MCL_CPU_SET="
+        "MCL_RT_PRIORITY="
+        "MCL_UI=none"
+        "MCL_VIZ=none"
+        "MCL_MUJOCO_VIEWER=off"
+        "${CMAKE_CURRENT_SOURCE_DIR}/apps/planned_hierarchical_step_otg_nullspace_admittance_kinematic_sim/scripts/run_mcap_replay.sh"
+    )
+    add_test(
+      NAME scripts.planned_nullspace_admittance_csv_preset_smoke
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        "MCL_BINARY=${MCL_TRUE_EXECUTABLE}"
+        "MCL_INPUT=/tmp/mcl-nullspace-admittance-csv-launcher-smoke.csv"
+        "${CMAKE_CURRENT_SOURCE_DIR}/apps/planned_hierarchical_step_otg_nullspace_admittance_kinematic_sim/scripts/run_csv_replay.sh"
+    )
+
+    if(MCL_SCRIPT_EXECUTABLE)
+      add_test(
+        NAME scripts.planned_nullspace_admittance_keyboard_smoke
+        COMMAND
+          "${CMAKE_COMMAND}" -E env
+          --unset=MCL_BINARY
+          "PATH=$<TARGET_FILE_DIR:mcl_planned_hierarchical_step_otg_nullspace_admittance_kinematic_sim>:$ENV{PATH}"
+          "MCL_UI=none"
+          "MCL_VIZ=none"
+          "MCL_MUJOCO_VIEWER=off"
+          "MCL_R1_SIM_ASSET_ROOT=${CMAKE_CURRENT_SOURCE_DIR}/assets/robots/r1/mujoco"
+          "${MCL_SCRIPT_EXECUTABLE}" -qec
+          "${CMAKE_CURRENT_SOURCE_DIR}/apps/planned_hierarchical_step_otg_nullspace_admittance_kinematic_sim/scripts/run_keyboard.sh --duration 0.05"
+          /dev/null
+      )
+      set_tests_properties(
+        scripts.planned_nullspace_admittance_keyboard_smoke
+        PROPERTIES TIMEOUT 15
+      )
+    endif()
+  endif()
+  if(MCL_BUILD_PLANNED_HIERARCHICAL_STEP_OTG_NULLSPACE_ADMITTANCE_KINEMATIC_SIM)
+    add_subdirectory(
+      apps/planned_hierarchical_step_otg_nullspace_admittance_kinematic_sim)
+  endif()
 endif()
+
+install(
+  DIRECTORY assets/robots/r1/mujoco/
+  DESTINATION ${CMAKE_INSTALL_DATADIR}/motion-control-lab/robots/r1/mujoco
+  PATTERN "prepare_asset.py" EXCLUDE
+  PATTERN "__pycache__" EXCLUDE
+  PATTERN "*.pyc" EXCLUDE
+)
 
 if(MCL_BUILD_CARTESIAN_PLANNING)
   if(NOT TARGET motion_control_viz::foxglove)
@@ -1205,12 +1284,14 @@ if(BUILD_TESTING)
         mcl_hierarchical_step
         mcl_planned_hierarchical_step
         mcl_planned_hierarchical_step_otg
-        mcl_planned_hierarchical_step_otg_nullspace)
+        mcl_planned_hierarchical_step_otg_nullspace
+        mcl_planned_hierarchical_step_otg_nullspace_admittance_kinematic_sim)
       if(TARGET ${MCL_SERVO_TARGET})
         set(MCL_SERVO_PLANNED OFF)
         if(MCL_SERVO_TARGET STREQUAL "mcl_planned_hierarchical_step" OR
            MCL_SERVO_TARGET STREQUAL "mcl_planned_hierarchical_step_otg" OR
-           MCL_SERVO_TARGET STREQUAL "mcl_planned_hierarchical_step_otg_nullspace")
+           MCL_SERVO_TARGET STREQUAL "mcl_planned_hierarchical_step_otg_nullspace" OR
+           MCL_SERVO_TARGET STREQUAL "mcl_planned_hierarchical_step_otg_nullspace_admittance_kinematic_sim")
           set(MCL_SERVO_PLANNED ON)
         endif()
         add_test(

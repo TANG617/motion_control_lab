@@ -488,6 +488,13 @@ Primary 保持左右 TCP position/orientation，Secondary 同时优化当前 hel
 保持关闭。键盘用 `c` 切换 TCP/link4 编辑焦点；link4 目标走 app-local latest snapshot，
 不会增加 Cartesian planner revision。该目标返回 TCP 后继续保持，同一时间最多启用一侧。
 
+`mcl_planned_hierarchical_step_otg_nullspace_admittance_kinematic_sim` 在上述 app 的当前
+working-tree 行为上增加 planner 后、HKS 前的双臂 TCP 导纳，并以 committed JointPlanner OTG
+状态驱动 MuJoCo 运动学投影。planner nominal 与 compliant command 分开记录；MuJoCo 不调用
+`mj_step`，不进入 torque/dynamics 闭环。数据流、P/V/A 控制点变换、失败策略、viewer 操作和
+新增 telemetry topic 见
+`apps/planned_hierarchical_step_otg_nullspace_admittance_kinematic_sim/README.md`。
+
 app 从 R1 URDF 所在 `robot_description/psi_r1/urdf` 布局推导 mesh package search root，并直接
 交给模型加载器。调试入口不预先校验 mesh 目录或 collision diagnostics 形状；底层错误直接退出，
 不新增 TUI 或 Foxglove schema。
@@ -592,6 +599,7 @@ apps/hierarchical_step/  main/options/solver/loop；raw Red/Yellow ServoStep
 apps/planned_hierarchical_step/ main/options/solver/planning/loop；在线 Cartesian replan
 apps/planned_hierarchical_step_otg/ main/options/solver/planning/loop；Cartesian replan + JointPlanner OTG
 apps/planned_hierarchical_step_otg_nullspace/ 独立两级 HQP null-space + JointPlanner OTG 演示
+apps/planned_hierarchical_step_otg_nullspace_admittance_kinematic_sim/ 上述 OTG/null-space + 双臂导纳 + MuJoCo 运动学投影
 contracts/                definition、manifest、metric 与 visualization 合同
 data/raw/                 原始数据占位；不得静默改写
 data/canonical/           规范数据占位

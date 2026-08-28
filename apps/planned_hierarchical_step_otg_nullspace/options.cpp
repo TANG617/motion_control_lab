@@ -6,6 +6,7 @@
 #include <filesystem>
 #include <initializer_list>
 #include <iostream>
+#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -32,6 +33,45 @@ double parsePositiveDouble(const std::string &name, const std::string &value) {
   return parsed;
 }
 
+double parseNonnegativeDouble(const std::string &name,
+                              const std::string &value) {
+  const double parsed = std::stod(value);
+  if (parsed < 0.0 || !std::isfinite(parsed)) {
+    throw std::runtime_error(name + " must be a non-negative finite value");
+  }
+  return parsed;
+}
+
+std::vector<std::pair<std::string, double>> parseJointWeightMultipliers(
+    const std::string &argument, const std::string &value) {
+  std::vector<std::pair<std::string, double>> result;
+  std::istringstream input(value);
+  std::string entry;
+  while (std::getline(input, entry, ',')) {
+    const auto separator = entry.find('=');
+    if (separator == std::string::npos || separator == 0U ||
+        separator + 1U == entry.size()) {
+      throw std::runtime_error(
+          argument + " entries must use <joint>=<non-negative-weight>");
+    }
+    const std::string name = entry.substr(0U, separator);
+    const double weight = parseNonnegativeDouble(
+        argument + " weight for " + name, entry.substr(separator + 1U));
+    const auto existing = std::find_if(
+        result.begin(), result.end(),
+        [&](const auto &item) { return item.first == name; });
+    if (existing == result.end()) {
+      result.emplace_back(name, weight);
+    } else {
+      existing->second = weight;
+    }
+  }
+  if (result.empty()) {
+    throw std::runtime_error(argument + " requires at least one joint weight");
+  }
+  return result;
+}
+
 bool optionIn(const std::string &option,
               std::initializer_list<const char *> candidates) {
   return std::any_of(
@@ -49,6 +89,21 @@ bool parseOnOff(const std::string &argument, const std::string &value) {
   throw std::runtime_error(argument + " must be either 'on' or 'off'");
 }
 
+PlanningSynchronization parsePlanningSynchronization(
+    const std::string &argument, const std::string &value) {
+  if (value == "none") {
+    return PlanningSynchronization::None;
+  }
+  if (value == "time") {
+    return PlanningSynchronization::Time;
+  }
+  if (value == "phase") {
+    return PlanningSynchronization::Phase;
+  }
+  throw std::runtime_error(
+      argument + " must be one of 'none', 'time', or 'phase'");
+}
+
 bool parseSolverOption(const std::string &argument, const std::string &value,
                        SolverOptions &options) {
   const double parsed = parsePositiveDouble(argument, value);
@@ -62,16 +117,18 @@ bool parseSolverOption(const std::string &argument, const std::string &value,
     options.maximum_accepted_hard_violation = parsed;
   else if (argument == "--joint-position-margin-rad")
     options.joint_position_margin_rad = parsed;
-  else if (argument == "--red-primary-task-cartesian-progress-weight")
-    options.red_primary_task_cartesian_progress_weight = parsed;
-  else if (argument == "--red-secondary-task-link4-position-weight")
-    options.red_secondary_task_link4_position_weight = parsed;
+  else if (argument == "--red-primary-task-tcp-position-progress-weight")
+    options.red_primary_task_tcp_position_progress_weight = parsed;
+  else if (argument == "--red-secondary-task-tcp-orientation-progress-weight")
+    options.red_secondary_task_tcp_orientation_progress_weight = parsed;
+  else if (argument == "--red-tertiary-task-link4-position-weight")
+    options.red_tertiary_task_link4_position_weight = parsed;
   else if (argument ==
-           "--red-secondary-task-link4-position-servo-gain-per-s")
-    options.red_secondary_task_link4_position_servo_gain_per_s = parsed;
+           "--red-tertiary-task-link4-position-servo-gain-per-s")
+    options.red_tertiary_task_link4_position_servo_gain_per_s = parsed;
   else if (argument ==
-           "--red-secondary-task-link4-position-preservation-tolerance-mps")
-    options.red_secondary_task_link4_position_preservation_tolerance_mps =
+           "--red-tertiary-task-link4-position-preservation-tolerance-mps")
+    options.red_tertiary_task_link4_position_preservation_tolerance_mps =
         parsed;
   else if (argument == "--red-proxqp-absolute-tolerance")
     options.red_proxqp_absolute_tolerance = parsed;
@@ -80,8 +137,14 @@ bool parseSolverOption(const std::string &argument, const std::string &value,
   else if (argument == "--yellow-task-posture-preference-weight")
     options.yellow_task_posture_preference_weight = parsed;
   else if (argument ==
-           "--red-secondary-task-yellow-posture-coupling-weight")
-    options.red_secondary_task_yellow_posture_coupling_weight = parsed;
+           "--yellow-task-posture-preference-servo-gain-per-s")
+    options.yellow_task_posture_preference_servo_gain_per_s = parsed;
+  else if (argument ==
+           "--red-tertiary-task-yellow-posture-coupling-weight")
+    options.red_tertiary_task_yellow_posture_coupling_weight = parsed;
+  else if (argument ==
+           "--red-tertiary-task-yellow-posture-coupling-servo-gain-per-s")
+    options.red_tertiary_task_yellow_posture_coupling_servo_gain_per_s = parsed;
   else if (argument ==
            "--yellow-constraints-self-collision-avoidance-minimum-distance-m")
     options.yellow_constraints_self_collision_avoidance_minimum_distance_m =
@@ -100,6 +163,20 @@ bool parseSolverOption(const std::string &argument, const std::string &value,
   else
     return false;
   return true;
+}
+
+void validateJointWeightMultipliers(
+    const std::vector<std::pair<std::string, double>> &multipliers,
+    const std::string &option_name) {
+  const auto &joint_names = r1RobotConfig().joint_names;
+  for (const auto &[name, weight] : multipliers) {
+    static_cast<void>(weight);
+    if (std::find(joint_names.begin(), joint_names.end(), name) ==
+        joint_names.end()) {
+      throw std::runtime_error(option_name + " contains unknown R1 joint: " +
+                               name);
+    }
+  }
 }
 
 void validate(const HierarchicalOptions &options) {
@@ -122,6 +199,13 @@ void validate(const HierarchicalOptions &options) {
     throw std::runtime_error(std::string{"--urdf is required unless "} +
                              kMotionControlUrdfEnvironmentVariable + " is set");
   }
+  validateJointWeightMultipliers(
+      options.solver.yellow_task_posture_preference_joint_weight_multipliers,
+      "--yellow-task-posture-preference-joint-weight-multipliers");
+  validateJointWeightMultipliers(
+      options.solver
+          .red_tertiary_task_yellow_posture_coupling_joint_weight_multipliers,
+      "--red-tertiary-task-yellow-posture-coupling-joint-weight-multipliers");
   if (options.solver
           .yellow_constraints_self_collision_avoidance_influence_distance_m <=
       options.solver
@@ -182,29 +266,39 @@ void printHierarchicalUsage(const char *program) {
       << "  --orientation-tolerance-rad <value>      Orientation tolerance\n"
       << "  --maximum-hard-violation <value>         App acceptance tolerance\n"
       << "  --joint-position-margin-rad <value>      Joint limit margin\n"
-      << "  --red-primary-task-cartesian-progress-weight <value> Cartesian "
-         "progress weight\n"
-      << "  --red-secondary-task-link4-position-weight <value> Secondary "
+      << "  --red-primary-task-tcp-position-progress-weight <value> Primary "
+         "position progress weight\n"
+      << "  --red-secondary-task-tcp-orientation-progress-weight <value> "
+         "Secondary orientation progress weight\n"
+      << "  --red-tertiary-task-link4-position-weight <value> Tertiary "
          "link4 weight "
          "(default: "
-      << defaults.solver.red_secondary_task_link4_position_weight << ")\n"
-      << "  --red-secondary-task-link4-position-servo-gain-per-s <value> "
-         "Secondary link4 gain "
+      << defaults.solver.red_tertiary_task_link4_position_weight << ")\n"
+      << "  --red-tertiary-task-link4-position-servo-gain-per-s <value> "
+         "Tertiary link4 gain "
          "(default: "
-      << defaults.solver.red_secondary_task_link4_position_servo_gain_per_s
+      << defaults.solver.red_tertiary_task_link4_position_servo_gain_per_s
       << ")\n"
-      << "  --red-secondary-task-link4-position-preservation-tolerance-mps "
+      << "  --red-tertiary-task-link4-position-preservation-tolerance-mps "
          "<value> Link4 preservation tolerance (default: "
       << defaults.solver
-             .red_secondary_task_link4_position_preservation_tolerance_mps
+             .red_tertiary_task_link4_position_preservation_tolerance_mps
       << ")\n"
       << "  --red-proxqp-absolute-tolerance <value>  Red QP tolerance\n"
       << "  --red-proxqp-primal-infeasibility-tolerance <value> Red "
          "certificate tolerance\n"
       << "  --yellow-task-posture-preference-weight <value> Yellow posture "
          "preference weight\n"
-      << "  --red-secondary-task-yellow-posture-coupling-weight <value> "
-         "Yellow-to-Red coupling weight\n"
+      << "  --yellow-task-posture-preference-servo-gain-per-s <value> Yellow "
+         "posture gain\n"
+      << "  --yellow-task-posture-preference-joint-weight-multipliers "
+         "<joint=value,...> Yellow posture joint weights\n"
+      << "  --red-tertiary-task-yellow-posture-coupling-weight <value> "
+         "Tertiary Yellow-to-Red coupling weight\n"
+      << "  --red-tertiary-task-yellow-posture-coupling-servo-gain-per-s "
+         "<value> Tertiary Yellow-to-Red coupling gain\n"
+      << "  --red-tertiary-task-yellow-posture-coupling-joint-weight-"
+         "multipliers <joint=value,...> Tertiary coupling joint weights\n"
       << "  --yellow-constraints-self-collision-avoidance-minimum-distance-m "
          "<value> Collision minimum distance\n"
       << "  --yellow-constraints-self-collision-avoidance-influence-distance-m "
@@ -218,7 +312,7 @@ void printHierarchicalUsage(const char *program) {
          "deadline.\n\n";
   std::cout
       << "Keyboard controls:\n"
-      << "  1..8/F1..F7/Tab/BackTab: navigate pages; h or ?: help\n"
+      << "  1..7/F1..F7/Tab/BackTab: navigate pages; h or ?: help\n"
       << "  PageUp/PageDown/Home/End: scroll the current page\n"
       << "  left/right arrows: select arm; c: switch TCP/link4 focus\n"
       << "  w/s: +x/-x, a/d: +y/-y, q/e: +z/-z\n"
@@ -244,6 +338,10 @@ void printPlannedUsage(const char *program, SourceMode source_mode) {
             << defaults.planning.max_angular_acceleration_rps2 << ")\n"
             << "  --max-angular-jerk-rps3 <value>         (default: "
             << defaults.planning.max_angular_jerk_rps3 << ")\n"
+            << "  --joint-synchronization <none|time|phase> (default: "
+            << planningSynchronizationName(
+                   defaults.planning.joint_synchronization)
+            << ")\n"
             << "  --joint-target-mode <future-o1-pv|ik-pv> (default: "
             << jointTargetModeName(defaults.joint_target.mode) << ")\n";
   if (source_mode == SourceMode::Replay) {
@@ -334,19 +432,34 @@ HierarchicalOptions parseHierarchicalOptions(int argc, char **argv) {
     } else if (argument == "--rotation-step-deg") {
       options.tui.rotation_step_deg = parsePositiveDouble(
           "rotation step", requireValue(index, argc, argv, argument));
+    } else if (argument ==
+               "--yellow-task-posture-preference-joint-weight-multipliers") {
+      options.solver.yellow_task_posture_preference_joint_weight_multipliers =
+          parseJointWeightMultipliers(
+              argument, requireValue(index, argc, argv, argument));
+    } else if (
+        argument ==
+        "--red-tertiary-task-yellow-posture-coupling-joint-weight-multipliers") {
+      options.solver
+          .red_tertiary_task_yellow_posture_coupling_joint_weight_multipliers =
+          parseJointWeightMultipliers(
+              argument, requireValue(index, argc, argv, argument));
     } else if (optionIn(
                    argument,
                    {"--regularization", "--position-tolerance-m",
                     "--orientation-tolerance-rad", "--maximum-hard-violation",
                     "--joint-position-margin-rad",
-                    "--red-primary-task-cartesian-progress-weight",
-                    "--red-secondary-task-link4-position-weight",
-                    "--red-secondary-task-link4-position-servo-gain-per-s",
-                    "--red-secondary-task-link4-position-preservation-tolerance-mps",
+                    "--red-primary-task-tcp-position-progress-weight",
+                    "--red-secondary-task-tcp-orientation-progress-weight",
+                    "--red-tertiary-task-link4-position-weight",
+                    "--red-tertiary-task-link4-position-servo-gain-per-s",
+                    "--red-tertiary-task-link4-position-preservation-tolerance-mps",
                     "--red-proxqp-absolute-tolerance",
                     "--red-proxqp-primal-infeasibility-tolerance",
                     "--yellow-task-posture-preference-weight",
-                    "--red-secondary-task-yellow-posture-coupling-weight",
+                    "--yellow-task-posture-preference-servo-gain-per-s",
+                    "--red-tertiary-task-yellow-posture-coupling-weight",
+                    "--red-tertiary-task-yellow-posture-coupling-servo-gain-per-s",
                     "--yellow-constraints-self-collision-avoidance-minimum-distance-m",
                     "--yellow-constraints-self-collision-avoidance-influence-distance-m",
                     "--yellow-constraints-self-collision-avoidance-damping-gain-per-s",
@@ -414,6 +527,9 @@ Options parseOptions(int argc, char **argv) {
       planningValue(result.planning.max_angular_acceleration_rps2);
     } else if (argument == "--max-angular-jerk-rps3") {
       planningValue(result.planning.max_angular_jerk_rps3);
+    } else if (argument == "--joint-synchronization") {
+      result.planning.joint_synchronization = parsePlanningSynchronization(
+          argument, requireValue(index, argc, argv, argument));
     } else if (argument == "--start-paused") {
       if (result.source_mode != SourceMode::Replay) {
         throw std::runtime_error("--start-paused is only valid with replay");
@@ -453,14 +569,19 @@ Options parseOptions(int argc, char **argv) {
            "--duration", "--regularization", "--position-tolerance-m",
            "--orientation-tolerance-rad", "--maximum-hard-violation",
            "--joint-position-margin-rad",
-           "--red-primary-task-cartesian-progress-weight",
-           "--red-secondary-task-link4-position-weight",
-           "--red-secondary-task-link4-position-servo-gain-per-s",
-           "--red-secondary-task-link4-position-preservation-tolerance-mps",
+           "--red-primary-task-tcp-position-progress-weight",
+           "--red-secondary-task-tcp-orientation-progress-weight",
+           "--red-tertiary-task-link4-position-weight",
+           "--red-tertiary-task-link4-position-servo-gain-per-s",
+           "--red-tertiary-task-link4-position-preservation-tolerance-mps",
            "--red-proxqp-absolute-tolerance",
            "--red-proxqp-primal-infeasibility-tolerance",
            "--yellow-task-posture-preference-weight",
-           "--red-secondary-task-yellow-posture-coupling-weight",
+           "--yellow-task-posture-preference-servo-gain-per-s",
+           "--yellow-task-posture-preference-joint-weight-multipliers",
+           "--red-tertiary-task-yellow-posture-coupling-weight",
+           "--red-tertiary-task-yellow-posture-coupling-servo-gain-per-s",
+           "--red-tertiary-task-yellow-posture-coupling-joint-weight-multipliers",
            "--yellow-constraints-self-collision-avoidance-minimum-distance-m",
            "--yellow-constraints-self-collision-avoidance-influence-distance-m",
            "--yellow-constraints-self-collision-avoidance-damping-gain-per-s",

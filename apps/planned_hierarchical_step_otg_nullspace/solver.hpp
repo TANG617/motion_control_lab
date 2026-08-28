@@ -17,8 +17,10 @@ namespace motion_control_lab::planned_hierarchical_step_otg_nullspace {
 namespace mcc = motion_control::core;
 
 struct CartesianHandles {
-  mcc::TaskScaleGroupHandle left_scale;
-  mcc::TaskScaleGroupHandle right_scale;
+  mcc::TaskScaleGroupHandle left_position_scale;
+  mcc::TaskScaleGroupHandle right_position_scale;
+  mcc::TaskScaleGroupHandle left_orientation_scale;
+  mcc::TaskScaleGroupHandle right_orientation_scale;
   mcc::PositionTaskHandle left_position;
   mcc::OrientationTaskHandle left_orientation;
   mcc::PositionTaskHandle right_position;

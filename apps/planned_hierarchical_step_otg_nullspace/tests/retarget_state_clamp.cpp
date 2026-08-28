@@ -424,6 +424,56 @@ void testClampedRequestPlansWithinAllDerivativeLimits()
     "planner target derivatives are not stationary");
 }
 
+void testNearStationaryResidualPlansWithoutClamping()
+{
+  mcc::CartesianRetargetRequest request;
+  request.reference_frame_name = "base_link";
+  request.sample_period = 1.0e-3;
+  request.maximum_sample_count = 10000U;
+  request.synchronization = mcc::TrajectorySynchronization::Time;
+  request.limits.max_linear_velocity = Eigen::Vector3d::Constant(3.0);
+  request.limits.max_linear_acceleration = Eigen::Vector3d::Constant(20.0);
+  request.limits.max_linear_jerk = Eigen::Vector3d::Constant(400.0);
+  request.limits.max_rotation_vector_velocity = Eigen::Vector3d::Constant(3.0);
+  request.limits.max_rotation_vector_acceleration = Eigen::Vector3d::Constant(20.0);
+  request.limits.max_rotation_vector_jerk = Eigen::Vector3d::Constant(300.0);
+
+  mcc::CartesianRetargetSegment left;
+  left.frame_name = "left_tool";
+  left.target_pose.translation() =
+    Eigen::Vector3d{-1.1102230246251565e-16, 0.0, 0.0};
+  left.current_twist <<
+    -5.4210108624275222e-20, 2.7105054312137611e-20, -2.1684043449710089e-19,
+    -2.2020040177630917e-18, 1.2413117550176466e-15, 7.789724247820044e-20;
+  left.current_acceleration <<
+    0.0, 0.0, 0.0, -1.0943467383406303e-16, -1.8182503227710328e-14,
+    -1.4958333289518682e-19;
+
+  mcc::CartesianRetargetSegment right;
+  right.frame_name = "right_tool";
+  right.target_pose.translation() =
+    Eigen::Vector3d{0.0, 2.7755575615628914e-17, 2.2204460492503131e-16};
+  right.current_twist <<
+    -3.2311742677852644e-27, 6.4623485355705287e-27, 6.4623485355705287e-27,
+    -7.3183646642771549e-19, -9.4867690092481638e-19, -1.7076184216646695e-18;
+  request.segments = {left, right};
+
+  const auto original = request;
+  const auto clamp = planned::clampRetargetCurrentState(request);
+  require(!clamp.clamped(), "near-stationary residual was unexpectedly clamped");
+  require(
+    sameRequestBits(request, original),
+    "near-stationary residual changed before planning");
+
+  mcc::CartesianPlanner planner;
+  mcc::PlanningDiagnostics diagnostics;
+  const auto status = planner.replan(request, diagnostics);
+  require(status.ok(), "Core rejected the near-stationary residual: " + status.message);
+  require(
+    diagnostics.duration == request.sample_period,
+    "near-stationary residual was not synchronized over one sample period");
+}
+
 }  // namespace
 
 int main()
@@ -433,6 +483,7 @@ int main()
     testInRangeRequestIsBitwiseUnchanged();
     testAllPvaGroupsClampAcrossBothArms();
     testClampedRequestPlansWithinAllDerivativeLimits();
+    testNearStationaryResidualPlansWithoutClamping();
     return EXIT_SUCCESS;
   } catch (const std::exception & error) {
     std::cerr << "planned hierarchical Step retarget clamp test failed: " << error.what() << '\n';

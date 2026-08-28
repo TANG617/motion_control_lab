@@ -155,6 +155,7 @@ struct NullspaceTuiDebug {
   bool secondary_attempted{false};
   bool secondary_succeeded{false};
   bool tertiary_attempted{false};
+  bool tertiary_succeeded{false};
   bool terminal_attempted{false};
   std::string terminal_status{"not-run"};
 };

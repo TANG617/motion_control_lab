@@ -57,6 +57,26 @@ struct TaskScaleDebug
   double cost{0.0};
   bool degraded{false};
   bool stuck{false};
+  std::string pass;
+  std::string evidence;
+  bool evaluated{false};
+};
+
+struct TaskDebug
+{
+  std::string name;
+  std::string kind;
+  std::string unit;
+  std::string pass;
+  std::string evidence;
+  std::string state;
+  bool enabled{false};
+  double residual_norm{0.0};
+  double maximum_violation{0.0};
+  double cost{0.0};
+  bool cost_available{false};
+  bool residual_available{false};
+  std::string enforcement;
 };
 
 struct RequirementDebug
@@ -68,6 +88,15 @@ struct RequirementDebug
   bool active{false};
   double maximum_violation{0.0};
   double cost{0.0};
+  std::string pass;
+  std::string evidence;
+  std::string state;
+  std::string component;
+  double minimum_slack{0.0};
+  bool cost_available{true};
+  bool slack_available{false};
+  std::string kind;
+  std::string side;
 };
 
 struct GroupedAttemptDebug
@@ -146,6 +175,7 @@ struct SolverDebug
   bool warm_start_used{false};
   std::vector<QpPassDebug> qp_passes;
   std::vector<TaskScaleDebug> task_scales;
+  std::vector<TaskDebug> tasks;
   std::vector<RequirementDebug> requirements;
   std::optional<SolverRunCounters> run_counters;
   std::optional<GroupedAttemptDebug> grouped_attempt;
@@ -236,6 +266,7 @@ struct InteractiveIkPresentation
   std::string base_frame_id;
   std::string joint_state_channel;
   std::vector<ArmPresentation> arms;
+  bool requirements_page_enabled{false};
 };
 
 inline const ArmPresentation * findArmPresentation(
