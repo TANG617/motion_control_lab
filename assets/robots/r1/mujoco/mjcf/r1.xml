@@ -337,6 +337,10 @@
       <geom type="mesh" rgba="0.90000 0.90000 0.90000 1.00000" mesh="base_link_visuals" group="1" name="base_link_visual_geom" contype="0" conaffinity="0" />
     </body>
   </worldbody>
+  <equality>
+    <weld name="fixed_base_weld" body1="base_link" active="false"
+      solref="0.001 1" solimp="0.9999 0.9999 0.001" />
+  </equality>
   <actuator>
     <motor name="head_yaw_joint_motor" joint="head_yaw_joint" gear="1" ctrllimited="true" ctrlrange="-16 16" />
     <motor name="head_pitch_joint_motor" joint="head_pitch_joint" gear="1" ctrllimited="true" ctrlrange="-16 16" />

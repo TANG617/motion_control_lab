@@ -495,9 +495,17 @@ working-tree 行为上增加 planner 后、HKS 前的双臂 TCP 导纳，并以 
 新增 telemetry topic 见
 `apps/planned_hierarchical_step_otg_nullspace_admittance_kinematic_sim/README.md`。
 
+`mcl_hierarchical_inverse_dynamics_torque_sim` 是独立的 ROS-free 固定基 R1 torque-driven app：
+`CartesianPlanner P/V/A -> optional admittance -> HID -> qfrc_applied -> one mj_step -> measured feedback`。
+其 keyboard launcher 默认对齐 planned app 的全屏分页 TUI、Foxglove WebSocket 和 MuJoCo
+窗口；MuJoCo 双手 marker 与键盘共用同一个 planner target source。它不改变现有
+HKS/kinematic app，也没有硬件发布路径。运行与模型合同见
+`docs/hierarchical_inverse_dynamics_torque_sim.md`。
+
 app 从 R1 URDF 所在 `robot_description/psi_r1/urdf` 布局推导 mesh package search root，并直接
 交给模型加载器。调试入口不预先校验 mesh 目录或 collision diagnostics 形状；底层错误直接退出，
-不新增 TUI 或 Foxglove schema。
+不新增 Foxglove schema；torque app 复用既有 state/planning/execution channels，并只在
+app-local TUI 增加 Dynamics 页。
 
 也可以设置 `MOTION_CONTROL_URDF`，省略每次运行的 `--urdf`。
 
@@ -600,6 +608,7 @@ apps/planned_hierarchical_step/ main/options/solver/planning/loop；在线 Carte
 apps/planned_hierarchical_step_otg/ main/options/solver/planning/loop；Cartesian replan + JointPlanner OTG
 apps/planned_hierarchical_step_otg_nullspace/ 独立两级 HQP null-space + JointPlanner OTG 演示
 apps/planned_hierarchical_step_otg_nullspace_admittance_kinematic_sim/ 上述 OTG/null-space + 双臂导纳 + MuJoCo 运动学投影
+apps/hierarchical_inverse_dynamics_torque_sim/ fixed-base R1 hierarchical ID + MuJoCo torque 闭环
 contracts/                definition、manifest、metric 与 visualization 合同
 data/raw/                 原始数据占位；不得静默改写
 data/canonical/           规范数据占位

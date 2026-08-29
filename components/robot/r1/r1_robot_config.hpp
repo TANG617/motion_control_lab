@@ -24,6 +24,8 @@ struct R1RobotConfig
   std::vector<double> default_positions;
   std::vector<std::size_t> left_arm_joint_indices;
   std::vector<std::size_t> right_arm_joint_indices;
+  /** @brief Curated symmetric effort magnitude in joint_names order; no rate limits implied. */
+  std::vector<double> effort_limits;
 };
 
 const R1RobotConfig & r1RobotConfig();
