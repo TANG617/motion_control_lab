@@ -50,10 +50,12 @@ mcc::HierarchicalKinematicsSolverConfig makeRedConfig(const Options &options) {
   config.servo_period = 1.0 / app.red_rate_hz;
   config.joint_limit_policy =
       mcc::KinematicsJointLimitPolicy::ExplicitRequirements;
-  config.proxqp.absolute_tolerance = app.solver.red_proxqp_absolute_tolerance;
-  config.proxqp.primal_infeasibility_tolerance =
+  config.qp.proxqp.absolute_tolerance =
+      app.solver.red_proxqp_absolute_tolerance;
+  config.qp.proxqp.primal_infeasibility_tolerance =
       app.solver.red_proxqp_primal_infeasibility_tolerance;
-  config.proxqp.warm_start_enabled = app.solver.red_proxqp_warm_start_enabled;
+  config.qp.proxqp.warm_start_enabled =
+      app.solver.red_proxqp_warm_start_enabled;
   config.maximum_accepted_hard_violation =
       app.solver.maximum_accepted_hard_violation;
   return config;
@@ -66,59 +68,59 @@ addCartesianTasks(mcc::HierarchicalKinematicsSolverBuilder &builder,
   mcc::TaskScaleGroupConfig scale;
   scale.progress_weight = options.cartesian_progress_weight;
   scale.name = "red-left-cartesian-progress";
-  requireOk(builder.addTaskScaleGroup(mcc::PriorityLevel::Primary, scale,
-                                      options.scale_preservation_tolerance,
-                                      handles.left_scale),
-            "register " + scale.name);
+  requireOk(
+      builder.addTaskScaleGroup(mcc::PriorityLevel::Primary,
+                                {scale, options.scale_preservation_tolerance},
+                                handles.left_scale),
+      "register " + scale.name);
   scale.name = "red-right-cartesian-progress";
-  requireOk(builder.addTaskScaleGroup(mcc::PriorityLevel::Primary, scale,
-                                      options.scale_preservation_tolerance,
-                                      handles.right_scale),
-            "register " + scale.name);
+  requireOk(
+      builder.addTaskScaleGroup(mcc::PriorityLevel::Primary,
+                                {scale, options.scale_preservation_tolerance},
+                                handles.right_scale),
+      "register " + scale.name);
 
   mcc::PositionTaskConfig position;
   position.name = "red-left-position";
   position.enforcement = mcc::ScaledEnforcement{
       handles.left_scale, options.maximum_accepted_hard_violation};
-  requireOk(builder.addPositionTask(
-                mcc::PriorityLevel::Primary, robot.left_end_effector_frame,
-                position,
-                Eigen::Vector3d::Constant(
-                    options.cartesian_preservation_tolerance),
-                handles.left_position),
-            "register " + position.name);
+  requireOk(
+      builder.addPositionTask(
+          mcc::PriorityLevel::Primary, robot.left_end_effector_frame, position,
+          Eigen::Vector3d::Constant(options.cartesian_preservation_tolerance),
+          handles.left_position),
+      "register " + position.name);
   position.name = "red-right-position";
   position.enforcement = mcc::ScaledEnforcement{
       handles.right_scale, options.maximum_accepted_hard_violation};
-  requireOk(builder.addPositionTask(
-                mcc::PriorityLevel::Primary, robot.right_end_effector_frame,
-                position,
-                Eigen::Vector3d::Constant(
-                    options.cartesian_preservation_tolerance),
-                handles.right_position),
-            "register " + position.name);
+  requireOk(
+      builder.addPositionTask(
+          mcc::PriorityLevel::Primary, robot.right_end_effector_frame, position,
+          Eigen::Vector3d::Constant(options.cartesian_preservation_tolerance),
+          handles.right_position),
+      "register " + position.name);
 
   mcc::OrientationTaskConfig orientation;
   orientation.name = "red-left-orientation";
   orientation.enforcement = mcc::ScaledEnforcement{
       handles.left_scale, options.maximum_accepted_hard_violation};
-  requireOk(builder.addOrientationTask(
-                mcc::PriorityLevel::Primary, robot.left_end_effector_frame,
-                orientation,
-                Eigen::Vector3d::Constant(
-                    options.cartesian_preservation_tolerance),
-                handles.left_orientation),
-            "register " + orientation.name);
+  requireOk(
+      builder.addOrientationTask(
+          mcc::PriorityLevel::Primary, robot.left_end_effector_frame,
+          orientation,
+          Eigen::Vector3d::Constant(options.cartesian_preservation_tolerance),
+          handles.left_orientation),
+      "register " + orientation.name);
   orientation.name = "red-right-orientation";
   orientation.enforcement = mcc::ScaledEnforcement{
       handles.right_scale, options.maximum_accepted_hard_violation};
-  requireOk(builder.addOrientationTask(
-                mcc::PriorityLevel::Primary, robot.right_end_effector_frame,
-                orientation,
-                Eigen::Vector3d::Constant(
-                    options.cartesian_preservation_tolerance),
-                handles.right_orientation),
-            "register " + orientation.name);
+  requireOk(
+      builder.addOrientationTask(
+          mcc::PriorityLevel::Primary, robot.right_end_effector_frame,
+          orientation,
+          Eigen::Vector3d::Constant(options.cartesian_preservation_tolerance),
+          handles.right_orientation),
+      "register " + orientation.name);
   return handles;
 }
 
@@ -196,9 +198,8 @@ mcc::JointNames activeJointNames(const R1RobotConfig &robot,
   return result;
 }
 
-std::vector<Eigen::Index>
-activeJointFullIndices(const R1RobotConfig &robot,
-                       const RobotOptions &options) {
+std::vector<Eigen::Index> activeJointFullIndices(const R1RobotConfig &robot,
+                                                 const RobotOptions &options) {
   std::vector<Eigen::Index> result;
   for (std::size_t index = 0; index < robot.joint_names.size(); ++index) {
     if (!isInactiveJoint(robot.joint_names[index], options)) {

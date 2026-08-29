@@ -38,7 +38,8 @@ collisionModelDescription(const std::filesystem::path &urdf_path) {
   return description;
 }
 
-mcc::KinematicsSolverConfig makeYellowConfig(const HierarchicalOptions &options) {
+mcc::KinematicsSolverConfig
+makeYellowConfig(const HierarchicalOptions &options) {
   mcc::KinematicsSolverConfig config;
   config.mode = mcc::IkSolveMode::ServoStep;
   config.servo_period = 1.0 / options.yellow_rate_hz;
@@ -61,13 +62,13 @@ mcc::HierarchicalKinematicsSolverConfig
 makeRedConfig(const HierarchicalOptions &options) {
   mcc::HierarchicalKinematicsSolverConfig config;
   config.mode = mcc::IkSolveMode::ServoStep;
-  config.backend = mcc::QpBackend::ProxQp;
+  config.qp.backend = mcc::QpBackend::ProxQp;
   config.servo_period = 1.0 / options.red_rate_hz;
   config.joint_limit_policy =
       mcc::KinematicsJointLimitPolicy::ExplicitRequirements;
-  config.proxqp.absolute_tolerance =
+  config.qp.proxqp.absolute_tolerance =
       options.solver.red_proxqp_absolute_tolerance;
-  config.proxqp.warm_start_enabled = false;
+  config.qp.proxqp.warm_start_enabled = false;
   config.maximum_accepted_hard_violation =
       options.solver.maximum_accepted_hard_violation;
   return config;
@@ -81,13 +82,13 @@ addCartesianTasks(mcc::HierarchicalKinematicsSolverBuilder &builder,
   mcc::TaskScaleGroupConfig scale;
   scale.progress_weight = options.cartesian_progress_weight;
   scale.name = "red-left-cartesian-progress";
-  requireOk(builder.addTaskScaleGroup(mcc::PriorityLevel::Primary, scale,
-                                      kScalePreservationTolerance,
+  requireOk(builder.addTaskScaleGroup(mcc::PriorityLevel::Primary,
+                                      {scale, kScalePreservationTolerance},
                                       handles.left_scale),
             "register " + scale.name);
   scale.name = "red-right-cartesian-progress";
-  requireOk(builder.addTaskScaleGroup(mcc::PriorityLevel::Primary, scale,
-                                      kScalePreservationTolerance,
+  requireOk(builder.addTaskScaleGroup(mcc::PriorityLevel::Primary,
+                                      {scale, kScalePreservationTolerance},
                                       handles.right_scale),
             "register " + scale.name);
 
