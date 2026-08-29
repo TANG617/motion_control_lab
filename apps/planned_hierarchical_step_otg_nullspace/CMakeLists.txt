@@ -44,6 +44,7 @@ if(BUILD_TESTING)
     test_planned_hierarchical_step_otg_nullspace_app_options
     tests/app_options_contract.cpp
     options.cpp
+    planning.cpp
   )
   target_link_libraries(
     test_planned_hierarchical_step_otg_nullspace_app_options
