@@ -34,7 +34,7 @@ Dynamics pages. The Dynamics page shows the selected/fallback HQP level and
 the 20 torques in actuation order. Set `MCL_UI=none`, `MCL_VIZ=none`, or
 `MCL_MUJOCO_VIEWER=off` to disable one presentation surface independently.
 
-The controls match `planned_hierarchical_step`: Left/Right selects the arm,
+The controls match the `hierarchical_kinematics_step` planned profile: Left/Right selects the arm,
 W/S moves X, A/D moves Y, Q/E moves Z, N selects the local rotation axis,
 I/U rotates, Up/Down changes the translation step, R resets the selected target,
 Space pauses the complete planner/HID/MuJoCo pipeline, and X or Esc exits.

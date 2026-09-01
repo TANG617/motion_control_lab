@@ -6,8 +6,10 @@
 ## App 独立性
 
 - 每个 app 的完整业务实现必须保留在自己的 `apps/<app_name>/` 目录中。
-- 所有 app 都以 R1 为既定机器人，不在 app 内重复定义 R1 的 joint、frame、默认姿态、
-  TCP offset 等固定参数，也不为假想的其他机器人增加抽象层。
+- 所有 app 都以 R1 为既定机器人。cleanup 后的 `hierarchical_kinematics_step`
+  由 app-local `RobotOptions` 完整持有 R1 joint、frame、默认姿态、TCP offset、limits、
+  collision 与 provenance，作为该 app 唯一配置入口；其他 app 继续使用共享 R1 配置，
+  不为假想机器人增加抽象层。
 - solver 的选择、构造和配置必须由具体 app 持有，包括 solve mode、周期、迭代次数、
   backend、regularization、joint-limit policy、约束注册和结果解释。
 - task 的定义、构造和配置必须由具体 app 持有，包括 task 类型、目标、权重、gain、
@@ -50,6 +52,9 @@
   `mcl_<app>_support` target。
 - 每个 app 保留 app-local `options.*`，共享组件只接收 typed config；禁止全局 CLI parser、全局
   option registry 或统一 `mcl` executable。
+- `hierarchical_kinematics_step` 是本轮明确允许的单 app 例外：它在自己的目录内用必选
+  `--profile` 合并五条历史链，并提供 app-local Python argparse launcher。该例外不允许把
+  parser、runner 或 profile pipeline 提取为跨 app 的全局设施。
 - 运动控制 app 按 `main.*`、`options.*`、`solver.*`、`loop.*` 组织；只有实际调用
   `CartesianPlanner`、`JointPlanner` 或其他规划算法的 app 才增加 `planning.*`：
   `main` 是短 composition root，`solver` 直接持有 MCC topology，`planning` 直接持有 MCC planning，
@@ -57,8 +62,9 @@
   目录看起来极简而把 solver/planning 搬到共享 component，也不要为了形式化分层继续拆分非重点代码。
 - 纯 planning、plot 或 replay inspection 工具不得为满足文件形状伪造空 solver；它们保留
   `main/options/planning/loop` 中实际存在的职责，且算法入口仍使用上述简洁名称。
-- 按实际 source 能力提供 `scripts/run_keyboard.sh`、`run_mcap_replay.sh`、
-  `run_csv_replay.sh` 或 JSON request script。脚本最后必须原样转发 `"$@"`。
+- 按实际 source 能力提供 app-local launcher。`hierarchical_kinematics_step` 使用
+  `launcher.py`、`run_keyboard.py`、`run_mcap_replay.py`、`run_csv_replay.py`；其他 app
+  继续使用现有 shell 或 JSON request script。
 - workspace 的标准构建入口是从 `/workspace` 执行 `colcon build`，标准运行产物是
   `${MCL_INSTALL_PREFIX:-/workspace/install/algorithm}/bin/mcl_<app>`。app-local 启动脚本必须默认
   指向该 install tree，不得默认运行 `labs/motion-control-lab/build/` 中可能过期的 standalone

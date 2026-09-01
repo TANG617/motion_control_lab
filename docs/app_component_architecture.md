@@ -256,9 +256,9 @@ apps/<app>/
   planning.hpp / .cpp      # optional: only when the app directly uses a planner
   loop.hpp / .cpp          # workers, input/replay, presentation/Viz/artifact glue
   scripts/
-    run_keyboard.sh
-    run_mcap_replay.sh
-    run_csv_replay.sh
+    run_keyboard.{sh,py}
+    run_mcap_replay.{sh,py}
+    run_csv_replay.{sh,py}
   tests/
 ```
 
@@ -335,7 +335,9 @@ preview_transport  -> motion_control_viz::render + [motion_control_viz::foxglove
 剩余的非核心 orchestration；这不是把 app 语义迁移到共享 component 的理由。纯 planning、
 plot 或 replay inspection 工具只保留实际存在的职责，不为满足目录模板伪造空 solver。
 
-共享 `r1_robot_config` 只保存固定 R1 joint、frame、TCP 和默认 pose。production-static
+共享 `r1_robot_config` 只保存其他 app 使用的固定 R1 joint、frame、TCP 和默认 pose；
+`hierarchical_kinematics_step` 为保证单一 typed 配置入口，在 app-local `RobotOptions` 中持有
+完整 R1 配置。production-static
 baseline 的冻结 solver/task/rate/profile 参数继续位于 `apps/baseline/`，不开放 runtime
 override，也不因其他 app 的实验需求改变。
 
@@ -345,50 +347,42 @@ override，也不因其他 app 的实验需求改变。
 flowchart LR
   Servo[apps/step]
   Target[apps/target]
-  Hierarchical[apps/hierarchical_step]
-  Planned[apps/planned_hierarchical_step]
-  OTG[apps/planned_hierarchical_step_otg]
-  Nullspace[apps/planned_hierarchical_step_otg_nullspace]
+  Hierarchical[apps/hierarchical_kinematics_step]
   Common[Shared component targets]
 
   Servo --> Common
   Target --> Common
   Hierarchical --> Common
-  Planned --> Common
-  OTG --> Common
-  Nullspace --> Common
 
   Servo -. no include or link .-> Target
   Target -. no include or link .-> Hierarchical
-  Hierarchical -. no include or link .-> Planned
-  Planned -. no include or link .-> OTG
-  OTG -. no include or link .-> Nullspace
+  Hierarchical -. no include or link .-> Servo
 ```
 
 若一段 solver/task 逻辑只被同一个 app 的 executable 和测试使用，可以建立
 `mcl_<app>_support` target，但源文件必须留在该 app 目录，其他 app 不得链接它。
 
-## Bash 启动与 runtime override
+## App-local 启动与 runtime override
 
 > 本节更新日期：2026-08-26
 
-不增加统一 CLI。用户面对的是每个 app 自己的脚本，例如：
+不增加跨 app 的统一 CLI。合并后的 profile app 使用自己的 Python 入口：
 
 ```text
-apps/planned_hierarchical_step/scripts/run_keyboard.sh
-apps/planned_hierarchical_step/scripts/run_mcap_replay.sh
-apps/planned_hierarchical_step/scripts/run_csv_replay.sh
+apps/hierarchical_kinematics_step/scripts/run_keyboard.py
+apps/hierarchical_kinematics_step/scripts/run_mcap_replay.py
+apps/hierarchical_kinematics_step/scripts/run_csv_replay.py
 ```
 
 脚本负责表达可读、可审查的实验 preset：
 
 - 从 `${MCL_INSTALL_PREFIX:-/workspace/install/algorithm}/bin` 选择 workspace colcon install
   executable；只有显式的 `MCL_BINARY` 才覆盖到 standalone 或临时产物；
-- URDF、input/topic 和 output root；
-- `LD_LIBRARY_PATH` 等本机运行环境；
+- Python preset 表中的 URDF、input/topic 和 output root；
+- `MCL_LD_LIBRARY_PATH` 等本机运行环境；
 - `chrt`、`taskset`、CPU mask 和 realtime priority 等 OS policy；
 - 本 app 的推荐 rate、deadline、solver 和 planner/OTG 参数；
-- 把 `"$@"` 原样放在命令末尾，允许一次运行覆盖脚本默认参数。
+- argparse 显式参数覆盖 preset；未设置字段不转发，由 C++ profile defaults 决定。
 
 启动脚本不执行 configure/build，也不以 `labs/motion-control-lab/build/` 作为隐式 fallback。
 workspace build、install 与 standalone CMake build 是三个不同 artifact tree：标准开发闭环是
@@ -400,13 +394,14 @@ workspace build、install 与 standalone CMake build 是三个不同 artifact tr
 全局环境隐式读取算法参数。参数优先级为：
 
 ```text
-app compiled defaults < script preset/environment < script trailing explicit arguments
+app compiled profile defaults < Python preset < explicit argparse arguments
 ```
 
 为了支持 experiment，除 production-static baseline 外，下列关键参数应能被本 app 的脚本/
 本地 flags 在 runtime 覆盖：solver/backend、tolerance、iteration、regularization、task
 gain/weight/enforcement/mask、collision 参数、planning/OTG limits、worker rate、deadline policy
-以及 UI/Viz/replay/output 选择。固定 R1 joint/frame/TCP 和生产 profile identity 不可覆盖。
+以及 UI/Viz/replay/output 选择。合并 app 的 profile identity 必须显式选择；R1
+joint/frame/TCP/limits 也由 app-local typed flags 覆盖并进入 resolved-options artifact。
 
 这是一组跨 app 的脚本约定，不是统一 parser。不同 app 可以拥有不同参数；脚本不得通过向
 所有 binary 填充无效 flag 来伪造一致性。产生实验 artifact 的 run 应保存最终解析后的配置、
@@ -419,7 +414,7 @@ gain/weight/enforcement/mask、collision 参数、planning/OTG limits、worker r
 | App 类别 | 目标 source | 说明 |
 | --- | --- | --- |
 | single-arm ServoStep、TargetSolve | keyboard teleop | 保留各自 ordinary solver 语义 |
-| Step、Hierarchical Step、Planned Hierarchical Step、Planned Hierarchical Step OTG | keyboard teleop、MCAP replay、CSV replay | 三种输入最终进入同一 MotionTargetFrame contract |
+| Step、Hierarchical Kinematics Step 五 profiles | keyboard teleop、MCAP replay、CSV replay | 三种输入最终进入同一 MotionTargetFrame contract；profile 决定 pipeline 能力 |
 | production-static baseline | keyboard teleop、MCAP replay、CSV replay | 算法与生产配置冻结 |
 | Cartesian planning | JSON request | 不伪装成 teleop/replay app |
 | replay-plan | headless MCAP/CSV | 只检查 timeline 和 artifact，不运行 solver |

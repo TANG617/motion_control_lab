@@ -18,7 +18,7 @@ planned。
 | Temporal projector | `adapters/data/temporal/` 中的 timestamp selection、严格时间校验、immutable Timeline、projection 与 ReplayClock |
 | Semantic projector | `adapters/data/projection/dual_arm_timeline.*`；只消费两个 `TypedStream<StampedPose>` |
 | Replay plan | `mcl_replay_plan`；预加载输入并输出 timeline trace/manifest，不运行 solver |
-| MCC interactive apps | `apps/single_arm_step/`、`apps/step/`、`apps/target/` 各自拥有完整的普通 `KinematicsSolver` topology 和配置；`apps/hierarchical_step/` 与 `apps/planned_hierarchical_step/` 各自拥有完整 Red/Yellow topology |
+| MCC interactive apps | `apps/single_arm_step/`、`apps/step/`、`apps/target/` 各自拥有完整的普通 `KinematicsSolver` topology 和配置；`apps/hierarchical_kinematics_step/` 通过五个显式 profile 持有 Red/Yellow topology 全集 |
 | Cartesian planning preview | `apps/cartesian_planning/` 读取版本化 JSON，调用 Core `CartesianPlanner`，输出 CSV/PNG 并循环发布 Foxglove；不加载 robot model 或调用 IK |
 | Input contracts | `motion_control_lab::input_contract` 定义 `MotionTargetFrame`、`InputStatus`、`SourceControl`、`TeleopIntent` 与归一化 `KeyEvent` |
 | Terminal / teleop | `terminal_frontend`、`keyboard_teleop`、`cartesian_teleop` 分别负责 raw terminal、intent 解释和 target 积分；与 TUI rendering 正交 |

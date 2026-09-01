@@ -2,8 +2,13 @@ if(NOT DEFINED APP)
   message(FATAL_ERROR "APP is required")
 endif()
 
+set(APP_COMMAND "${APP}")
+if(DEFINED PROFILE AND NOT PROFILE STREQUAL "")
+  list(APPEND APP_COMMAND --profile "${PROFILE}")
+endif()
+
 execute_process(
-  COMMAND "${APP}" teleop --help
+  COMMAND ${APP_COMMAND} teleop --help
   RESULT_VARIABLE TELEOP_RESULT
   OUTPUT_VARIABLE TELEOP_OUTPUT
   ERROR_VARIABLE TELEOP_ERROR
@@ -13,7 +18,7 @@ if(NOT TELEOP_RESULT EQUAL 0 OR NOT "${TELEOP_OUTPUT}${TELEOP_ERROR}" MATCHES "-
 endif()
 
 execute_process(
-  COMMAND "${APP}" replay --help
+  COMMAND ${APP_COMMAND} replay --help
   RESULT_VARIABLE REPLAY_RESULT
   OUTPUT_VARIABLE REPLAY_OUTPUT
   ERROR_VARIABLE REPLAY_ERROR
@@ -24,7 +29,7 @@ if(NOT REPLAY_RESULT EQUAL 0 OR
 endif()
 
 execute_process(
-  COMMAND "${APP}" replay
+  COMMAND ${APP_COMMAND} replay
     --urdf /tmp/missing.urdf
     --input /tmp/missing.mcap
     --left-stream left

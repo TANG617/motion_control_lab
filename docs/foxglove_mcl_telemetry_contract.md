@@ -45,9 +45,9 @@
 planner-only app 还可发布 `/mcl/cartesian/scene`（`foxglove.SceneUpdate`）来显示路径和
 坐标轴；它不是 OTG app 的必需 topic。
 
-`mcl_planned_hierarchical_step_otg` 与
-`mcl_planned_hierarchical_step_otg_nullspace` 默认发布上表中除 replay topic 外各自具备的
-全部状态与数值流；`/mcl/events` 仅在事件发生时出现。null-space app 还发布
+`mcl_hierarchical_kinematics_step` 的 `planned-otg`、`planned-otg-nullspace` 与最长
+profile 默认发布上表中除 replay topic 外各自具备的状态与数值流；`/mcl/events` 仅在事件
+发生时出现。null-space profiles 还发布
 `/mcl/nullspace/elbow/scene`：绿色为 enabled target，蓝色为 raw HKS FK，橙色为 executed OTG
 FK，绿色连线表示 target→execution 误差；link4 与 Yellow objective 数值仍记录在通用 HKS
 `tasks[]` 中。replay mode 额外启用 `/mcl/telemetry/replay`。

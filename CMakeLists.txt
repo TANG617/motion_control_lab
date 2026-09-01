@@ -35,28 +35,8 @@ option(
   ON
 )
 option(
-  MCL_BUILD_HIERARCHICAL_STEP
-  "Build the Red/Yellow dual-arm IK application"
-  ON
-)
-option(
-  MCL_BUILD_PLANNED_HIERARCHICAL_STEP
-  "Build the online-planned Red/Yellow dual-arm IK application"
-  ON
-)
-option(
-  MCL_BUILD_PLANNED_HIERARCHICAL_STEP_OTG
-  "Build the online-planned Red/Yellow IK plus joint-OTG application"
-  ON
-)
-option(
-  MCL_BUILD_PLANNED_HIERARCHICAL_STEP_OTG_NULLSPACE
-  "Build the planned hierarchical joint-OTG null-space demonstration"
-  ON
-)
-option(
-  MCL_BUILD_PLANNED_HIERARCHICAL_STEP_OTG_NULLSPACE_ADMITTANCE_KINEMATIC_SIM
-  "Build the planned null-space admittance kinematic MuJoCo application"
+  MCL_BUILD_HIERARCHICAL_KINEMATICS_STEP
+  "Build the profile-driven hierarchical kinematics Step application"
   ON
 )
 option(
@@ -123,10 +103,8 @@ endif()
 
 set(MCL_BUILD_ANY_INTERACTIVE_IK OFF)
 if(MCL_BUILD_SINGLE_ARM_STEP OR MCL_BUILD_STEP OR
-   MCL_BUILD_TARGET OR MCL_BUILD_BASELINE OR MCL_BUILD_HIERARCHICAL_STEP OR
-   MCL_BUILD_PLANNED_HIERARCHICAL_STEP OR MCL_BUILD_PLANNED_HIERARCHICAL_STEP_OTG OR
-   MCL_BUILD_PLANNED_HIERARCHICAL_STEP_OTG_NULLSPACE OR
-   MCL_BUILD_PLANNED_HIERARCHICAL_STEP_OTG_NULLSPACE_ADMITTANCE_KINEMATIC_SIM OR
+   MCL_BUILD_TARGET OR MCL_BUILD_BASELINE OR
+   MCL_BUILD_HIERARCHICAL_KINEMATICS_STEP OR
    MCL_BUILD_HIERARCHICAL_INVERSE_DYNAMICS_TORQUE_SIM)
   set(MCL_BUILD_ANY_INTERACTIVE_IK ON)
 endif()
@@ -232,9 +210,7 @@ target_include_directories(
   INTERFACE "$<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/generated>"
 )
 
-if(MCL_BUILD_PLANNED_HIERARCHICAL_STEP_OTG OR
-   MCL_BUILD_PLANNED_HIERARCHICAL_STEP_OTG_NULLSPACE OR
-   MCL_BUILD_PLANNED_HIERARCHICAL_STEP_OTG_NULLSPACE_ADMITTANCE_KINEMATIC_SIM)
+if(MCL_BUILD_HIERARCHICAL_KINEMATICS_STEP)
   find_package(Protobuf REQUIRED)
   set(MCL_TELEMETRY_PROTO
       "${CMAKE_CURRENT_SOURCE_DIR}/contracts/telemetry/mcl_telemetry_v1.proto")
@@ -263,7 +239,7 @@ if(MCL_BUILD_ANY_INTERACTIVE_IK OR MCL_BUILD_MCC_PLOTS OR MCL_BUILD_CARTESIAN_PL
   find_package(motion_control_core CONFIG REQUIRED)
 endif()
 
-if(MCL_BUILD_PLANNED_HIERARCHICAL_STEP_OTG_NULLSPACE_ADMITTANCE_KINEMATIC_SIM OR
+if(MCL_BUILD_HIERARCHICAL_KINEMATICS_STEP OR
    MCL_BUILD_HIERARCHICAL_INVERSE_DYNAMICS_TORQUE_SIM)
   find_package(motion_control_sim 0.1 CONFIG REQUIRED)
 endif()
@@ -520,78 +496,9 @@ if(MCL_BUILD_ANY_INTERACTIVE_IK)
   if(MCL_BUILD_BASELINE)
     add_subdirectory(apps/baseline)
   endif()
-  if(MCL_BUILD_HIERARCHICAL_STEP)
-    add_subdirectory(apps/hierarchical_step)
-  endif()
-  if(MCL_BUILD_PLANNED_HIERARCHICAL_STEP)
-    add_subdirectory(apps/planned_hierarchical_step)
-  endif()
-  if(MCL_BUILD_PLANNED_HIERARCHICAL_STEP_OTG)
-    add_subdirectory(apps/planned_hierarchical_step_otg)
-  endif()
-
-  if(MCL_BUILD_PLANNED_HIERARCHICAL_STEP_OTG_NULLSPACE)
-    add_subdirectory(apps/planned_hierarchical_step_otg_nullspace)
-  endif()
-
-  if(MCL_BUILD_PLANNED_HIERARCHICAL_STEP_OTG_NULLSPACE_ADMITTANCE_KINEMATIC_SIM)
-    add_test(
-      NAME scripts.planned_nullspace_admittance_source_launcher_path_resolution
-      COMMAND
-        "${CMAKE_COMMAND}" -E env
-        --unset=MCL_BINARY
-        "PATH=$<TARGET_FILE_DIR:mcl_planned_hierarchical_step_otg_nullspace_admittance_kinematic_sim>:$ENV{PATH}"
-        "MCL_UI=none"
-        "MCL_VIZ=none"
-        "MCL_MUJOCO_VIEWER=off"
-        "${CMAKE_CURRENT_SOURCE_DIR}/apps/planned_hierarchical_step_otg_nullspace_admittance_kinematic_sim/scripts/run_keyboard.sh"
-        --help
-    )
-    add_test(
-      NAME scripts.planned_nullspace_admittance_mcap_preset_smoke
-      COMMAND
-        "${CMAKE_COMMAND}" -E env
-        "MCL_BINARY=${MCL_TRUE_EXECUTABLE}"
-        "MCL_CPU_SET="
-        "MCL_RT_PRIORITY="
-        "MCL_UI=none"
-        "MCL_VIZ=none"
-        "MCL_MUJOCO_VIEWER=off"
-        "${CMAKE_CURRENT_SOURCE_DIR}/apps/planned_hierarchical_step_otg_nullspace_admittance_kinematic_sim/scripts/run_mcap_replay.sh"
-    )
-    add_test(
-      NAME scripts.planned_nullspace_admittance_csv_preset_smoke
-      COMMAND
-        "${CMAKE_COMMAND}" -E env
-        "MCL_BINARY=${MCL_TRUE_EXECUTABLE}"
-        "MCL_INPUT=/tmp/mcl-nullspace-admittance-csv-launcher-smoke.csv"
-        "${CMAKE_CURRENT_SOURCE_DIR}/apps/planned_hierarchical_step_otg_nullspace_admittance_kinematic_sim/scripts/run_csv_replay.sh"
-    )
-
-    if(MCL_SCRIPT_EXECUTABLE)
-      add_test(
-        NAME scripts.planned_nullspace_admittance_keyboard_smoke
-        COMMAND
-          "${CMAKE_COMMAND}" -E env
-          --unset=MCL_BINARY
-          "PATH=$<TARGET_FILE_DIR:mcl_planned_hierarchical_step_otg_nullspace_admittance_kinematic_sim>:$ENV{PATH}"
-          "MCL_UI=none"
-          "MCL_VIZ=none"
-          "MCL_MUJOCO_VIEWER=off"
-          "MCL_R1_SIM_ASSET_ROOT=${CMAKE_CURRENT_SOURCE_DIR}/assets/robots/r1/mujoco"
-          "${MCL_SCRIPT_EXECUTABLE}" -qec
-          "${CMAKE_CURRENT_SOURCE_DIR}/apps/planned_hierarchical_step_otg_nullspace_admittance_kinematic_sim/scripts/run_keyboard.sh --duration 0.05"
-          /dev/null
-      )
-      set_tests_properties(
-        scripts.planned_nullspace_admittance_keyboard_smoke
-        PROPERTIES TIMEOUT 15
-      )
-    endif()
-  endif()
-  if(MCL_BUILD_PLANNED_HIERARCHICAL_STEP_OTG_NULLSPACE_ADMITTANCE_KINEMATIC_SIM)
+  if(MCL_BUILD_HIERARCHICAL_KINEMATICS_STEP)
     add_subdirectory(
-      apps/planned_hierarchical_step_otg_nullspace_admittance_kinematic_sim)
+      apps/hierarchical_kinematics_step)
   endif()
   if(MCL_BUILD_HIERARCHICAL_INVERSE_DYNAMICS_TORQUE_SIM)
     add_subdirectory(apps/hierarchical_inverse_dynamics_torque_sim)
@@ -946,108 +853,56 @@ if(BUILD_TESTING)
   add_test(NAME scripts.bash_syntax COMMAND "${MCL_BASH_EXECUTABLE}" -n ${MCL_APP_SHELL_SCRIPTS})
   find_program(MCL_SCRIPT_EXECUTABLE script)
 
-  if(MCL_BUILD_PLANNED_HIERARCHICAL_STEP_OTG)
+  if(TARGET mcl_hierarchical_kinematics_step)
     add_test(
-      NAME scripts.source_launcher_path_resolution
+      NAME scripts.hierarchical_kinematics_source_launcher_path_resolution
       COMMAND
         "${CMAKE_COMMAND}" -E env
         --unset=MCL_BINARY
-        "PATH=$<TARGET_FILE_DIR:mcl_planned_hierarchical_step_otg>:$ENV{PATH}"
-        "MCL_UI=none"
-        "MCL_VIZ=none"
-        "${CMAKE_CURRENT_SOURCE_DIR}/apps/planned_hierarchical_step_otg/scripts/run_keyboard.sh"
-        --help
-    )
-
-    if(MCL_SCRIPT_EXECUTABLE)
-      add_test(
-        NAME scripts.planned_hierarchical_step_otg_keyboard_smoke
-        COMMAND
-          "${CMAKE_COMMAND}" -E env
-          --unset=MCL_BINARY
-          "PATH=$<TARGET_FILE_DIR:mcl_planned_hierarchical_step_otg>:$ENV{PATH}"
-          "MCL_UI=none"
-          "MCL_VIZ=none"
-          "${MCL_SCRIPT_EXECUTABLE}" -qec
-          "${CMAKE_CURRENT_SOURCE_DIR}/apps/planned_hierarchical_step_otg/scripts/run_keyboard.sh --duration 0.05"
-          /dev/null
-      )
-      set_tests_properties(
-        scripts.planned_hierarchical_step_otg_keyboard_smoke
-        PROPERTIES TIMEOUT 15
-      )
-    endif()
-  endif()
-
-  if(MCL_BUILD_PLANNED_HIERARCHICAL_STEP_OTG_NULLSPACE)
-    add_test(
-      NAME scripts.nullspace_source_launcher_path_resolution
-      COMMAND
-        "${CMAKE_COMMAND}" -E env
-        --unset=MCL_BINARY
-        "PATH=$<TARGET_FILE_DIR:mcl_planned_hierarchical_step_otg_nullspace>:$ENV{PATH}"
-        "MCL_UI=none"
-        "MCL_VIZ=none"
-        "${CMAKE_CURRENT_SOURCE_DIR}/apps/planned_hierarchical_step_otg_nullspace/scripts/run_keyboard.sh"
+        "PATH=$<TARGET_FILE_DIR:mcl_hierarchical_kinematics_step>:$ENV{PATH}"
+        "MCL_CPU_SET="
+        "MCL_RT_PRIORITY="
+        "${CMAKE_CURRENT_SOURCE_DIR}/apps/hierarchical_kinematics_step/scripts/run_keyboard.py"
         --help
     )
     add_test(
-      NAME scripts.planned_hierarchical_step_otg_nullspace_mcap_preset_smoke
+      NAME scripts.hierarchical_kinematics_mcap_preset_smoke
       COMMAND
         "${CMAKE_COMMAND}" -E env
         "MCL_BINARY=${MCL_TRUE_EXECUTABLE}"
         "MCL_CPU_SET="
         "MCL_RT_PRIORITY="
-        "MCL_UI=none"
-        "MCL_VIZ=none"
-        "${CMAKE_CURRENT_SOURCE_DIR}/apps/planned_hierarchical_step_otg_nullspace/scripts/run_mcap_replay.sh"
+        "${CMAKE_CURRENT_SOURCE_DIR}/apps/hierarchical_kinematics_step/scripts/run_mcap_replay.py"
+        --profile planned-otg-nullspace-admittance-kinematic-sim
     )
     add_test(
-      NAME scripts.planned_hierarchical_step_otg_nullspace_csv_preset_smoke
+      NAME scripts.hierarchical_kinematics_csv_preset_smoke
       COMMAND
         "${CMAKE_COMMAND}" -E env
         "MCL_BINARY=${MCL_TRUE_EXECUTABLE}"
-        "MCL_INPUT=/tmp/mcl-nullspace-csv-launcher-smoke.csv"
-        "${CMAKE_CURRENT_SOURCE_DIR}/apps/planned_hierarchical_step_otg_nullspace/scripts/run_csv_replay.sh"
+        "MCL_CPU_SET="
+        "MCL_RT_PRIORITY="
+        "${CMAKE_CURRENT_SOURCE_DIR}/apps/hierarchical_kinematics_step/scripts/run_csv_replay.py"
+        --profile planned-otg-nullspace-admittance-kinematic-sim
+        --input /tmp/mcl-nullspace-admittance-csv-launcher-smoke.csv
     )
-
     if(MCL_SCRIPT_EXECUTABLE)
       add_test(
-        NAME scripts.planned_hierarchical_step_otg_nullspace_keyboard_smoke
+        NAME scripts.hierarchical_kinematics_keyboard_smoke
         COMMAND
           "${CMAKE_COMMAND}" -E env
-          --unset=MCL_BINARY
-          "PATH=$<TARGET_FILE_DIR:mcl_planned_hierarchical_step_otg_nullspace>:$ENV{PATH}"
-          "MCL_UI=none"
-          "MCL_VIZ=none"
+          "MCL_BINARY=$<TARGET_FILE:mcl_hierarchical_kinematics_step>"
+          "MCL_CPU_SET="
+          "MCL_RT_PRIORITY="
           "${MCL_SCRIPT_EXECUTABLE}" -qec
-          "${CMAKE_CURRENT_SOURCE_DIR}/apps/planned_hierarchical_step_otg_nullspace/scripts/run_keyboard.sh --duration 0.05"
+          "${CMAKE_CURRENT_SOURCE_DIR}/apps/hierarchical_kinematics_step/scripts/run_keyboard.py --profile planned-otg-nullspace-admittance-kinematic-sim --no-mujoco-viewer --ui none --viz none --duration 0.05"
           /dev/null
       )
       set_tests_properties(
-        scripts.planned_hierarchical_step_otg_nullspace_keyboard_smoke
+        scripts.hierarchical_kinematics_keyboard_smoke
         PROPERTIES TIMEOUT 15
       )
     endif()
-  endif()
-
-  if(MCL_BUILD_PLANNED_HIERARCHICAL_STEP AND MCL_SCRIPT_EXECUTABLE)
-    add_test(
-      NAME scripts.planned_hierarchical_step_keyboard_smoke
-      COMMAND
-        "${CMAKE_COMMAND}" -E env
-        --unset=MCL_BINARY
-        "PATH=$<TARGET_FILE_DIR:mcl_planned_hierarchical_step>:$ENV{PATH}"
-        "MCL_UI=none"
-        "MCL_VIZ=none"
-        "${MCL_SCRIPT_EXECUTABLE}" -qec
-        "${CMAKE_CURRENT_SOURCE_DIR}/apps/planned_hierarchical_step/scripts/run_keyboard.sh --duration 0.05"
-        /dev/null
-    )
-    set_tests_properties(
-      scripts.planned_hierarchical_step_keyboard_smoke
-      PROPERTIES TIMEOUT 15
-    )
   endif()
 
   add_test(
@@ -1220,50 +1075,19 @@ if(BUILD_TESTING)
         PROPERTIES TIMEOUT 15
       )
 
-      if(TARGET mcl_planned_hierarchical_step)
+      if(TARGET mcl_hierarchical_kinematics_step)
         add_test(
-          NAME apps.mcl_planned_hierarchical_step_tui_pages_pty
+          NAME apps.mcl_hierarchical_kinematics_step_tui_pages_pty
           COMMAND
             "${Python3_EXECUTABLE}"
             "${CMAKE_CURRENT_SOURCE_DIR}/tests/run_planned_tui_pages_pty.py"
-            "$<TARGET_FILE:mcl_planned_hierarchical_step>"
-            5
-            "/workspace/models/Psi_R1_visual_collision.urdf"
-        )
-        set_tests_properties(
-          apps.mcl_planned_hierarchical_step_tui_pages_pty
-          PROPERTIES TIMEOUT 20
-        )
-      endif()
-
-      if(TARGET mcl_planned_hierarchical_step_otg)
-        add_test(
-          NAME apps.mcl_planned_hierarchical_step_otg_tui_pages_pty
-          COMMAND
-            "${Python3_EXECUTABLE}"
-            "${CMAKE_CURRENT_SOURCE_DIR}/tests/run_planned_tui_pages_pty.py"
-            "$<TARGET_FILE:mcl_planned_hierarchical_step_otg>"
-            5
-            "/workspace/products/synrobot/modules/common/robot_description/psi_r1/urdf/Psi_R1_rev1.urdf"
-        )
-        set_tests_properties(
-          apps.mcl_planned_hierarchical_step_otg_tui_pages_pty
-          PROPERTIES TIMEOUT 20
-        )
-      endif()
-
-      if(TARGET mcl_planned_hierarchical_step_otg_nullspace)
-        add_test(
-          NAME apps.mcl_planned_hierarchical_step_otg_nullspace_tui_pages_pty
-          COMMAND
-            "${Python3_EXECUTABLE}"
-            "${CMAKE_CURRENT_SOURCE_DIR}/tests/run_planned_tui_pages_pty.py"
-            "$<TARGET_FILE:mcl_planned_hierarchical_step_otg_nullspace>"
+            "$<TARGET_FILE:mcl_hierarchical_kinematics_step>"
             6
             "/workspace/products/synrobot/modules/common/robot_description/psi_r1/urdf/Psi_R1_rev1.urdf"
+            --profile planned-otg-nullspace
         )
         set_tests_properties(
-          apps.mcl_planned_hierarchical_step_otg_nullspace_tui_pages_pty
+          apps.mcl_hierarchical_kinematics_step_tui_pages_pty
           PROPERTIES TIMEOUT 20
         )
       endif()
@@ -1291,18 +1115,14 @@ if(BUILD_TESTING)
 
     foreach(MCL_SERVO_TARGET IN ITEMS
         mcl_step
-        mcl_hierarchical_step
-        mcl_planned_hierarchical_step
-        mcl_planned_hierarchical_step_otg
-        mcl_planned_hierarchical_step_otg_nullspace
-        mcl_planned_hierarchical_step_otg_nullspace_admittance_kinematic_sim)
+        mcl_hierarchical_kinematics_step)
       if(TARGET ${MCL_SERVO_TARGET})
         set(MCL_SERVO_PLANNED OFF)
-        if(MCL_SERVO_TARGET STREQUAL "mcl_planned_hierarchical_step" OR
-           MCL_SERVO_TARGET STREQUAL "mcl_planned_hierarchical_step_otg" OR
-           MCL_SERVO_TARGET STREQUAL "mcl_planned_hierarchical_step_otg_nullspace" OR
-           MCL_SERVO_TARGET STREQUAL "mcl_planned_hierarchical_step_otg_nullspace_admittance_kinematic_sim")
+        if(MCL_SERVO_TARGET STREQUAL "mcl_hierarchical_kinematics_step")
           set(MCL_SERVO_PLANNED ON)
+          set(MCL_SERVO_PROFILE planned-otg-nullspace)
+        else()
+          set(MCL_SERVO_PROFILE "")
         endif()
         add_test(
           NAME apps.${MCL_SERVO_TARGET}_subcommands
@@ -1310,6 +1130,7 @@ if(BUILD_TESTING)
             "${CMAKE_COMMAND}"
             "-DAPP=$<TARGET_FILE:${MCL_SERVO_TARGET}>"
             "-DPLANNED=${MCL_SERVO_PLANNED}"
+            "-DPROFILE=${MCL_SERVO_PROFILE}"
             -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/check_servo_subcommands.cmake"
         )
       endif()

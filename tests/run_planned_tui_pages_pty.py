@@ -12,17 +12,20 @@ import time
 
 
 def main() -> int:
-    if len(sys.argv) != 4:
+    if len(sys.argv) not in (4, 6):
         raise RuntimeError(
-            "usage: run_planned_tui_pages_pty.py <app> <5|6> <urdf>"
+            "usage: run_planned_tui_pages_pty.py <app> <5|6> <urdf> "
+            "[--profile <profile>]"
         )
-    executable, page_count_text, urdf = sys.argv[1:]
+    executable, page_count_text, urdf = sys.argv[1:4]
+    profile_arguments = sys.argv[4:]
     page_count = int(page_count_text)
     if page_count not in (5, 6):
         raise RuntimeError(f"unsupported page count: {page_count}")
 
     command = [
         executable,
+        *profile_arguments,
         "teleop",
         "--urdf",
         urdf,
@@ -138,7 +141,6 @@ def main() -> int:
             b"Cartesian states",
             b"Passes",
             b"Last-iterate violations",
-            b"Tasks and constraints",
             b"Processor affinity",
             b"Collision pairs",
         ]
@@ -147,7 +149,7 @@ def main() -> int:
                 [
                     b"Null-space",
                     b"Control",
-                    b"Secondary objectives",
+                    b"Tertiary objectives",
                     b"Tertiary",
                     b"Terminal",
                     b"held",

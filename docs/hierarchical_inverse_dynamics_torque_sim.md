@@ -36,7 +36,7 @@ MCL_INSTALL_PREFIX=/workspace/install/algorithm \
   apps/hierarchical_inverse_dynamics_torque_sim/scripts/run_keyboard.sh
 ```
 
-The launcher follows the `planned_hierarchical_step` contract: it selects the
+The launcher follows the `hierarchical_kinematics_step` planned-profile contract: it selects the
 installed binary unless `MCL_BINARY` overrides it, uses the installed R1 assets,
 passes through `launch_app.sh`, and preserves trailing CLI argument priority.
 It also enables the same interactive presentation shape by default:

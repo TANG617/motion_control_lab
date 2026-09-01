@@ -79,8 +79,9 @@ Lab standalone build 中存在同名旧文件而选择它。需要验证其他 i
 `MCL_INSTALL_PREFIX`；需要有意运行 standalone 或临时 executable 时显式设置 `MCL_BINARY`：
 
 ```bash
-MCL_BINARY=/workspace/labs/motion-control-lab/build/mcl_planned_hierarchical_step_otg_nullspace \
-  apps/planned_hierarchical_step_otg_nullspace/scripts/run_keyboard.sh
+MCL_BINARY=/workspace/build/algorithm/motion_control_lab/mcl_hierarchical_kinematics_step \
+  apps/hierarchical_kinematics_step/scripts/run_keyboard.py \
+  --profile planned-otg-nullspace
 ```
 
 `COLCON_PREFIX_PATH` 用于已安装 package 的发现，不决定本次 build/install 目录，也不决定启动脚本
@@ -219,8 +220,7 @@ cmake -S . -B build/replay-ik \
   -DMCL_BUILD_SINGLE_ARM_STEP=OFF \
   -DMCL_BUILD_STEP=ON \
   -DMCL_BUILD_TARGET=OFF \
-  -DMCL_BUILD_HIERARCHICAL_STEP=OFF \
-  -DMCL_BUILD_PLANNED_HIERARCHICAL_STEP=OFF \
+  -DMCL_BUILD_HIERARCHICAL_KINEMATICS_STEP=OFF \
   -DCMAKE_PREFIX_PATH="/path/to/mcc-install;/path/to/eiq-install"
 cmake --build build/replay-ik --target mcl_step -j8
 ```
@@ -234,7 +234,7 @@ topic。R1 target stream 的输入语义是 TCP pose；runner 使用左右各自
 转换为 end-effector target 后再构造 IK request。replay solver 消费最新 target，允许丢弃
 尚未消费的旧帧并在 `ik_replay_manifest.v2` 中记录计数。`--ui tui`（默认）保留 renderer，
 Space 暂停/继续，`.` 单帧推进。`--ui none` 只禁用渲染；replay 的 terminal input 由正交的
-`--terminal-input on|off` 控制，所以 headless 模式也可以按需保留 pause/resume/step。
+`--terminal-input/--no-terminal-input` 控制，所以 headless 模式也可以按需保留 pause/resume/step。
 
 不指定 `--output-dir` 时，runner 会在
 `experiments/E02_dual_arm_replay_ik/runs/` 下创建新的
@@ -248,8 +248,7 @@ cmake -S . -B build/replay-ik-viz \
   -DMCL_BUILD_SINGLE_ARM_STEP=OFF \
   -DMCL_BUILD_STEP=ON \
   -DMCL_BUILD_TARGET=OFF \
-  -DMCL_BUILD_HIERARCHICAL_STEP=OFF \
-  -DMCL_BUILD_PLANNED_HIERARCHICAL_STEP=OFF \
+  -DMCL_BUILD_HIERARCHICAL_KINEMATICS_STEP=OFF \
   -DCMAKE_PREFIX_PATH="/path/to/mcc-install;/path/to/eiq-install;/path/to/mcv-install"
 cmake --build build/replay-ik-viz --target mcl_step -j8
 ```
@@ -358,12 +357,11 @@ cmake -S . -B build/mcc-preview \
   -DMCL_BUILD_SINGLE_ARM_STEP=ON \
   -DMCL_BUILD_STEP=ON \
   -DMCL_BUILD_TARGET=ON \
-  -DMCL_BUILD_HIERARCHICAL_STEP=ON \
-  -DMCL_BUILD_PLANNED_HIERARCHICAL_STEP=ON \
+  -DMCL_BUILD_HIERARCHICAL_KINEMATICS_STEP=ON \
   -DCMAKE_PREFIX_PATH="/tmp/mcc_install;/tmp/eiq_install;/tmp/mcv_install"
 cmake --build build/mcc-preview \
   --target mcl_single_arm_step mcl_step \
-    mcl_target mcl_hierarchical_step mcl_planned_hierarchical_step -j8
+    mcl_target mcl_hierarchical_kinematics_step -j8
 ```
 
 每个入口可以独立配置。只构建单臂入口：
@@ -413,13 +411,10 @@ cmake --build build/dual-arm \
 ./build/mcc-preview/mcl_target \
   --solver placo --urdf /path/to/Psi_R1_rev1.urdf --rate 20 \
   --mcap /new/run/path/target-placo.mcap
-./build/mcc-preview/mcl_hierarchical_step teleop \
+./build/mcc-preview/mcl_hierarchical_kinematics_step \
+  --profile hierarchical teleop \
   --urdf /path/to/Psi_R1_rev1.urdf \
-  --red-rate 1000 --yellow-rate 100 --ui-rate 20 \
-  --deadline-policy monitor
-./build/mcc-preview/mcl_planned_hierarchical_step teleop \
-  --urdf /path/to/Psi_R1_rev1.urdf \
-  --red-rate 1000 --yellow-rate 100 --ui none \
+  --ui none --viz none \
   --deadline-policy monitor
 ```
 
@@ -467,14 +462,12 @@ rejected attempt 和 worker exception 在 monitor 模式下仍然触发 Fault。
 Yellow、Red 启动前会顺序预热一次；正式 run 中两者完全异步，不等待 source 的下一条
 结果。TUI、Viz 和 MCAP 只在 `ui-rate` 线程运行，不进入 Red solver 路径。
 
-Red 使用双手 Scaled position/orientation task：每只手的 position/orientation 默认共享一个
-`progress_weight=3` 的 scale，左右手则独立退化；TUI 会报告两路 scale 的
-full/degraded/stuck 状态。Red 默认使用 `1e-6` 的 ProxQP absolute tolerance 并显式关闭 warm
-start；Cartesian equality 与 limit 的默认 accepted hard-violation 上限为 `5e-4`。raw hierarchical 的 Red 注册
-position+velocity limits；planned hierarchical 还注册既定 PSI R1 acceleration limits。两者 Yellow
-都只注册 position limits。joint position limit 默认使用 `1e-2 rad` 内部 margin。这些数值、
-worker rates、deadline policy 与 collision 参数由每个 hierarchical app 自己的 `options.*` 暴露，
-不会进入 scheduler 或共享配置对象。
+`mcl_hierarchical_kinematics_step` 用必选 `--profile` 保留五条历史数据流：
+`hierarchical`、`planned`、`planned-otg`、`planned-otg-nullspace`、
+`planned-otg-nullspace-admittance-kinematic-sim`。前三个 profile 保留原 shared Cartesian
+scale/legacy Red-Yellow topology；后两个使用严格 position > orientation > posture/link4
+三级 hierarchy。planner、JointPlanner、nullspace、admittance、MuJoCo 与 telemetry 都只由
+profile 能力推导，不能通过独立阶段开关组成非法数据流。
 
 Yellow 当前使用 4 对 app-local R1 link pair 的 Soft self-collision velocity damping：minimum
 distance `0.30 m`、influence distance `0.35 m`、gain `2 s^-1`、weight `100`；posture task 当前未
@@ -482,18 +475,10 @@ distance `0.30 m`、influence distance `0.35 m`、gain `2 s^-1`、weight `100`�
 运动优化目标，不是硬安全屏障；
 margin shortfall 不会自动拒绝 accepted solution，硬件 command authorization 仍由集成层负责。
 
-`mcl_planned_hierarchical_step_otg_nullspace` 是从 OTG 入口独立复制的两级 HQP 演示。
-Primary 保持左右 TCP position/orientation，Secondary 同时优化当前 held 的单侧 link4 position
-和 Yellow accepted `qY` posture target，默认权重分别为 `100` 和 `1`。Tertiary 与 Terminal
-保持关闭。键盘用 `c` 切换 TCP/link4 编辑焦点；link4 目标走 app-local latest snapshot，
-不会增加 Cartesian planner revision。该目标返回 TCP 后继续保持，同一时间最多启用一侧。
-
-`mcl_planned_hierarchical_step_otg_nullspace_admittance_kinematic_sim` 在上述 app 的当前
-working-tree 行为上增加 planner 后、HKS 前的双臂 TCP 导纳，并以 committed JointPlanner OTG
-状态驱动 MuJoCo 运动学投影。planner nominal 与 compliant command 分开记录；MuJoCo 不调用
-`mj_step`，不进入 torque/dynamics 闭环。数据流、P/V/A 控制点变换、失败策略、viewer 操作和
-新增 telemetry topic 见
-`apps/planned_hierarchical_step_otg_nullspace_admittance_kinematic_sim/README.md`。
+最长 profile 在 planner 后、HKS 前执行双臂 TCP 导纳，并以 committed JointPlanner OTG 状态
+驱动 MuJoCo 运动学投影；MuJoCo 不调用 `mj_step`，不进入 torque/dynamics 闭环。完整 profile、
+配置、P/V/A 控制点变换、失败策略、viewer 操作和 telemetry 见
+`apps/hierarchical_kinematics_step/README.md`。
 
 `mcl_hierarchical_inverse_dynamics_torque_sim` 是独立的 ROS-free 固定基 R1 torque-driven app：
 `CartesianPlanner P/V/A -> optional admittance -> HID -> qfrc_applied -> one mj_step -> measured feedback`。
@@ -529,12 +514,11 @@ app-local TUI 增加 Dynamics 页。
 app compiled defaults < script preset/environment < trailing explicit arguments
 ```
 
-planned hierarchical apps 的 `run_mcap_replay.sh` 可直接运行：默认回放
-`sliced_RW1AZHYCSEFT5_RW1AZHYCSEFT5260310002_20260731015829_0.mcap`，使用左右
-`/hal/tracker/htc/*/calib_target_pose` 和首帧 `/mc/ik/joint_states`，以 10 ms、nearest/5 ms、
-realtime、monitor、start-paused preset 启动。其 `run_keyboard.sh` 使用相同的 URDF、Red/Yellow
-rate、deadline、planner limits、CPU/RT 和 TUI/Viz preset。可用 `MCL_START_PAUSED=off` 直接开始，
-以空的 `MCL_CPU_SET=` 或 `MCL_RT_PRIORITY=` 禁用对应 OS wrapper，并用 `MCL_VIZ_PORT` 更换端口。
+`hierarchical_kinematics_step` 不使用上述 Bash wrapper，而提供可 import 的纯标准库
+`launcher.py` 与三个 Python 入口。Python 未设置字段使用 `argparse.SUPPRESS`，C++ profile
+defaults 是默认值唯一来源；历史 launcher preset 位于 Python preset 表，显式 argparse 参数
+优先级最高。只保留 `MCL_BINARY`、`MCL_INSTALL_PREFIX`、`MCL_LD_LIBRARY_PATH`、
+`MCL_CPU_SET`、`MCL_RT_PRIORITY` 五个运行环境变量，算法、robot、replay 与 UI/Viz 全部走参数。
 
 replay artifact 记录 resolved config、原始 argv、`--launcher` 标识和输入 SHA-256/provenance。
 `mcl_baseline` 接受 source/UI/Viz/output 选择，但明确拒绝 solver、backend、rate、tolerance、
@@ -557,7 +541,7 @@ cmake -S . -B build/cartesian-planning \
   -DMCL_BUILD_SINGLE_ARM_STEP=OFF \
   -DMCL_BUILD_STEP=OFF \
   -DMCL_BUILD_TARGET=OFF \
-  -DMCL_BUILD_HIERARCHICAL_STEP=OFF \
+  -DMCL_BUILD_HIERARCHICAL_KINEMATICS_STEP=OFF \
   -DMCL_BUILD_CARTESIAN_PLANNING=ON \
   -DCMAKE_PREFIX_PATH="/path/to/mcc-install;/path/to/eiq-install;/path/to/mcv-install"
 cmake --build build/cartesian-planning --target mcl_cartesian_planning -j8
@@ -603,11 +587,7 @@ apps/baseline/            main/options/solver/loop；PlaCo production-static tel
 apps/step/          main/options/solver/loop；普通双臂 ServoStep teleop/replay
 apps/target/        main/options/solver/loop；普通双臂 TargetSolve
 apps/single_arm_step/ main/options/solver/loop；单臂 ServoStep
-apps/hierarchical_step/  main/options/solver/loop；raw Red/Yellow ServoStep
-apps/planned_hierarchical_step/ main/options/solver/planning/loop；在线 Cartesian replan
-apps/planned_hierarchical_step_otg/ main/options/solver/planning/loop；Cartesian replan + JointPlanner OTG
-apps/planned_hierarchical_step_otg_nullspace/ 独立两级 HQP null-space + JointPlanner OTG 演示
-apps/planned_hierarchical_step_otg_nullspace_admittance_kinematic_sim/ 上述 OTG/null-space + 双臂导纳 + MuJoCo 运动学投影
+apps/hierarchical_kinematics_step/ 五 profile Red/Yellow HKS、planning、OTG、nullspace、导纳与运动学仿真
 apps/hierarchical_inverse_dynamics_torque_sim/ fixed-base R1 hierarchical ID + MuJoCo torque 闭环
 contracts/                definition、manifest、metric 与 visualization 合同
 data/raw/                 原始数据占位；不得静默改写
