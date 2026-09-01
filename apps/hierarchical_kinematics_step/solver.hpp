@@ -16,10 +16,8 @@ namespace motion_control_lab::hierarchical_kinematics_step {
 namespace mcc = motion_control::core;
 
 struct CartesianHandles {
-  mcc::TaskScaleGroupHandle left_position_scale;
-  mcc::TaskScaleGroupHandle right_position_scale;
-  mcc::TaskScaleGroupHandle left_orientation_scale;
-  mcc::TaskScaleGroupHandle right_orientation_scale;
+  mcc::TaskScaleGroupHandle left_cartesian_scale;
+  mcc::TaskScaleGroupHandle right_cartesian_scale;
   mcc::PositionTaskHandle left_position;
   mcc::OrientationTaskHandle left_orientation;
   mcc::PositionTaskHandle right_position;
@@ -135,8 +133,7 @@ private:
 void requireOk(const mcc::Status &status, const std::string &context);
 mcc::JointNames activeJointNames(const R1RobotConfig &robot,
                                  const RobotOptions &options);
-std::vector<std::size_t>
-activeJointFullIndices(const R1RobotConfig &robot,
+std::vector<std::size_t> activeJointFullIndices(const R1RobotConfig &robot,
                        const RobotOptions &options);
 std::shared_ptr<const mcc::RobotModel>
 loadRobotModel(const R1RobotConfig &robot, const Options &options);

@@ -6,13 +6,16 @@
 - `hierarchical`：直接 target -> legacy HKS；
 - `planned`：CartesianPlanner -> legacy HKS；
 - `planned-otg`：CartesianPlanner -> legacy HKS -> JointPlanner；
-- `planned-otg-nullspace`：严格 position > orientation > posture/link4 HKS + JointPlanner；
+- `planned-otg-nullspace`：双臂 Cartesian Primary > posture/link4 Secondary HKS + JointPlanner；
 - `planned-otg-nullspace-admittance-kinematic-sim`：再增加导纳、MuJoCo 运动学投影、viewer
   与完整 replay telemetry gate。
 
 `options.hpp` 是 app 的唯一 typed 配置入口，也完整持有 R1 robot 配置。可用
 `--dump-resolved-options` 在加载模型前输出 profile、能力、robot、solver、planning、replay、
 binary argv 与 launcher provenance 的完整 JSON。
+
+五个 profile 默认使用 `/workspace/models/Psi_R1_visual_collision.urdf`。该 URDF 的 mesh
+引用均为同目录下的 `meshes/<name>.obj`，不依赖 `products/synrobot` 中的 robot description。
 
 控制链为：
 
@@ -45,23 +48,28 @@ MuJoCo 只消费 committed OTG joint position/velocity 并执行 `forward()`。�
 ```bash
 /workspace/install/algorithm/bin/mcl_hierarchical_kinematics_step \
   --profile planned-otg-nullspace-admittance-kinematic-sim teleop \
-  --urdf /workspace/install/algorithm/share/motion-control-lab/robots/r1/mujoco/urdf/r1.urdf \
   --mujoco-model /workspace/install/algorithm/share/motion-control-lab/robots/r1/mujoco/mjcf/r1.xml \
   --no-mujoco-viewer --ui none --viz none --deadline-policy monitor --duration 0.25
 ```
 
-或使用 app-local Python 入口：
+或使用固定 profile 的 app-local Python recipe：
 
 ```bash
-apps/hierarchical_kinematics_step/scripts/run_keyboard.py \
-  --profile planned-otg-nullspace-admittance-kinematic-sim \
+apps/hierarchical_kinematics_step/scripts/profiles/planned_otg_nullspace_admittance_kinematic_sim/run_keyboard.py \
   --no-mujoco-viewer --ui none --viz none --duration 0.25
 ```
 
-`scripts/launcher.py` 导出 `create_parser(source)`、`build_command(source, argv)` 和
-`run(source, argv)`，供 experiments 直接 import；只依赖 Python 标准库。唯一支持的环境变量是
+`scripts/profiles/<profile>/config.py` 完整列出该 profile 的 Python launcher overrides；每个
+profile 提供 `run_keyboard.py`、`run_mcap_interactive.py`、`run_mcap_headless.py` 和
+`run_csv_batch.py`。MCAP interactive 使用 realtime、TUI、start-paused 和 Foxglove；MCAP
+headless 使用 batch 并关闭 TUI/Viz/viewer/terminal。`hierarchical` 的两个 MCAP recipe 要求
+显式 `--input`，其他 profile 继续使用默认 tracker fixture。
+
+每个 recipe 模块均导出 `build_command(argv)` 与 `run(argv)`，供 experiments import；profile
+和 source 已由模块固定，不能通过参数改写。模块只依赖 Python 标准库。唯一支持的环境变量是
 `MCL_BINARY`、`MCL_INSTALL_PREFIX`、`MCL_LD_LIBRARY_PATH`、`MCL_CPU_SET`、
-`MCL_RT_PRIORITY`，其余配置全部使用 argparse。
+`MCL_RT_PRIORITY`，其余配置全部使用 argparse。所有 interactive recipe 默认绑定
+`127.0.0.1:8765`；并行运行时用 `--port` 显式覆盖。
 
 viewer 交互沿用运动学导纳 app：`Ctrl+左键` 平面拖动 TCP handle，
 `Ctrl+Shift+左键` 深度拖动，`Ctrl+右键` 旋转；旋转导纳需显式启用

@@ -63,8 +63,9 @@
 - 纯 planning、plot 或 replay inspection 工具不得为满足文件形状伪造空 solver；它们保留
   `main/options/planning/loop` 中实际存在的职责，且算法入口仍使用上述简洁名称。
 - 按实际 source 能力提供 app-local launcher。`hierarchical_kinematics_step` 使用
-  `launcher.py`、`run_keyboard.py`、`run_mcap_replay.py`、`run_csv_replay.py`；其他 app
-  继续使用现有 shell 或 JSON request script。
+  `scripts/_launcher/` 和 `scripts/profiles/<profile>/` 下固定 profile/source 的 keyboard、MCAP
+  interactive、MCAP headless、CSV batch Python recipes；这些实现必须保持 app-local，不得迁入
+  全局 runner/parser。其他 app 继续使用现有 shell 或 JSON request script。
 - workspace 的标准构建入口是从 `/workspace` 执行 `colcon build`，标准运行产物是
   `${MCL_INSTALL_PREFIX:-/workspace/install/algorithm}/bin/mcl_<app>`。app-local 启动脚本必须默认
   指向该 install tree，不得默认运行 `labs/motion-control-lab/build/` 中可能过期的 standalone

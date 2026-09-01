@@ -97,8 +97,7 @@ private:
   void apply(const KeyboardAction &action, double dt);
   void captureLink4(ArmSide side, ElbowTeleopEventKind kind);
   void clearLink4();
-  void recordElbowEvent(ElbowTeleopEventKind kind,
-                        std::optional<ArmSide> side,
+  void recordElbowEvent(ElbowTeleopEventKind kind, std::optional<ArmSide> side,
                         const Eigen::Vector3d &target);
   Eigen::Vector3d &mutableLink4Target(ArmSide side);
 
@@ -141,8 +140,10 @@ struct NullspaceTuiDebug {
   double right_tcp_position_error_m{0.0};
   double left_tcp_orientation_error_rad{0.0};
   double right_tcp_orientation_error_rad{0.0};
-  double primary_maximum_preservation_drift{0.0};
-  double primary_preservation_tolerance{0.0};
+  double primary_maximum_position_preservation_drift_mps{0.0};
+  double primary_maximum_orientation_preservation_drift_radps{0.0};
+  double primary_position_preservation_tolerance_mps{0.0};
+  double primary_orientation_preservation_tolerance_radps{0.0};
   double link4_task_error_m{0.0};
   double yellow_posture_error_rad{0.0};
   double link4_weight{0.0};

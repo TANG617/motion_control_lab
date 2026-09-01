@@ -32,14 +32,22 @@ bool rejects(const std::function<void()> &call) {
 } // namespace
 
 int main() {
+  constexpr const char *kDefaultUrdf =
+      "/workspace/models/Psi_R1_visual_collision.urdf";
   const auto hierarchical = app::profileDefaults(app::Profile::Hierarchical);
   const auto planned = app::profileDefaults(app::Profile::Planned);
   const auto otg = app::profileDefaults(app::Profile::PlannedOtg);
-  const auto nullspace = app::profileDefaults(app::Profile::PlannedOtgNullspace);
+  const auto nullspace =
+      app::profileDefaults(app::Profile::PlannedOtgNullspace);
   const auto maximum = app::profileDefaults(
       app::Profile::PlannedOtgNullspaceAdmittanceKinematicSim);
 
-  if (hierarchical.interactive.red_rate_hz != 1000.0 ||
+  if (hierarchical.interactive.urdf_path != kDefaultUrdf ||
+      planned.interactive.urdf_path != kDefaultUrdf ||
+      otg.interactive.urdf_path != kDefaultUrdf ||
+      nullspace.interactive.urdf_path != kDefaultUrdf ||
+      maximum.interactive.urdf_path != kDefaultUrdf ||
+      hierarchical.interactive.red_rate_hz != 1000.0 ||
       hierarchical.interactive.yellow_rate_hz != 100.0 ||
       hierarchical.interactive.solver.regularization != 1.0e-4 ||
       hierarchical.interactive.solver.legacy_cartesian_progress_weight != 3.0 ||
@@ -93,9 +101,8 @@ int main() {
     return EXIT_FAILURE;
   }
 
-  if (!rejects([] {
-        (void)parse({"app", "teleop", "--urdf", "/tmp/r1.urdf"});
-      }) ||
+  if (!rejects(
+          [] { (void)parse({"app", "teleop", "--urdf", "/tmp/r1.urdf"}); }) ||
       !rejects([] {
         (void)parse({"app", "--profile", "hierarchical", "teleop", "--urdf",
                      "/tmp/r1.urdf", "--max-linear-velocity-mps", "1"});
@@ -107,7 +114,7 @@ int main() {
       !rejects([] {
         (void)parse({"app", "--profile", "planned-otg", "teleop", "--urdf",
                      "/tmp/r1.urdf",
-                     "--red-tertiary-task-link4-position-weight", "5"});
+                     "--red-secondary-task-link4-position-weight", "5"});
       }) ||
       !rejects([] {
         (void)parse({"app", "--profile", "planned-otg-nullspace", "teleop",
@@ -117,16 +124,37 @@ int main() {
     return EXIT_FAILURE;
   }
 
-  const auto custom = parse(
-      {"app", "--profile",
-       "planned-otg-nullspace-admittance-kinematic-sim", "teleop", "--urdf",
-       "/tmp/r1.urdf", "--mujoco-model", "/tmp/r1.xml",
+  const auto default_planned =
+      parse({"app", "--profile", "planned", "teleop"});
+  if (default_planned.interactive.urdf_path != kDefaultUrdf ||
+      default_planned.interactive.robot.collision_mesh_search_paths !=
+          std::vector<std::string>{"/workspace/models"}) {
+    return EXIT_FAILURE;
+  }
+
+  const auto custom =
+      parse({"app",
+             "--profile",
+             "planned-otg-nullspace-admittance-kinematic-sim",
+             "teleop",
+             "--urdf",
+             "/tmp/r1.urdf",
+             "--mujoco-model",
+             "/tmp/r1.xml",
        "--joint-position-braking-velocity-envelope",
-       "--red-joint-acceleration-limits", "--left-tcp-offset",
-       "0.1,0.2,0.3,0,0,0,1", "--inactive-joints", "knee_pitch_joint",
-       "--self-collision-pair", "left_arm_link4:body_link4",
+             "--red-joint-acceleration-limits",
+             "--left-tcp-offset",
+             "0.1,0.2,0.3,0,0,0,1",
+             "--inactive-joints",
+             "knee_pitch_joint",
+             "--self-collision-pair",
+             "left_arm_link4:body_link4",
        "--yellow-task-posture-preference-joint-weight-multipliers",
-       "left_arm_joint6=2.5", "--red-rate", "800", "--yellow-rate", "80"});
+             "left_arm_joint6=2.5",
+             "--red-rate",
+             "800",
+             "--yellow-rate",
+             "80"});
   if (!custom.interactive.solver
            .joint_position_braking_velocity_envelope_enabled ||
       !custom.interactive.solver.red_joint_acceleration_limits_enabled ||
@@ -140,8 +168,8 @@ int main() {
   }
 
   const auto json = app::resolvedOptionsJson(custom);
-  return json.find(
-             "\"profile\" : \"planned-otg-nullspace-admittance-kinematic-sim\"") !=
+  return json.find("\"profile\" : "
+                   "\"planned-otg-nullspace-admittance-kinematic-sim\"") !=
                  std::string::npos &&
                  json.find("\"profile_provenance\"") != std::string::npos &&
                  json.find("\"binary_argv\"") != std::string::npos

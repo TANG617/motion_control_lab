@@ -21,7 +21,6 @@ target_compile_definitions(
   mcl_hierarchical_kinematics_step_support
   PRIVATE
     MCL_R1_MUJOCO_MODEL_PATH="${PROJECT_SOURCE_DIR}/assets/robots/r1/mujoco/mjcf/r1.xml"
-    MCL_R1_MUJOCO_URDF_PATH="${PROJECT_SOURCE_DIR}/assets/robots/r1/mujoco/urdf/r1.urdf"
 )
 target_link_libraries(
   mcl_hierarchical_kinematics_step_support
@@ -48,13 +47,15 @@ mcl_add_app(
   LIBRARIES motion_control_lab::hierarchical_kinematics_step_support
 )
 install(
-  PROGRAMS
-    scripts/launcher.py
-    scripts/run_keyboard.py
-    scripts/run_mcap_replay.py
-    scripts/run_csv_replay.py
+  DIRECTORY
+    scripts/_launcher
+    scripts/profiles
   DESTINATION
     "${CMAKE_INSTALL_LIBEXECDIR}/motion-control-lab/mcl_hierarchical_kinematics_step"
+  USE_SOURCE_PERMISSIONS
+  FILES_MATCHING
+    PATTERN "*.py"
+    PATTERN "__pycache__" EXCLUDE
 )
 
 if(BUILD_TESTING)
@@ -77,7 +78,6 @@ if(BUILD_TESTING)
     test_hierarchical_kinematics_step_app_options
     PRIVATE
       MCL_R1_MUJOCO_MODEL_PATH="${PROJECT_SOURCE_DIR}/assets/robots/r1/mujoco/mjcf/r1.xml"
-      MCL_R1_MUJOCO_URDF_PATH="${PROJECT_SOURCE_DIR}/assets/robots/r1/mujoco/urdf/r1.urdf"
   )
   add_test(
     NAME apps.mcl_hierarchical_kinematics_step_options
@@ -145,7 +145,7 @@ if(BUILD_TESTING)
     NAME apps.mcl_hierarchical_kinematics_step_solver
     COMMAND
       test_hierarchical_kinematics_step_solver
-      "/workspace/products/synrobot/modules/common/robot_description/psi_r1/urdf/Psi_R1_rev1.urdf"
+      "/workspace/models/Psi_R1_visual_collision.urdf"
   )
 
   add_executable(

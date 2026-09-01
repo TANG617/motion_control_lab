@@ -68,8 +68,8 @@ void ReplayPipelineGate::resume() noexcept {
   paused_.store(false, std::memory_order_release);
 }
 
-void ReplayPipelineGate::grantSingleFrame(
-    std::uint64_t red_ticks, std::uint64_t yellow_ticks) noexcept {
+void ReplayPipelineGate::grantSingleFrame(std::uint64_t red_ticks,
+                                          std::uint64_t yellow_ticks) noexcept {
   red_tick_budget_.store(red_ticks, std::memory_order_release);
   yellow_tick_budget_.store(yellow_ticks, std::memory_order_release);
   paused_.store(true, std::memory_order_release);
@@ -112,8 +112,7 @@ namespace replay = motion_control_lab::replay;
 using mcl::toEigen;
 using mcl::toStdVector;
 
-constexpr const char *kProgramId =
-    "mcl_hierarchical_kinematics_step";
+constexpr const char *kProgramId = "mcl_hierarchical_kinematics_step";
 constexpr const char *kTitle =
     "Motion Control Planned Null-space Admittance Kinematic Sim";
 constexpr std::array<unsigned int, 1> kUiCpuAffinity{5};
@@ -267,8 +266,8 @@ const char *hierarchicalBoundSideName(mcc::HierarchicalBoundSide value) {
   return "unknown";
 }
 
-const char *hierarchicalDiagnosticStateName(
-    mcc::HierarchicalDiagnosticState value) {
+const char *
+hierarchicalDiagnosticStateName(mcc::HierarchicalDiagnosticState value) {
   switch (value) {
   case mcc::HierarchicalDiagnosticState::NotRun:
     return "not-run";
@@ -306,10 +305,9 @@ const char *hierarchicalTaskUnit(mcc::HierarchicalTaskKind value) {
   return value == mcc::HierarchicalTaskKind::Position ? "m/s" : "rad/s";
 }
 
-const char *hierarchicalTaskEnforcementName(
-    mcc::HierarchicalTaskEnforcement value) {
-  return value == mcc::HierarchicalTaskEnforcement::Scaled ? "scaled"
-                                                           : "soft";
+const char *
+hierarchicalTaskEnforcementName(mcc::HierarchicalTaskEnforcement value) {
+  return value == mcc::HierarchicalTaskEnforcement::Scaled ? "scaled" : "soft";
 }
 
 template <typename Value>
@@ -365,7 +363,8 @@ void appendHierarchicalEvidence(
     constraint.name = source.name;
     constraint.unit = source.unit;
     constraint.source = hierarchicalBoundSourceName(source.bound_source);
-    constraint.enabled = source.state != mcc::HierarchicalDiagnosticState::NotRun;
+    constraint.enabled =
+        source.state != mcc::HierarchicalDiagnosticState::NotRun;
     constraint.active =
         source.state == mcc::HierarchicalDiagnosticState::Active ||
         source.state == mcc::HierarchicalDiagnosticState::Violated;
@@ -456,8 +455,7 @@ void updateSolverDebug(mcl::SolverDebug &output,
                        mcc::ResultDisposition disposition) {
   if (diagnostics.hierarchical) {
     const bool rejected = !mcc::isAccepted(disposition);
-    auto accepted_tasks =
-        rejected ? evidenceRows(output.tasks, "last-accepted")
+    auto accepted_tasks = rejected ? evidenceRows(output.tasks, "last-accepted")
                  : std::vector<mcl::TaskDebug>{};
     auto accepted_task_scales =
         rejected ? evidenceRows(output.task_scales, "last-accepted")
@@ -524,14 +522,13 @@ void updateSolverDebug(mcl::SolverDebug &output,
     output.task_scales = std::move(accepted_task_scales);
     output.requirements = std::move(accepted_constraints);
     if (!rejected) {
-      appendHierarchicalEvidence(
-          output, diagnostics.hierarchy.tasks,
-          diagnostics.hierarchy.task_scales, diagnostics.hierarchy.constraints,
+      appendHierarchicalEvidence(output, diagnostics.hierarchy.tasks,
+                                 diagnostics.hierarchy.task_scales,
+                                 diagnostics.hierarchy.constraints,
           "last-accepted", std::nullopt);
     } else {
       for (const auto &pass : diagnostics.hierarchy.passes) {
-        if (!pass.attempted || pass.succeeded ||
-            !pass.last_iterate_available) {
+        if (!pass.attempted || pass.succeeded || !pass.last_iterate_available) {
           continue;
         }
         appendHierarchicalEvidence(
@@ -542,8 +539,7 @@ void updateSolverDebug(mcl::SolverDebug &output,
     }
   } else {
     const bool rejected = !mcc::isAccepted(disposition);
-    auto accepted_tasks =
-        rejected ? evidenceRows(output.tasks, "last-accepted")
+    auto accepted_tasks = rejected ? evidenceRows(output.tasks, "last-accepted")
                  : std::vector<mcl::TaskDebug>{};
     auto accepted_task_scales =
         rejected ? evidenceRows(output.task_scales, "last-accepted")
@@ -600,8 +596,7 @@ void updateSolverDebug(mcl::SolverDebug &output,
         task.unit = source.unit;
         task.pass = "Solve";
         task.evidence = evidence;
-        task.state = !source.enabled
-                         ? "not-run"
+        task.state = !source.enabled ? "not-run"
                          : (source.active ? "active" : "satisfied");
         task.enabled = source.enabled;
         task.maximum_violation = source.maximum_violation;
@@ -621,15 +616,14 @@ void updateSolverDebug(mcl::SolverDebug &output,
       requirement.cost = source.cost;
       requirement.pass = "Solve";
       requirement.evidence = evidence;
-      requirement.state = !source.enabled
-                              ? "not-run"
+      requirement.state =
+          !source.enabled ? "not-run"
                               : (source.maximum_violation > 0.0
                                      ? "violated"
-                                     : (source.active ? "active"
-                                                      : "satisfied"));
+                                 : (source.active ? "active" : "satisfied"));
       requirement.cost_available = softConstraintSemanticName(source.name);
-      requirement.kind = requirement.cost_available ? "soft-constraint"
-                                                    : "joint-bound";
+      requirement.kind =
+          requirement.cost_available ? "soft-constraint" : "joint-bound";
       requirement.side = "-";
       output.requirements.push_back(std::move(requirement));
     }
@@ -713,10 +707,8 @@ struct RedOutputSnapshot {
   Eigen::VectorXd raw_ik_positions;
   Eigen::VectorXd raw_ik_velocities;
   mcl::hierarchical_kinematics_step::JointTarget raw_joint_target;
-  mcl::hierarchical_kinematics_step::JointTarget
-      projected_joint_target;
-  mcl::hierarchical_kinematics_step::ProjectionDiagnostics
-      projection;
+  mcl::hierarchical_kinematics_step::JointTarget projected_joint_target;
+  mcl::hierarchical_kinematics_step::ProjectionDiagnostics projection;
   std::uint64_t projection_event_count{0U};
   std::uint64_t projection_cycle_count{0U};
   bool future_o1_startup{false};
@@ -738,7 +730,8 @@ struct RedOutputSnapshot {
   double left_orientation_error_rad{0.0};
   double right_position_error_m{0.0};
   double right_orientation_error_rad{0.0};
-  double primary_maximum_preservation_drift{0.0};
+  double primary_maximum_position_preservation_drift_mps{0.0};
+  double primary_maximum_orientation_preservation_drift_radps{0.0};
   double link4_task_error_m{0.0};
   double yellow_posture_error_rad{0.0};
   std::optional<mcc::PriorityLevel> highest_completed_priority;
@@ -766,8 +759,7 @@ struct RedAttemptSnapshot {
   TargetSnapshot target;
   TargetSnapshot attempted_reference;
   mcl::SolverDebug solver_debug;
-  mcl::hierarchical_kinematics_step::RetargetClampDiagnostics
-      retarget_clamp;
+  mcl::hierarchical_kinematics_step::RetargetClampDiagnostics retarget_clamp;
   std::uint64_t retarget_clamp_target_revision{0U};
   std::string detail;
 };
@@ -782,8 +774,8 @@ mcs::Pose3d simulationPose(const mcc::Pose &pose) {
   return result;
 }
 
-mcs::JointState simulationJointState(
-    const StateSnapshot &state,
+mcs::JointState
+simulationJointState(const StateSnapshot &state,
     const std::vector<std::string> &joint_names) {
   mcs::JointState result;
   result.names = joint_names;
@@ -806,18 +798,19 @@ DragSnapshot initialDragSnapshot(const RedOutputSnapshot &output,
   return result;
 }
 
-DualAdmittanceOutput initialAdmittanceOutput(
-    const mcc::CartesianTrajectorySample &nominal_sample,
+DualAdmittanceOutput
+initialAdmittanceOutput(const mcc::CartesianTrajectorySample &nominal_sample,
     const mcc::Pose &left_actual_link_pose,
-    const mcc::Pose &right_actual_link_pose, const R1RobotConfig &robot) {
+                        const mcc::Pose &right_actual_link_pose,
+                        const R1RobotConfig &robot) {
   DualAdmittanceOutput output;
   const auto initialize_arm = [](const mcc::CartesianFrameSample &nominal,
                                  const mcc::Pose &actual_link_pose,
                                  const mcc::Pose &tcp_offset,
                                  ArmAdmittanceOutput &arm) {
     arm.nominal_link = nominal;
-    arm.nominal_tcp = shiftCartesianControlPoint(
-        nominal, tcp_offset, nominal.frame_name + "_tcp");
+    arm.nominal_tcp = shiftCartesianControlPoint(nominal, tcp_offset,
+                                                 nominal.frame_name + "_tcp");
     arm.command_tcp = arm.nominal_tcp;
     arm.command_link = nominal;
     arm.actual_tcp_pose = actual_link_pose * tcp_offset;
@@ -877,15 +870,15 @@ void appendAdmittanceVisualization(const DualAdmittanceOutput &admittance,
       mcv::PoseSample pose;
       pose.channel = channel;
       pose.frame_id = "base_link";
-      pose.pose.position_m = {{source.translation().x(), source.translation().y(),
+      pose.pose.position_m = {{source.translation().x(),
+                               source.translation().y(),
                                source.translation().z()}};
       pose.pose.orientation_xyzw = {
           {orientation.x(), orientation.y(), orientation.z(), orientation.w()}};
       pose.timestamp_ns = timestamp_ns;
       batch.poses.push_back(std::move(pose));
     };
-    append_pose(
-        arm.nominal_link.pose,
+    append_pose(arm.nominal_link.pose,
         side == "left"
             ? contracts::mcl_planning_v1::kLeftCartesianNominalTopic
             : contracts::mcl_planning_v1::kRightCartesianNominalTopic);
@@ -893,8 +886,7 @@ void appendAdmittanceVisualization(const DualAdmittanceOutput &admittance,
                 "/mcl/admittance/" + side + "/nominal_tcp");
     append_pose(arm.command_tcp.pose,
                 "/mcl/admittance/" + side + "/command_tcp");
-    append_pose(arm.actual_tcp_pose,
-                "/mcl/admittance/" + side + "/actual_tcp");
+    append_pose(arm.actual_tcp_pose, "/mcl/admittance/" + side + "/actual_tcp");
 
     mcv::LineStrip3d wrench;
     wrench.entity_id = side + "_wrench";
@@ -930,13 +922,13 @@ void appendAdmittanceVisualization(const DualAdmittanceOutput &admittance,
 
     batch.spheres.push_back(mcv::Sphere3d{
         side + "_admittance_saturation",
-        "/mcl/admittance/" + side + "/saturation", "base_link",
+        "/mcl/admittance/" + side + "/saturation",
+        "base_link",
         {{arm.command_tcp.pose.translation().x(),
           arm.command_tcp.pose.translation().y(),
           arm.command_tcp.pose.translation().z()}},
         anySaturation(arm.diagnostics) ? 0.05 : 0.015,
-        anySaturation(arm.diagnostics)
-            ? mcv::ColorRgba{1.0, 0.1, 0.1, 0.85}
+        anySaturation(arm.diagnostics) ? mcv::ColorRgba{1.0, 0.1, 0.1, 0.85}
             : mcv::ColorRgba{0.1, 0.8, 0.2, 0.35}});
   };
   append(admittance.left, "left", {1.0, 0.55, 0.05, 1.0});
@@ -944,10 +936,8 @@ void appendAdmittanceVisualization(const DualAdmittanceOutput &admittance,
 }
 
 const char *retargetClampComponentName(
-    mcl::hierarchical_kinematics_step::RetargetClampComponent
-        component) {
-  using Component =
-      mcl::hierarchical_kinematics_step::RetargetClampComponent;
+    mcl::hierarchical_kinematics_step::RetargetClampComponent component) {
+  using Component = mcl::hierarchical_kinematics_step::RetargetClampComponent;
   switch (component) {
   case Component::LinearVelocity:
     return "linear_velocity";
@@ -968,11 +958,9 @@ const char *compactJointName(std::size_t index) {
   return kNames.at(index);
 }
 
-const char *
-projectionFlag(mcl::hierarchical_kinematics_step::ProjectionComponent
-                   component) {
-  using Component =
-      mcl::hierarchical_kinematics_step::ProjectionComponent;
+const char *projectionFlag(
+    mcl::hierarchical_kinematics_step::ProjectionComponent component) {
+  using Component = mcl::hierarchical_kinematics_step::ProjectionComponent;
   switch (component) {
   case Component::VelocityLimit:
     return "V";
@@ -1151,15 +1139,15 @@ double hierarchicalTaskTolerance(const mcc::HierarchicalTaskDiagnostics &task,
                                  const SolverOptions &options) {
   if (task.kind == mcc::HierarchicalTaskKind::Posture) {
     return options
-        .red_tertiary_task_yellow_posture_coupling_preservation_tolerance;
+        .red_secondary_task_yellow_posture_coupling_preservation_tolerance;
   }
   if (task.kind == mcc::HierarchicalTaskKind::Position &&
-      task.priority == mcc::PriorityLevel::Tertiary) {
-    return options
-        .red_tertiary_task_link4_position_preservation_tolerance_mps;
+      task.priority == mcc::PriorityLevel::Secondary) {
+    return options.red_secondary_task_link4_position_preservation_tolerance_mps;
   }
   if (task.kind == mcc::HierarchicalTaskKind::Orientation) {
-    return options.red_secondary_task_tcp_orientation_preservation_tolerance_radps;
+    return options
+        .red_primary_task_tcp_orientation_preservation_tolerance_radps;
   }
   return options.red_primary_task_tcp_position_preservation_tolerance_mps;
 }
@@ -1455,8 +1443,8 @@ proto::CartesianTracking makeCartesianTracking(
   return message;
 }
 
-proto::CartesianCompliance makeCartesianCompliance(
-    const proto::SampleContext &context,
+proto::CartesianCompliance
+makeCartesianCompliance(const proto::SampleContext &context,
     const DualAdmittanceOutput &compliance) {
   proto::CartesianCompliance message;
   *message.mutable_context() = context;
@@ -1465,8 +1453,7 @@ proto::CartesianCompliance makeCartesianCompliance(
     setVector3(*target.mutable_force_n(), source.force);
     setVector3(*target.mutable_torque_nm(), source.torque);
   };
-  const auto append = [&](const char *side,
-                          const ArmAdmittanceOutput &source) {
+  const auto append = [&](const char *side, const ArmAdmittanceOutput &source) {
     auto *arm = message.add_arms();
     arm->set_side(side);
     arm->set_reference_frame_name(source.nominal_tcp.reference_frame_name);
@@ -1703,8 +1690,7 @@ std::string tracePose(const mcc::Pose &pose) {
 }
 
 std::string traceProjectionEvents(
-    const mcl::hierarchical_kinematics_step::ProjectionDiagnostics
-        &diagnostics,
+    const mcl::hierarchical_kinematics_step::ProjectionDiagnostics &diagnostics,
     const std::vector<std::string> &joint_names) {
   std::ostringstream output;
   for (std::size_t index = 0U; index < diagnostics.events.size(); ++index) {
@@ -1713,8 +1699,8 @@ std::string traceProjectionEvents(
     }
     const auto &event = diagnostics.events[index];
     output << joint_names.at(event.joint_index) << ':'
-           << mcl::hierarchical_kinematics_step::
-                  projectionComponentName(event.component)
+           << mcl::hierarchical_kinematics_step::projectionComponentName(
+                  event.component)
            << ':' << std::setprecision(17) << event.original_value << "->"
            << event.applied_value;
   }
@@ -1758,8 +1744,7 @@ void applyReplayInitialState(const replay::LoadedReplay &loaded,
 }
 
 mcl::R1RobotConfig presentationRobotConfig(const RobotOptions &robot) {
-  return mcl::R1RobotConfig{
-      robot.base_frame,
+  return mcl::R1RobotConfig{robot.base_frame,
       robot.left_end_effector_frame,
       robot.right_end_effector_frame,
       robot.left_link4_frame,
@@ -1867,8 +1852,7 @@ std::string rejectedAttemptDetail(const mcc::Status &status,
         scale_diagnostics->empty() ? "unavailable" : "accepted";
     if (scale_diagnostics->empty()) {
       for (const auto &pass : diagnostics.hierarchy.passes) {
-        if (pass.attempted && !pass.succeeded &&
-            pass.last_iterate_available &&
+        if (pass.attempted && !pass.succeeded && pass.last_iterate_available &&
             !pass.last_iterate_task_scales.empty()) {
           scale_diagnostics = &pass.last_iterate_task_scales;
           scale_provenance = "failed-last-iterate";
@@ -1886,8 +1870,7 @@ std::string rejectedAttemptDetail(const mcc::Status &status,
       }
       const auto &scale = scale_diagnostics->at(index);
       output << "{name=\"" << scale.name << "\",active=" << std::boolalpha
-             << scale.active
-             << ",evaluated=" << scale.evaluated
+             << scale.active << ",evaluated=" << scale.evaluated
              << ",weighted_progress_scale=" << scale.weighted_progress_scale
              << ",cost=" << scale.objective_cost
              << ",degraded=" << scale.degraded << ",stuck=" << scale.stuck
@@ -2001,17 +1984,18 @@ taskScaleSnapshot(const mcc::HierarchicalTaskScaleDiagnostics &diagnostic) {
 void fillRedDiagnostics(const SolverHandles &handles,
                         const SolverDiagnostics &diagnostics,
                         RedOutputSnapshot &output) {
-  output.primary_maximum_preservation_drift = 0.0;
+  output.primary_maximum_position_preservation_drift_mps = 0.0;
+  output.primary_maximum_orientation_preservation_drift_radps = 0.0;
   output.link4_task_error_m = 0.0;
   output.yellow_posture_error_rad = 0.0;
   for (const auto &task : diagnostics.hierarchy.tasks) {
+    if (task.kind == mcc::HierarchicalTaskKind::Position) {
     if (task.enabled && task.priority == mcc::PriorityLevel::Primary &&
         task.actual_preservation_drift.size() > 0) {
-      output.primary_maximum_preservation_drift =
-          std::max(output.primary_maximum_preservation_drift,
+        output.primary_maximum_position_preservation_drift_mps =
+            std::max(output.primary_maximum_position_preservation_drift_mps,
                    task.actual_preservation_drift.maxCoeff());
     }
-    if (task.kind == mcc::HierarchicalTaskKind::Position) {
       if (task.handle_value == handles.red.left_position.value) {
         output.left_position_error_m = task.target_error_norm;
       } else if (task.handle_value == handles.red.right_position.value) {
@@ -2022,6 +2006,12 @@ void fillRedDiagnostics(const SolverHandles &handles,
         output.link4_task_error_m = task.target_error_norm;
       }
     } else if (task.kind == mcc::HierarchicalTaskKind::Orientation) {
+      if (task.enabled && task.priority == mcc::PriorityLevel::Primary &&
+          task.actual_preservation_drift.size() > 0) {
+        output.primary_maximum_orientation_preservation_drift_radps = std::max(
+            output.primary_maximum_orientation_preservation_drift_radps,
+            task.actual_preservation_drift.maxCoeff());
+      }
       if (task.handle_value == handles.red.left_orientation.value) {
         output.left_orientation_error_rad = task.target_error_norm;
       } else if (task.handle_value == handles.red.right_orientation.value) {
@@ -2232,8 +2222,8 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
       const std::string run_id = replay_options.run_id.value_or(
           mcl::make_run_id(mcl::sha256_file(replay_options.input_path)));
       const std::filesystem::path output_root =
-          replay_options.output_root.value_or(std::filesystem::path{
-              "runs/mcl_hierarchical_kinematics_step"});
+          replay_options.output_root.value_or(
+              std::filesystem::path{"runs/mcl_hierarchical_kinematics_step"});
       replay_options.output_dir = output_root / run_id;
     }
     loaded_replay = replay::loadReplay(replay_options);
@@ -2387,15 +2377,15 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
   std::unique_ptr<mcs::MujocoViewer> viewer;
   if (capabilities.kinematic_simulation) {
     simulation = std::make_unique<mcs::MujocoKinematicSimulation>();
-    simulation->load(mcs::ModelDescription{
-        options.simulation.mujoco_model_path, robot.joint_names,
-        {"left_tcp_site", "right_tcp_site"}, "floating_base"});
+    simulation->load(mcs::ModelDescription{options.simulation.mujoco_model_path,
+                                           robot.joint_names,
+                                           {"left_tcp_site", "right_tcp_site"},
+                                           "floating_base"});
     simulation->setKinematicState(
         simulationJointState(initial_state, robot.joint_names));
     simulation->forward();
   }
-  if (capabilities.kinematic_simulation &&
-      options.simulation.viewer_enabled) {
+  if (capabilities.kinematic_simulation && options.simulation.viewer_enabled) {
     mcs::ViewerOptions viewer_options;
     viewer_options.title = kTitle;
     viewer_options.handles = {
@@ -2451,18 +2441,17 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
            (planned_options.replay.has_value() &&
             planned_options.replay->terminal_input_enabled),
        options.presentation.enabled});
-  NullspaceTargetSource input(terminal,
+  NullspaceTargetSource input(
+      terminal,
                               planned_options.source_mode == SourceMode::Replay
                                   ? mcl::KeyboardSourceMode::Replay
                                   : mcl::KeyboardSourceMode::Teleop,
                               options.tui,
                               {{mcl::ArmSide::Left, initial_target.left},
                                {mcl::ArmSide::Right, initial_target.right}},
-                              initial_link4_target.left,
-                              initial_link4_target.right,
+      initial_link4_target.left, initial_link4_target.right,
                               capabilities.nullspace,
-                              capabilities.nullspace &&
-                                  planned_options.replay_elbow_teleop_enabled);
+      capabilities.nullspace && planned_options.replay_elbow_teleop_enabled);
   mcl::PlannedGroupedTui tui(options.presentation);
   if (planned_options.source_mode == SourceMode::Replay) {
     if (!planned_options.replay_elbow_teleop_enabled) {
@@ -2537,7 +2526,9 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
            "elbow_raw_right_xyz,elbow_executed_left_xyz,"
            "elbow_executed_right_xyz,elbow_left_raw_error_m,"
            "elbow_right_raw_error_m,elbow_left_executed_error_m,"
-           "elbow_right_executed_error_m,primary_maximum_preservation_drift,"
+           "elbow_right_executed_error_m,"
+           "primary_maximum_position_preservation_drift_mps,"
+           "primary_maximum_orientation_preservation_drift_radps,"
            "elbow_task_error_m,replay_source_index\n";
   }
 
@@ -2594,9 +2585,10 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
             telemetry_stamp = telemetry_clock->sample();
           }
           if (!replay_pipeline_gate.acquireYellowTick()) {
-            return mcl::WorkerIterationResult{
-                mcl::WorkerIterationOutcome::Idle,
-                diagnostics.attempt_revision, 0.0, {}};
+            return mcl::WorkerIterationResult{mcl::WorkerIterationOutcome::Idle,
+                                              diagnostics.attempt_revision,
+                                              0.0,
+                                              {}};
           }
           state_to_yellow.readLatest(state);
           request.captured_state = capturedState(state);
@@ -2723,10 +2715,9 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
     }
 
     const auto makeReplayRow = [&](std::uint64_t attempt_revision) {
-      std::vector<std::string> row(65U);
+      std::vector<std::string> row(66U);
       row[0] = std::to_string(attempt_revision);
-      row[14] =
-          mcl::hierarchical_kinematics_step::jointTargetModeName(
+      row[14] = mcl::hierarchical_kinematics_step::jointTargetModeName(
               planned_options.joint_target.mode);
       row[48] = std::to_string(link4_target.revision);
       row[49] = link4_target.left_enabled
@@ -2741,16 +2732,21 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
       row[56] = traceEigenVector(output.left_link4_pose.translation());
       row[57] = traceEigenVector(output.right_link4_pose.translation());
       row[58] = std::to_string(
-          (link4_target.left - output.raw_left_link4_pose.translation()).norm());
+          (link4_target.left - output.raw_left_link4_pose.translation())
+              .norm());
       row[59] = std::to_string(
-          (link4_target.right - output.raw_right_link4_pose.translation()).norm());
+          (link4_target.right - output.raw_right_link4_pose.translation())
+              .norm());
       row[60] = std::to_string(
           (link4_target.left - output.left_link4_pose.translation()).norm());
       row[61] = std::to_string(
           (link4_target.right - output.right_link4_pose.translation()).norm());
-      row[62] = std::to_string(output.primary_maximum_preservation_drift);
-      row[63] = std::to_string(output.link4_task_error_m);
-      row[64] = target.replay_source_index.has_value()
+      row[62] = std::to_string(
+          output.primary_maximum_position_preservation_drift_mps);
+      row[63] = std::to_string(
+          output.primary_maximum_orientation_preservation_drift_radps);
+      row[64] = std::to_string(output.link4_task_error_m);
+      row[65] = target.replay_source_index.has_value()
                     ? std::to_string(*target.replay_source_index)
                     : "";
       if (!loaded_replay.has_value() ||
@@ -2820,9 +2816,10 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
             attempt.run_time_ns = telemetry_stamp.run_time_ns;
           }
           if (!replay_pipeline_gate.acquireRedTick()) {
-            return mcl::WorkerIterationResult{
-                mcl::WorkerIterationOutcome::Idle,
-                diagnostics.attempt_revision, 0.0, {}};
+            return mcl::WorkerIterationResult{mcl::WorkerIterationOutcome::Idle,
+                                              diagnostics.attempt_revision,
+                                              0.0,
+                                              {}};
           }
           if (target_to_red.readLatest(target) && loaded_replay.has_value()) {
             replay_last_consumed_revision.store(target.revision);
@@ -2867,8 +2864,8 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
                 target.left, target.right, accepted_planner_sample, robot,
                 planned_options.planning, options.red_rate_hz);
             attempt.retarget_clamp =
-                mcl::hierarchical_kinematics_step::
-                    clampRetargetCurrentState(retarget_request);
+                mcl::hierarchical_kinematics_step::clampRetargetCurrentState(
+                    retarget_request);
             attempt.retarget_clamp_target_revision = target.revision;
             const auto planning_status = cartesian_planner->replan(
                 retarget_request, planning_diagnostics);
@@ -2969,13 +2966,15 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
           const mcc::CartesianTrajectorySample staged_for_attempt =
               *staged_planner_sample;
           drag_to_red.readLatest(drag);
-          const DualAdmittanceOutput compliance = capabilities.admittance
+          const DualAdmittanceOutput compliance =
+              capabilities.admittance
               ? admittance.step(staged_for_attempt, output.left_pose,
                                 output.right_pose, robot.left_tcp_offset,
                                 robot.right_tcp_offset, drag.references,
                                 1.0 / options.red_rate_hz)
-              : initialAdmittanceOutput(staged_for_attempt, output.left_pose,
-                                        output.right_pose, robot);
+                  : initialAdmittanceOutput(staged_for_attempt,
+                                            output.left_pose, output.right_pose,
+                                            robot);
           const mcc::CartesianTrajectorySample command_for_attempt =
               compliance.command_sample;
           TargetSnapshot reference;
@@ -3027,8 +3026,7 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
                   telemetry_stamp,
                   contracts::mcl_telemetry_v1::kCartesianTrackingTopic,
                   makeCartesianTracking(
-                      telemetry_context, target, reference,
-                      command_for_attempt,
+                      telemetry_context, target, reference, command_for_attempt,
                       output.raw_left_pose, output.raw_right_pose,
                       output.left_pose, output.right_pose)));
             }
@@ -3102,13 +3100,12 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
             raw_target.velocities = mapped_raw_ik.velocities;
             raw_target.accelerations.assign(joint_names.size(), 0.0);
           }
-          mcl::hierarchical_kinematics_step::ProjectionDiagnostics
-              projection;
+          mcl::hierarchical_kinematics_step::ProjectionDiagnostics projection;
           auto projected_target = raw_target;
           if (capabilities.joint_otg) {
-            projected_target = mcl::hierarchical_kinematics_step::
-                projectConfiguredLimits(raw_target, joint_otg_limits,
-                                        projection);
+            projected_target =
+                mcl::hierarchical_kinematics_step::projectConfiguredLimits(
+                    raw_target, joint_otg_limits, projection);
           }
           if (target.replay_joint_hold) {
             // Synthetic replay frames keep the IK state machine running while
@@ -3140,14 +3137,17 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
             mcc::JointTrajectoryRequest joint_request;
             joint_request.joint_names = joint_names;
           joint_request.current.positions = toStdVector(otg_state.positions);
-          joint_request.current.velocities = toStdVector(otg_state.velocities);
+            joint_request.current.velocities =
+                toStdVector(otg_state.velocities);
           joint_request.current.accelerations =
               toStdVector(otg_state.accelerations);
           joint_request.target.positions = projected_target.positions;
           joint_request.target.velocities = projected_target.velocities;
           joint_request.target.accelerations = projected_target.accelerations;
-          joint_request.limits.position_lower = joint_otg_limits.position_lower;
-          joint_request.limits.position_upper = joint_otg_limits.position_upper;
+            joint_request.limits.position_lower =
+                joint_otg_limits.position_lower;
+            joint_request.limits.position_upper =
+                joint_otg_limits.position_upper;
           joint_request.limits.max_velocity = joint_otg_limits.max_velocity;
           joint_request.limits.max_acceleration =
               joint_otg_limits.max_acceleration;
@@ -3395,11 +3395,14 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
             ++replay_accepted_solve_count;
             const std::size_t final_source_index =
                 loaded_replay->timeline.timeline.size() - 1U;
-            const bool settled = !replay_settling || replay_settling->update(
+            const bool settled =
+                !replay_settling ||
+                replay_settling->update(
                 target.replay_source_index == final_source_index &&
                     replay_last_consumed_revision.load() >= target.revision,
                 planning_diagnostics.state == mcc::PlanningState::Finished,
-                output.left_position_error_m, output.left_orientation_error_rad,
+                    output.left_position_error_m,
+                    output.left_orientation_error_rad,
                 output.right_position_error_m,
                 output.right_orientation_error_rad,
                 maximumAbsolute(otg_state.velocities),
@@ -3417,7 +3420,8 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
               row[16] = std::to_string(diagnostics.maximum_hard_violation);
               row[17] = traceEigenVector(target.left.translation());
               row[18] = traceEigenVector(reference.left.translation());
-              row[19] = traceEigenVector(command_for_attempt.frames.at(0).twist);
+              row[19] =
+                  traceEigenVector(command_for_attempt.frames.at(0).twist);
               row[20] = traceEigenVector(
                   command_for_attempt.frames.at(0).acceleration);
               row[21] = tracePose(raw_left_pose);
@@ -3695,9 +3699,9 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
         continue;
       }
       const auto stamp = telemetry_clock->sample();
-      const auto source_index = replay_source.has_value()
-                                    ? std::optional<std::size_t>{
-                                          replay_source->sourceIndex()}
+      const auto source_index =
+          replay_source.has_value()
+              ? std::optional<std::size_t>{replay_source->sourceIndex()}
                                     : std::nullopt;
       ui_telemetry_records.push_back(TelemetryRecord::log(
           stamp, contracts::mcl_telemetry_v1::kEventsTopic,
@@ -3740,8 +3744,7 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
             publishCurrentReplayFrame("Replay single-frame goal");
             const auto duration_ns = currentReplayFrameDuration();
             replay_pipeline_gate.grantSingleFrame(
-                workerTicksForReplayDuration(duration_ns,
-                                             options.red_rate_hz),
+                workerTicksForReplayDuration(duration_ns, options.red_rate_hz),
                 workerTicksForReplayDuration(duration_ns,
                                              options.yellow_rate_hz));
             skip_replay_advance = true;
@@ -3923,8 +3926,7 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
               .maxCoeff();
       frame.ik_status +=
           " joint_otg=" +
-          std::string{
-              mcl::hierarchical_kinematics_step::jointTargetModeName(
+          std::string{mcl::hierarchical_kinematics_step::jointTargetModeName(
                   planned_options.joint_target.mode)} +
           " feedback=split-ik-reference/otg-execution" + " state=" +
           plannerStateName(latest_output.joint_step_diagnostics.state) +
@@ -3938,8 +3940,8 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
           std::to_string(latest_output.projection_event_count);
       frame.status +=
           " | JointPlanner " +
-          std::string{mcl::hierarchical_kinematics_step::
-                          planningSynchronizationName(
+          std::string{
+              mcl::hierarchical_kinematics_step::planningSynchronizationName(
                               planned_options.planning.joint_synchronization)} +
           " per-tick plan+first-step duration_s=" +
           std::to_string(latest_output.joint_plan_diagnostics.duration) +
@@ -4043,8 +4045,8 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
         }
         tui_debug.projection_events.push_back(
             {joint_names.at(event.joint_index),
-             mcl::hierarchical_kinematics_step::
-                 projectionComponentName(event.component),
+             mcl::hierarchical_kinematics_step::projectionComponentName(
+                 event.component),
              event.original_value, event.applied_value, event.limit});
       }
 
@@ -4120,8 +4122,8 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
         mcl::hierarchical_kinematics_step::appendNullspaceElbowScene(
             visualization_frame, robot.base_frame, latest_output.link4_target,
             latest_output.raw_left_link4_pose,
-            latest_output.raw_right_link4_pose,
-            latest_output.left_link4_pose, latest_output.right_link4_pose);
+            latest_output.raw_right_link4_pose, latest_output.left_link4_pose,
+            latest_output.right_link4_pose);
       }
       if (capabilities.admittance) {
         appendAdmittanceVisualization(latest_output.admittance,
@@ -4145,14 +4147,15 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
               pose.channel ==
                   contracts::mcl_execution_v1::kRightCartesianExecutionTopic) {
             pose.timestamp_ns = output_timestamp;
-          } else if (pose.channel == contracts::mcl_planning_v1::
-                                         kLeftCartesianReferenceTopic ||
-                     pose.channel == contracts::mcl_planning_v1::
-                                         kRightCartesianReferenceTopic ||
-                     pose.channel == contracts::mcl_planning_v1::
-                                         kLeftCartesianNominalTopic ||
-                     pose.channel == contracts::mcl_planning_v1::
-                                         kRightCartesianNominalTopic) {
+          } else if (
+              pose.channel ==
+                  contracts::mcl_planning_v1::kLeftCartesianReferenceTopic ||
+              pose.channel ==
+                  contracts::mcl_planning_v1::kRightCartesianReferenceTopic ||
+              pose.channel ==
+                  contracts::mcl_planning_v1::kLeftCartesianNominalTopic ||
+              pose.channel ==
+                  contracts::mcl_planning_v1::kRightCartesianNominalTopic) {
             pose.timestamp_ns = attempt_timestamp;
           } else {
             pose.timestamp_ns = emit_stamp.timestamp_ns;
@@ -4249,12 +4252,14 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
                      options.simulation.viewer_enabled ? "on" : "off");
           add_option("angular_admittance",
                      options.admittance.angular_enabled ? "on" : "off");
-          add_option("environment_stiffness_n_per_m",
-                     std::to_string(options.admittance
-                                        .linear_environment_stiffness_n_per_m));
-          add_option("environment_damping_ns_per_m",
-                     std::to_string(options.admittance
-                                        .linear_environment_damping_ns_per_m));
+          add_option(
+              "environment_stiffness_n_per_m",
+              std::to_string(
+                  options.admittance.linear_environment_stiffness_n_per_m));
+          add_option(
+              "environment_damping_ns_per_m",
+              std::to_string(
+                  options.admittance.linear_environment_damping_ns_per_m));
           add_option("maximum_force_n",
                      std::to_string(options.admittance.maximum_force_n));
           add_option("wrench_filter_alpha",
@@ -4266,78 +4271,73 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
                      planned_options.replay_elbow_teleop_enabled
                          ? "interactive-noncanonical"
                          : "canonical-replay");
-          add_option(
-              "red_primary_task_tcp_position_progress_weight",
+          add_option("red_primary_task_tcp_cartesian_progress_weight",
               std::to_string(
-                  options.solver.red_primary_task_tcp_position_progress_weight));
+                         options.solver
+                             .red_primary_task_tcp_cartesian_progress_weight));
+          add_option(
+              "red_primary_task_tcp_cartesian_progress_preservation_tolerance",
+              std::to_string(
+                  options.solver
+                      .red_primary_task_tcp_cartesian_progress_preservation_tolerance));
           add_option(
               "red_primary_task_tcp_position_preservation_tolerance_mps",
-              std::to_string(options.solver
-                                 .red_primary_task_tcp_position_preservation_tolerance_mps));
-          add_option(
-              "red_primary_task_tcp_position_progress_preservation_tolerance",
               std::to_string(
                   options.solver
-                      .red_primary_task_tcp_position_progress_preservation_tolerance));
+                      .red_primary_task_tcp_position_preservation_tolerance_mps));
           add_option(
-              "red_secondary_task_tcp_orientation_progress_weight",
-              std::to_string(options.solver
-                                 .red_secondary_task_tcp_orientation_progress_weight));
-          add_option(
-              "red_secondary_task_tcp_orientation_preservation_tolerance_radps",
+              "red_primary_task_tcp_orientation_preservation_tolerance_radps",
               std::to_string(
                   options.solver
-                      .red_secondary_task_tcp_orientation_preservation_tolerance_radps));
+                      .red_primary_task_tcp_orientation_preservation_tolerance_radps));
           add_option(
-              "red_secondary_task_tcp_orientation_progress_preservation_tolerance",
+              "red_secondary_task_link4_position_weight",
+              std::to_string(
+                  options.solver.red_secondary_task_link4_position_weight));
+          add_option(
+              "red_secondary_task_link4_position_servo_gain_per_s",
               std::to_string(
                   options.solver
-                      .red_secondary_task_tcp_orientation_progress_preservation_tolerance));
+                      .red_secondary_task_link4_position_servo_gain_per_s));
           add_option(
-              "red_tertiary_task_link4_position_weight",
-              std::to_string(
-                  options.solver.red_tertiary_task_link4_position_weight));
-          add_option(
-              "red_tertiary_task_link4_position_servo_gain_per_s",
-              std::to_string(options.solver
-                                 .red_tertiary_task_link4_position_servo_gain_per_s));
-          add_option(
-              "red_tertiary_task_link4_position_preservation_tolerance_mps",
+              "red_secondary_task_link4_position_preservation_tolerance_mps",
               std::to_string(
                   options.solver
-                      .red_tertiary_task_link4_position_preservation_tolerance_mps));
-          add_option(
-              "yellow_task_posture_preference_weight",
+                      .red_secondary_task_link4_position_preservation_tolerance_mps));
+          add_option("yellow_task_posture_preference_weight",
               std::to_string(
                   options.solver.yellow_task_posture_preference_weight));
-          add_option(
-              "yellow_task_posture_preference_servo_gain_per_s",
-              std::to_string(options.solver
+          add_option("yellow_task_posture_preference_servo_gain_per_s",
+                     std::to_string(
+                         options.solver
                                  .yellow_task_posture_preference_servo_gain_per_s));
           add_option(
-              "red_tertiary_task_yellow_posture_coupling_weight",
-              std::to_string(options.solver
-                                 .red_tertiary_task_yellow_posture_coupling_weight));
-          add_option(
-              "red_tertiary_task_yellow_posture_coupling_servo_gain_per_s",
+              "red_secondary_task_yellow_posture_coupling_weight",
               std::to_string(
                   options.solver
-                      .red_tertiary_task_yellow_posture_coupling_servo_gain_per_s));
+                      .red_secondary_task_yellow_posture_coupling_weight));
           add_option(
-              "red_tertiary_task_yellow_posture_coupling_preservation_tolerance",
+              "red_secondary_task_yellow_posture_coupling_servo_gain_per_s",
               std::to_string(
                   options.solver
-                      .red_tertiary_task_yellow_posture_coupling_preservation_tolerance));
+                      .red_secondary_task_yellow_posture_coupling_servo_gain_per_s));
+          add_option(
+              "red_secondary_task_yellow_posture_coupling_preservation_"
+              "tolerance",
+              std::to_string(
+                  options.solver
+                      .red_secondary_task_yellow_posture_coupling_preservation_tolerance));
           add_option(
               "yellow_task_posture_preference_joint_weight_multipliers",
               jointWeightMultipliersString(
                   options.solver
                       .yellow_task_posture_preference_joint_weight_multipliers));
           add_option(
-              "red_tertiary_task_yellow_posture_coupling_joint_weight_multipliers",
+              "red_secondary_task_yellow_posture_coupling_joint_weight_"
+              "multipliers",
               jointWeightMultipliersString(
                   options.solver
-                      .red_tertiary_task_yellow_posture_coupling_joint_weight_multipliers));
+                      .red_secondary_task_yellow_posture_coupling_joint_weight_multipliers));
           add_option("cartesian_algorithm", "jerk_limited");
           add_option("joint_algorithm", "jerk_limited");
           add_option("cartesian_synchronization",
@@ -4590,18 +4590,23 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
           latest_output.left_orientation_error_rad;
       nullspace_debug.right_tcp_orientation_error_rad =
           latest_output.right_orientation_error_rad;
-      nullspace_debug.primary_maximum_preservation_drift =
-          latest_output.primary_maximum_preservation_drift;
-      nullspace_debug.primary_preservation_tolerance =
+      nullspace_debug.primary_maximum_position_preservation_drift_mps =
+          latest_output.primary_maximum_position_preservation_drift_mps;
+      nullspace_debug.primary_maximum_orientation_preservation_drift_radps =
+          latest_output.primary_maximum_orientation_preservation_drift_radps;
+      nullspace_debug.primary_position_preservation_tolerance_mps =
           options.solver
               .red_primary_task_tcp_position_preservation_tolerance_mps;
+      nullspace_debug.primary_orientation_preservation_tolerance_radps =
+          options.solver
+              .red_primary_task_tcp_orientation_preservation_tolerance_radps;
       nullspace_debug.link4_task_error_m = latest_output.link4_task_error_m;
       nullspace_debug.yellow_posture_error_rad =
           latest_output.yellow_posture_error_rad;
       nullspace_debug.link4_weight =
-          options.solver.red_tertiary_task_link4_position_weight;
+          options.solver.red_secondary_task_link4_position_weight;
       nullspace_debug.yellow_weight =
-          options.solver.red_tertiary_task_yellow_posture_coupling_weight;
+          options.solver.red_secondary_task_yellow_posture_coupling_weight;
       nullspace_debug.left_task_scale = latest_output.left_scale.scale;
       nullspace_debug.right_task_scale = latest_output.right_scale.scale;
       if (latest_output.highest_completed_priority.has_value()) {
@@ -4720,38 +4725,32 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
          options.solver.joint_position_braking_velocity_envelope_enabled
              ? "true"
              : "false"},
-        {"red_primary_task_tcp_position_progress_weight",
+        {"red_primary_task_tcp_cartesian_progress_weight",
          std::to_string(
-             options.solver.red_primary_task_tcp_position_progress_weight)},
+             options.solver.red_primary_task_tcp_cartesian_progress_weight)},
+        {"red_primary_task_tcp_cartesian_progress_preservation_tolerance",
+         std::to_string(
+             options.solver
+                 .red_primary_task_tcp_cartesian_progress_preservation_tolerance)},
         {"red_primary_task_tcp_position_preservation_tolerance_mps",
          std::to_string(
              options.solver
                  .red_primary_task_tcp_position_preservation_tolerance_mps)},
-        {"red_primary_task_tcp_position_progress_preservation_tolerance",
+        {"red_primary_task_tcp_orientation_preservation_tolerance_radps",
          std::to_string(
              options.solver
-                 .red_primary_task_tcp_position_progress_preservation_tolerance)},
-        {"red_secondary_task_tcp_orientation_progress_weight",
+                 .red_primary_task_tcp_orientation_preservation_tolerance_radps)},
+        {"red_secondary_task_link4_position_weight",
          std::to_string(
-             options.solver.red_secondary_task_tcp_orientation_progress_weight)},
-        {"red_secondary_task_tcp_orientation_preservation_tolerance_radps",
-         std::to_string(
-             options.solver
-                 .red_secondary_task_tcp_orientation_preservation_tolerance_radps)},
-        {"red_secondary_task_tcp_orientation_progress_preservation_tolerance",
+             options.solver.red_secondary_task_link4_position_weight)},
+        {"red_secondary_task_link4_position_servo_gain_per_s",
          std::to_string(
              options.solver
-                 .red_secondary_task_tcp_orientation_progress_preservation_tolerance)},
-        {"red_tertiary_task_link4_position_weight",
-         std::to_string(
-             options.solver.red_tertiary_task_link4_position_weight)},
-        {"red_tertiary_task_link4_position_servo_gain_per_s",
-         std::to_string(options.solver
-                            .red_tertiary_task_link4_position_servo_gain_per_s)},
-        {"red_tertiary_task_link4_position_preservation_tolerance_mps",
+                 .red_secondary_task_link4_position_servo_gain_per_s)},
+        {"red_secondary_task_link4_position_preservation_tolerance_mps",
          std::to_string(
              options.solver
-                 .red_tertiary_task_link4_position_preservation_tolerance_mps)},
+                 .red_secondary_task_link4_position_preservation_tolerance_mps)},
         {"red_proxqp_maximum_iterations",
          std::to_string(options.solver.red_proxqp_maximum_iterations)},
         {"red_proxqp_absolute_tolerance",
@@ -4762,8 +4761,7 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
         {"red_proxqp_warm_start_enabled",
          options.solver.red_proxqp_warm_start_enabled ? "true" : "false"},
         {"yellow_task_posture_preference_weight",
-         std::to_string(
-             options.solver.yellow_task_posture_preference_weight)},
+         std::to_string(options.solver.yellow_task_posture_preference_weight)},
         {"yellow_task_posture_preference_servo_gain_per_s",
          std::to_string(
              options.solver.yellow_task_posture_preference_servo_gain_per_s)},
@@ -4771,22 +4769,21 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
          jointWeightMultipliersString(
              options.solver
                  .yellow_task_posture_preference_joint_weight_multipliers)},
-        {"red_tertiary_task_yellow_posture_coupling_weight",
+        {"red_secondary_task_yellow_posture_coupling_weight",
+         std::to_string(
+             options.solver.red_secondary_task_yellow_posture_coupling_weight)},
+        {"red_secondary_task_yellow_posture_coupling_servo_gain_per_s",
          std::to_string(
              options.solver
-                 .red_tertiary_task_yellow_posture_coupling_weight)},
-        {"red_tertiary_task_yellow_posture_coupling_servo_gain_per_s",
+                 .red_secondary_task_yellow_posture_coupling_servo_gain_per_s)},
+        {"red_secondary_task_yellow_posture_coupling_preservation_tolerance",
          std::to_string(
              options.solver
-                 .red_tertiary_task_yellow_posture_coupling_servo_gain_per_s)},
-        {"red_tertiary_task_yellow_posture_coupling_preservation_tolerance",
-         std::to_string(
-             options.solver
-                 .red_tertiary_task_yellow_posture_coupling_preservation_tolerance)},
-        {"red_tertiary_task_yellow_posture_coupling_joint_weight_multipliers",
+                 .red_secondary_task_yellow_posture_coupling_preservation_tolerance)},
+        {"red_secondary_task_yellow_posture_coupling_joint_weight_multipliers",
          jointWeightMultipliersString(
              options.solver
-                 .red_tertiary_task_yellow_posture_coupling_joint_weight_multipliers)},
+                 .red_secondary_task_yellow_posture_coupling_joint_weight_multipliers)},
         {"yellow_constraints_self_collision_avoidance_minimum_distance_m",
          std::to_string(
              options.solver
@@ -4821,14 +4818,12 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
         {"environment_damping_ns_per_m",
          std::to_string(
              options.admittance.linear_environment_damping_ns_per_m)},
-        {"maximum_force_n",
-         std::to_string(options.admittance.maximum_force_n)},
+        {"maximum_force_n", std::to_string(options.admittance.maximum_force_n)},
         {"wrench_filter_alpha",
          std::to_string(options.admittance.wrench_filter_alpha)},
         {"replay_elbow_teleop",
          planned_options.replay_elbow_teleop_enabled ? "on" : "off"},
-        {"evidence_class",
-         planned_options.replay_elbow_teleop_enabled
+        {"evidence_class", planned_options.replay_elbow_teleop_enabled
              ? "interactive-noncanonical"
              : "canonical-replay"},
         {"replay_trace", planned_options.replay_trace_enabled ? "on" : "off"},
@@ -4846,8 +4841,7 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
     }
     manifest["profile"] = profileName(planned_options.profile);
     manifest["resolved_options"] = std::move(complete_resolved_options);
-    manifest["python_launcher_argv_json"] =
-        planned_options.launcher_argv_json;
+    manifest["python_launcher_argv_json"] = planned_options.launcher_argv_json;
     manifest["execution"]["interactive_overlay"] =
         planned_options.replay_elbow_teleop_enabled;
     manifest["execution"]["canonical_replay"] =
@@ -4869,10 +4863,8 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
     for (const double value : input.link4Targets().right) {
       elbow_teleop["final_right_target_xyz_m"].append(value);
     }
-    elbow_teleop["final_left_enabled"] =
-        input.link4Targets().left_enabled;
-    elbow_teleop["final_right_enabled"] =
-        input.link4Targets().right_enabled;
+    elbow_teleop["final_left_enabled"] = input.link4Targets().left_enabled;
+    elbow_teleop["final_right_enabled"] = input.link4Targets().right_enabled;
     elbow_teleop["final_left_raw_error_m"] =
         (input.link4Targets().left -
          latest_output.raw_left_link4_pose.translation())
@@ -4882,15 +4874,18 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
          latest_output.raw_right_link4_pose.translation())
             .norm();
     elbow_teleop["final_left_executed_error_m"] =
-        (input.link4Targets().left - latest_output.left_link4_pose.translation())
+        (input.link4Targets().left -
+         latest_output.left_link4_pose.translation())
             .norm();
     elbow_teleop["final_right_executed_error_m"] =
         (input.link4Targets().right -
          latest_output.right_link4_pose.translation())
             .norm();
     elbow_teleop["final_task_error_m"] = latest_output.link4_task_error_m;
-    elbow_teleop["final_primary_maximum_preservation_drift"] =
-        latest_output.primary_maximum_preservation_drift;
+    elbow_teleop["final_primary_maximum_position_preservation_drift_mps"] =
+        latest_output.primary_maximum_position_preservation_drift_mps;
+    elbow_teleop["final_primary_maximum_orientation_preservation_drift_radps"] =
+        latest_output.primary_maximum_orientation_preservation_drift_radps;
     if (!planned_options.replay_trace_enabled) {
       manifest["artifacts"].removeMember("trace.csv");
     }
@@ -4899,10 +4894,11 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
         mcl::hierarchical_kinematics_step::jointTargetModeName(
             planned_options.joint_target.mode);
     joint_otg["sample_period_s"] = 1.0 / options.red_rate_hz;
-    joint_otg["algorithm"] = mcl::hierarchical_kinematics_step::
-        jointPlanningAlgorithmName(planned_options.planning.joint_algorithm);
-    joint_otg["synchronization"] = mcl::
-        hierarchical_kinematics_step::planningSynchronizationName(
+    joint_otg["algorithm"] =
+        mcl::hierarchical_kinematics_step::jointPlanningAlgorithmName(
+            planned_options.planning.joint_algorithm);
+    joint_otg["synchronization"] =
+        mcl::hierarchical_kinematics_step::planningSynchronizationName(
             planned_options.planning.joint_synchronization);
     joint_otg["execution_semantics"] =
         "per Red tick JointPlanner::plan plus first JointPlanner::step sample; "

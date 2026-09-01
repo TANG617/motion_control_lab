@@ -149,7 +149,7 @@ def main() -> int:
                 [
                     b"Null-space",
                     b"Control",
-                    b"Tertiary objectives",
+                    b"Secondary objectives",
                     b"Tertiary",
                     b"Terminal",
                     b"held",

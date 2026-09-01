@@ -75,7 +75,7 @@ int main(int argc, char **argv) {
     app_options.interactive.urdf_path = argv[1];
     const auto urdf = std::filesystem::weakly_canonical(argv[1]);
     app_options.interactive.robot.collision_mesh_search_paths = {
-        urdf.parent_path().parent_path().parent_path().string()};
+        urdf.parent_path().string()};
     const auto model = app::loadRobotModel(robot, app_options);
     const auto collision_model = app::loadCollisionModel(model, app_options);
     app::SolverRuntime runtime;
@@ -93,12 +93,11 @@ int main(int argc, char **argv) {
     fk_request.reference_frame_name = robot.base_frame;
     fk_request.frame_names = {robot.left_end_effector_frame,
                               robot.right_end_effector_frame,
-                              robot.left_link4_frame,
-                              robot.right_link4_frame};
+                              robot.left_link4_frame, robot.right_link4_frame};
     motion_control::core::ForwardKinematicsSolution initial_fk;
     motion_control::core::ForwardKinematicsDiagnostics fk_diagnostics;
-    app::requireOk(runtime.computeForwardKinematics(
-                       fk_request, initial_fk, fk_diagnostics),
+    app::requireOk(runtime.computeForwardKinematics(fk_request, initial_fk,
+                                                    fk_diagnostics),
                    "initial FK");
 
     const auto initial_left_tcp =
@@ -106,9 +105,11 @@ int main(int argc, char **argv) {
     const auto initial_right_tcp =
         requirePose(initial_fk.poses, robot.right_end_effector_frame).pose;
     const auto initial_left_link4 =
-        requirePose(initial_fk.poses, robot.left_link4_frame).pose.translation();
+        requirePose(initial_fk.poses, robot.left_link4_frame)
+            .pose.translation();
     const auto initial_right_link4 =
-        requirePose(initial_fk.poses, robot.right_link4_frame).pose.translation();
+        requirePose(initial_fk.poses, robot.right_link4_frame)
+            .pose.translation();
 
     runtime.beginRun(1);
     app::SolverRequest yellow;
@@ -116,8 +117,8 @@ int main(int argc, char **argv) {
     yellow.captured_state = {state, 1U, 1};
     app::SolverSolution yellow_solution;
     app::SolverDiagnostics yellow_diagnostics;
-    app::requireOk(runtime.solveYellow(yellow, yellow_solution,
-                                       yellow_diagnostics),
+    app::requireOk(
+        runtime.solveYellow(yellow, yellow_solution, yellow_diagnostics),
                    "Yellow solve");
     require(yellow_diagnostics.kinematics.posture_errors.size() == 1U,
             "Yellow posture diagnostics missing");
@@ -136,7 +137,8 @@ int main(int argc, char **argv) {
         [](const auto &requirement) {
           return requirement.name == "yellow/task/posture-preference";
         });
-    require(yellow_posture_requirement !=
+    require(
+        yellow_posture_requirement !=
                     yellow_diagnostics.kinematics.optimization.requirements.end() &&
                 yellow_posture_requirement->enabled,
             "Yellow posture requirement is not enabled");
@@ -144,8 +146,8 @@ int main(int argc, char **argv) {
     auto displaced_state = state;
     displaced_state.joint_positions(0) += 0.1;
     yellow.captured_state = {displaced_state, 2U, 2};
-    app::requireOk(runtime.solveYellow(yellow, yellow_solution,
-                                       yellow_diagnostics),
+    app::requireOk(
+        runtime.solveYellow(yellow, yellow_solution, yellow_diagnostics),
                    "displaced Yellow solve");
     require(yellow_solution.kinematics_solution.joint_velocities(0) < 0.0 &&
                 yellow_solution.kinematics_solution.joint_positions(0) <
@@ -153,8 +155,8 @@ int main(int argc, char **argv) {
             "Yellow posture preference did not restore the nominal pose");
 
     yellow.captured_state = {state, 3U, 3};
-    app::requireOk(runtime.solveYellow(yellow, yellow_solution,
-                                       yellow_diagnostics),
+    app::requireOk(
+        runtime.solveYellow(yellow, yellow_solution, yellow_diagnostics),
                    "reset Yellow solve");
 
     app::SolverRequest red;
@@ -179,14 +181,15 @@ int main(int argc, char **argv) {
             "Primary pass did not succeed");
     require(passes[1].attempted && passes[1].succeeded,
             "Secondary pass did not succeed");
-    require(passes[2].attempted && passes[2].succeeded,
-            "Tertiary pass did not succeed");
+    require(!passes[2].attempted,
+            "Tertiary pass must remain inactive in the two-level topology");
     require(!passes[3].attempted, "Terminal pass must remain disabled");
     require(red_diagnostics.hierarchy.highest_completed_priority ==
-                motion_control::core::PriorityLevel::Tertiary,
-            "highest completed priority is not Tertiary");
+                motion_control::core::PriorityLevel::Secondary,
+            "highest completed priority is not Secondary");
 
     std::size_t enabled_primary = 0U;
+    std::size_t enabled_primary_scaled = 0U;
     std::size_t enabled_secondary = 0U;
     std::size_t enabled_tertiary = 0U;
     bool left_link4_enabled = false;
@@ -196,6 +199,10 @@ int main(int argc, char **argv) {
       if (task.enabled &&
           task.priority == motion_control::core::PriorityLevel::Primary) {
         ++enabled_primary;
+        if (task.enforcement ==
+            motion_control::core::HierarchicalTaskEnforcement::Scaled) {
+          ++enabled_primary_scaled;
+        }
       }
       if (task.enabled &&
           task.priority == motion_control::core::PriorityLevel::Secondary) {
@@ -215,15 +222,27 @@ int main(int argc, char **argv) {
         yellow_posture_enabled = task.enabled;
       }
     }
-    require(enabled_primary == 2U,
-            "Primary must contain the two TCP position tasks");
+    require(enabled_primary == 4U,
+            "Primary must contain both TCP position and orientation tasks");
+    require(enabled_primary_scaled == 4U,
+            "all Primary Cartesian tasks must use scaled enforcement");
     require(enabled_secondary == 2U,
-            "Secondary must contain the two TCP orientation tasks");
-    require(enabled_tertiary == 2U,
-            "Tertiary must contain one link4 and the Yellow posture target");
+            "Secondary must contain one link4 and the Yellow posture target");
+    require(enabled_tertiary == 0U,
+            "Tertiary must not contain an enabled task");
     require(left_link4_enabled && right_link4_disabled &&
                 yellow_posture_enabled,
-            "Tertiary task enablement mismatch");
+            "Secondary task enablement mismatch");
+    const auto &scales = red_diagnostics.hierarchy.task_scales;
+    require(
+        scales.size() == 2U && scales[0].active && scales[1].active &&
+            scales[0].priority ==
+                motion_control::core::PriorityLevel::Primary &&
+            scales[1].priority ==
+                motion_control::core::PriorityLevel::Primary &&
+            scales[0].name == "red-primary/task/left-tcp-cartesian-progress" &&
+            scales[1].name == "red-primary/task/right-tcp-cartesian-progress",
+        "Primary must expose exactly one active Cartesian scale per arm");
 
     for (const bool exercise_left : {true, false}) {
       runtime.beginRun(exercise_left ? 2U : 3U);
@@ -246,8 +265,8 @@ int main(int argc, char **argv) {
           app::makeJointPlannerConfig(app_options.planning));
       const auto joint_limits = app::makeJointTargetLimits(
           robot, app_options.interactive.robot.joint_stream);
-      double maximum_primary_drift = 0.0;
-      double maximum_secondary_drift = 0.0;
+      double maximum_primary_position_drift = 0.0;
+      double maximum_primary_orientation_drift = 0.0;
 
       for (std::uint64_t tick = 1; tick <= 400; ++tick) {
         motion_control::core::RobotState yellow_state;
@@ -267,24 +286,25 @@ int main(int argc, char **argv) {
                        "iterated Red solve");
         require(red_diagnostics.hierarchy.passes[0].succeeded &&
                     red_diagnostics.hierarchy.passes[1].succeeded &&
-                    red_diagnostics.hierarchy.passes[2].succeeded &&
+                    !red_diagnostics.hierarchy.passes[2].attempted &&
                     !red_diagnostics.hierarchy.passes[3].attempted,
-                "iterated solve changed the three-pass hierarchy");
+                "iterated solve changed the two-pass hierarchy");
         for (const auto &task : red_diagnostics.hierarchy.tasks) {
           if (task.enabled &&
               task.priority == motion_control::core::PriorityLevel::Primary &&
               task.actual_preservation_drift.size() != 0) {
-            maximum_primary_drift =
-                std::max(maximum_primary_drift,
+            if (task.kind ==
+                motion_control::core::HierarchicalTaskKind::Position) {
+              maximum_primary_position_drift =
+                  std::max(maximum_primary_position_drift,
+                         task.actual_preservation_drift.maxCoeff());
+            } else if (task.kind == motion_control::core::HierarchicalTaskKind::
+                                        Orientation) {
+              maximum_primary_orientation_drift =
+                  std::max(maximum_primary_orientation_drift,
                          task.actual_preservation_drift.maxCoeff());
           }
-          if (task.enabled &&
-              task.priority == motion_control::core::PriorityLevel::Secondary &&
-              task.actual_preservation_drift.size() != 0) {
-            maximum_secondary_drift =
-                std::max(maximum_secondary_drift,
-                         task.actual_preservation_drift.maxCoeff());
-          }
+        }
         }
 
         const auto raw_target = app::mapActiveIkToFull(
@@ -362,28 +382,28 @@ int main(int argc, char **argv) {
               "executed link4 target error did not decrease");
       require((eigen(otg_positions) - state.joint_positions).norm() > 1.0e-4,
               "null-space objective did not change the executed joints");
-      require(maximum_tcp_position_error <=
+      require(
+          maximum_tcp_position_error <=
                       app_options.interactive.solver
                           .red_primary_task_tcp_position_preservation_tolerance_mps &&
                   maximum_tcp_orientation_error <=
                       app_options.interactive.solver
-                          .red_secondary_task_tcp_orientation_preservation_tolerance_radps,
+                      .red_primary_task_tcp_orientation_preservation_tolerance_radps,
               "executed TCP drift exceeded its hierarchy preservation tolerance");
-      require(
-          maximum_primary_drift <=
+      require(maximum_primary_position_drift <=
               app_options.interactive.solver
                   .red_primary_task_tcp_position_preservation_tolerance_mps,
-          "a lower pass changed a Primary position residual beyond tolerance");
+              "Secondary changed a Primary position residual beyond tolerance");
       require(
-          maximum_secondary_drift <=
+          maximum_primary_orientation_drift <=
               app_options.interactive.solver
-                  .red_secondary_task_tcp_orientation_preservation_tolerance_radps,
-          "Tertiary changed a Secondary orientation residual beyond tolerance");
+                  .red_primary_task_tcp_orientation_preservation_tolerance_radps,
+          "Secondary changed a Primary orientation residual beyond tolerance");
     }
     return EXIT_SUCCESS;
   } catch (const std::exception &error) {
-    std::cerr << "planned hierarchical Step OTG solver test failed: " << error.what()
-              << '\n';
+    std::cerr << "planned hierarchical Step OTG solver test failed: "
+              << error.what() << '\n';
     return EXIT_FAILURE;
   }
 }

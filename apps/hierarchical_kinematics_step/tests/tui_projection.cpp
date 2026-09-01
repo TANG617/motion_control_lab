@@ -12,19 +12,17 @@
 namespace mcl = motion_control_lab;
 namespace nsapp = motion_control_lab::hierarchical_kinematics_step;
 
-namespace
-{
+namespace {
 
-void require(bool condition, const char * message)
-{
+void require(bool condition, const char *message) {
   if (!condition) {
     std::cerr << message << '\n';
     std::exit(EXIT_FAILURE);
   }
 }
 
-const mcl::TuiPage & page(const mcl::TuiDocument & document, const std::string & title)
-{
+const mcl::TuiPage &page(const mcl::TuiDocument &document,
+                         const std::string &title) {
   for (const auto & candidate : document.pages) {
     if (candidate.title == title)
       return candidate;
@@ -33,8 +31,8 @@ const mcl::TuiPage & page(const mcl::TuiDocument & document, const std::string &
   std::exit(EXIT_FAILURE);
 }
 
-const mcl::TuiSection & section(const mcl::TuiPage & source, const std::string & title)
-{
+const mcl::TuiSection &section(const mcl::TuiPage &source,
+                               const std::string &title) {
   for (const auto & candidate : source.sections) {
     if (candidate.title == title)
       return candidate;
@@ -43,8 +41,7 @@ const mcl::TuiSection & section(const mcl::TuiPage & source, const std::string &
   std::exit(EXIT_FAILURE);
 }
 
-bool hasUiLabel(const mcl::TuiDocument & document, const std::string & label)
-{
+bool hasUiLabel(const mcl::TuiDocument &document, const std::string &label) {
   for (const auto & page : document.pages) {
     if (page.title == label) {
       return true;
@@ -70,8 +67,7 @@ bool hasUiLabel(const mcl::TuiDocument & document, const std::string & label)
   return false;
 }
 
-void requireSingleTableSheets(const mcl::TuiDocument & document)
-{
+void requireSingleTableSheets(const mcl::TuiDocument &document) {
   for (const auto & candidate_page : document.pages) {
     for (const auto & candidate_section : candidate_page.sections) {
       require(candidate_section.tables.size() <= 1U,
@@ -80,8 +76,7 @@ void requireSingleTableSheets(const mcl::TuiDocument & document)
   }
 }
 
-mcl::Pose translated(double x, double y, double z)
-{
+mcl::Pose translated(double x, double y, double z) {
   mcl::Pose result = mcl::Pose::Identity();
   result.translation() = Eigen::Vector3d{x, y, z};
   return result;
@@ -89,8 +84,7 @@ mcl::Pose translated(double x, double y, double z)
 
 } // namespace
 
-int main()
-{
+int main() {
   mcl::IkDebugFrame frame;
   frame.runtime_state = mcl::IkRuntimeState::Running;
   frame.status = "Hierarchical IK running";
@@ -104,9 +98,12 @@ int main()
   for (const auto side : {mcl::ArmSide::Left, mcl::ArmSide::Right}) {
     mcl::PlannedArmDebug arm;
     arm.side = side;
-    arm.source_goal = translated(side == mcl::ArmSide::Left ? 1.0 : -1.0, 2.0, 3.0);
-    arm.reference = translated(side == mcl::ArmSide::Left ? 0.9 : -0.9, 2.0, 3.0);
-    arm.forward_kinematics = translated(side == mcl::ArmSide::Left ? 0.8 : -0.8, 2.0, 3.0);
+    arm.source_goal =
+        translated(side == mcl::ArmSide::Left ? 1.0 : -1.0, 2.0, 3.0);
+    arm.reference =
+        translated(side == mcl::ArmSide::Left ? 0.9 : -0.9, 2.0, 3.0);
+    arm.forward_kinematics =
+        translated(side == mcl::ArmSide::Left ? 0.8 : -0.8, 2.0, 3.0);
     arm.reference_twist << 0.1, 0.2, 0.3, 0.4, 0.5, 0.6;
     arm.reference_acceleration << 1.1, 1.2, 1.3, 1.4, 1.5, 1.6;
     cartesian.arms.push_back(std::move(arm));
@@ -129,19 +126,16 @@ int main()
     solver.ik_solve_time_percentiles.p95 = 0.42;
     if (label == "Red") {
       solver.qp_passes = {
-          {"Primary", true, true, "optimal", "PROXQP_SOLVED", 0.21, 2,
-           false},
-          {"Secondary", true, true, "optimal", "PROXQP_SOLVED", 0.19, 1,
-           false},
+          {"Primary", true, true, "optimal", "PROXQP_SOLVED", 0.21, 2, false},
+          {"Secondary", true, true, "optimal", "PROXQP_SOLVED", 0.19, 1, false},
           {"Tertiary", false, false, "not-run", "", 0.0, 0, false},
-          {"Terminal", true, true, "optimal", "PROXQP_SOLVED", 0.18, 1,
-           false}};
-      solver.qp_passes.at(0).solve_time_percentiles =
-          {120, 120, 4096, 0.31, 0.41, 0.51};
-      solver.qp_passes.at(1).solve_time_percentiles =
-          {120, 120, 4096, 0.29, 0.39, 0.49};
-      solver.qp_passes.at(3).solve_time_percentiles =
-          {120, 120, 4096, 0.28, 0.38, 0.48};
+          {"Terminal", true, true, "optimal", "PROXQP_SOLVED", 0.18, 1, false}};
+      solver.qp_passes.at(0).solve_time_percentiles = {120,  120,  4096,
+                                                       0.31, 0.41, 0.51};
+      solver.qp_passes.at(1).solve_time_percentiles = {120,  120,  4096,
+                                                       0.29, 0.39, 0.49};
+      solver.qp_passes.at(3).solve_time_percentiles = {120,  120,  4096,
+                                                       0.28, 0.38, 0.48};
       auto &primary = solver.qp_passes.at(0);
       primary.succeeded = false;
       primary.status = "maximum-iterations";
@@ -151,40 +145,41 @@ int main()
       primary.dual_residual = 2.5e-3;
       primary.last_iterate_available = true;
       primary.constraint_violations.push_back(
-          {"task-equation", "-", "upper", "left-position", "y", "m/s",
-           1.0e-3, -2.5e-4, 2.5e-4, 7.5e-4});
+          {"task-equation", "-", "upper", "left-position", "y", "m/s", 1.0e-3,
+           -2.5e-4, 2.5e-4, 7.5e-4});
     }
     solver.grouped_attempt =
         mcl::GroupedAttemptDebug{"none", 2, 10, 9, "active", 8, 77, 1000};
-    solver.task_scales.push_back(
-      {"red-primary/task/left-tcp-position-progress", true, 0.95, 4.0, false, false,
-       "Primary", "last-accepted", true});
-    solver.tasks.push_back(
-      {"yellow/task/posture-preference", "posture", "rad/s", "Solve", "last-accepted",
-       "active", true, 0.02, 0.0, 1.5, true, true, "soft"});
+    solver.task_scales.push_back({"red-primary/task/left-tcp-position-progress",
+                                  true, 0.95, 4.0, false, false, "Primary",
+                                  "last-accepted", true});
+    solver.tasks.push_back({"yellow/task/posture-preference", "posture",
+                            "rad/s", "Solve", "last-accepted", "active", true,
+                            0.02, 0.0, 1.5, true, true, "soft"});
     solver.requirements.push_back(
-      {"red-shared/constraints/joint-position-limits", "rad/s", "position-braking", true,
-       true, 0.0, 0.0, "Shared", "last-accepted", "active", "left_arm_joint6",
-       2.0e-5, false, true});
+        {"red-shared/constraints/joint-position-limits", "rad/s",
+         "position-braking", true, true, 0.0, 0.0, "Shared", "last-accepted",
+         "active", "left_arm_joint6", 2.0e-5, false, true});
     if (label == "Red") {
       solver.task_scales.push_back(
-        {"red-primary/task/left-tcp-position-progress", true, 0.25, 28.125, true, false,
-         "Primary", "failed-last-iterate", true});
-      solver.tasks.push_back(
-        {"red-primary/task/left-tcp-position", "position", "m/s", "Primary",
-         "failed-last-iterate", "violated", true, 7.5e-4, 5.0e-4, 0.0, false, true,
-         "scaled"});
+          {"red-primary/task/left-tcp-position-progress", true, 0.25, 28.125,
+           true, false, "Primary", "failed-last-iterate", true});
+      solver.tasks.push_back({"red-primary/task/left-tcp-position", "position",
+                              "m/s", "Primary", "failed-last-iterate",
+                              "violated", true, 7.5e-4, 5.0e-4, 0.0, false,
+                              true, "scaled"});
       solver.requirements.push_back(
-        {"red-shared/constraints/joint-position-limits", "rad/s", "position-braking", true,
-         true, 7.5e-4, 0.0, "Primary", "failed-last-iterate", "violated",
-         "left_arm_joint6", -7.5e-4, false, true});
+          {"red-shared/constraints/joint-position-limits", "rad/s",
+           "position-braking", true, true, 7.5e-4, 0.0, "Primary",
+           "failed-last-iterate", "violated", "left_arm_joint6", -7.5e-4, false,
+           true});
     }
     frame.solvers.push_back(std::move(solver));
   }
-  frame.workers.push_back({"Red", 1000.0, 100, 1, 0, 2, 0.1, 0.8, 0.9, 0.0, 0.2, 3, 0.6, 0.01, 0.5,
-                           0.55, 0.0, 0.15, 0.35});
-  frame.workers.push_back({"Yellow", 100.0, 10, 0, 0, 0, 0.2, 1.2, 1.3, 0.0, 0.7, 0, 0.5, 0.02, 0.9,
-                           0.95, 0.0, 0.6, 0.3});
+  frame.workers.push_back({"Red", 1000.0, 100, 1, 0, 2, 0.1, 0.8, 0.9, 0.0, 0.2,
+                           3, 0.6, 0.01, 0.5, 0.55, 0.0, 0.15, 0.35});
+  frame.workers.push_back({"Yellow", 100.0, 10, 0, 0, 0, 0.2, 1.2, 1.3, 0.0,
+                           0.7, 0, 0.5, 0.02, 0.9, 0.95, 0.0, 0.6, 0.3});
   frame.cpu_affinities = {{"ui", true, 1005, {5}, {5}},
                           {"red", true, 1006, {6}, {6}},
                           {"yellow", true, 1007, {7}, {7}}};
@@ -220,23 +215,28 @@ int main()
     frame.joint_names.push_back("joint_" + std::to_string(index));
     frame.positions.push_back(0.6 + static_cast<double>(index));
     frame.velocities.push_back(0.7 + static_cast<double>(index));
-    app.joints.push_back({"joint_" + std::to_string(index),
+    app.joints.push_back(
+        {"joint_" + std::to_string(index),
                           index < 2U ? "H" + std::to_string(index) : "J" + std::to_string(index),
                           0.1 + index, 0.2 + index, 0.3 + index, 0.4 + index, 0.5 + index,
-                          0.6 + index, 0.7 + index, 0.8 + index, 0.9 + index, -2.0, 2.0, 5.0, 10.0,
-                          100.0, index == 3U ? "VA" : "-"});
+         0.6 + index, 0.7 + index, 0.8 + index, 0.9 + index, -2.0, 2.0, 5.0,
+         10.0, 100.0, index == 3U ? "VA" : "-"});
   }
-  app.projection_events.push_back({"joint_3", "acceleration-limit", 12.0, 10.0, 10.0});
+  app.projection_events.push_back(
+      {"joint_3", "acceleration-limit", 12.0, 10.0, 10.0});
   app.clamp_events.push_back({"left", "linear_velocity", "x", 1.2, 0.8, 0.8});
 
   mcl::InteractiveIkPresentation presentation;
   presentation.base_frame_id = "base_link";
   presentation.requirements_page_enabled = true;
   const mcl::PlannedGroupedTuiSnapshot servo_snapshot{
-      &frame, &presentation, std::nullopt, 37, "ws://127.0.0.1:8765", "Planned Servo", "paused"};
-  const auto servo_document = mcl::makePlannedGroupedTuiDocument(servo_snapshot);
+      &frame,          &presentation, std::nullopt, 37, "ws://127.0.0.1:8765",
+      "Planned Servo", "paused"};
+  const auto servo_document =
+      mcl::makePlannedGroupedTuiDocument(servo_snapshot);
   require(servo_document.pages.size() == 6U,
-          "snapshot with Requirements but without Joint-OTG must produce six pages");
+          "snapshot with Requirements but without Joint-OTG must produce six "
+          "pages");
   require(!hasUiLabel(servo_document, "Joint Planning"),
           "snapshot without Joint-OTG capability must not produce an N/A page");
 
@@ -252,18 +252,18 @@ int main()
   nullspace.right_link4_executed_error_m = 0.02;
   nullspace.right_tcp_position_error_m = 1.0e-5;
   nullspace.right_tcp_orientation_error_rad = 2.0e-5;
-  nullspace.primary_maximum_preservation_drift = 3.0e-5;
-  nullspace.primary_preservation_tolerance = 5.0e-4;
+  nullspace.primary_maximum_position_preservation_drift_mps = 3.0e-5;
+  nullspace.primary_maximum_orientation_preservation_drift_radps = 4.0e-5;
+  nullspace.primary_position_preservation_tolerance_mps = 5.0e-4;
+  nullspace.primary_orientation_preservation_tolerance_radps = 6.0e-4;
   nullspace.link4_task_error_m = 0.01;
   nullspace.yellow_posture_error_rad = 0.2;
   nullspace.link4_weight = 100.0;
   nullspace.yellow_weight = 1.0;
-  nullspace.highest_completed_priority = "Tertiary";
+  nullspace.highest_completed_priority = "Secondary";
   nullspace.primary_attempted = true;
   nullspace.secondary_attempted = true;
   nullspace.secondary_succeeded = true;
-  nullspace.tertiary_attempted = true;
-  nullspace.tertiary_succeeded = true;
 
   mcl::PlannedGroupedTuiSnapshot snapshot;
   snapshot.frame = &frame;
@@ -282,21 +282,26 @@ int main()
       "Replay: Space pauses/resumes; . advances one frame; Esc exits",
       "Elbow: c enables/disables one link4 target; Left/Right selects its arm",
       "Elbow: w/s +/-x; a/d +/-y; q/e +/-z in base_link",
-      "Elbow: Up/Down or m changes step; r captures executed link4; x clears/exits",
+      "Elbow: Up/Down or m changes step; r captures executed link4; x "
+      "clears/exits",
       "Paused replay accepts navigation and replay controls, not elbow edits"};
   const auto document = mcl::makePlannedGroupedTuiDocument(snapshot);
 
   const std::vector<std::string> expected_titles{
-      "Monitor", "Motion", "Solver", "Requirements", "Joints", "System", "Null-space"};
-  require(document.pages.size() == expected_titles.size(), "projection must produce seven pages");
+      "Monitor", "Motion", "Solver",    "Requirements",
+      "Joints",  "System", "Null-space"};
+  require(document.pages.size() == expected_titles.size(),
+          "projection must produce seven pages");
   require(document.footer_hints.find("? help") != std::string::npos,
           "footer must expose the conventional help key");
   require(document.header_left.find("source mcap replay + elbow teleop") !=
               std::string::npos &&
-              document.header_left.find("input replay+elbow") != std::string::npos &&
+              document.header_left.find("input replay+elbow") !=
+                  std::string::npos &&
               document.header_left.find("focus link4") != std::string::npos &&
               document.header_left.find("step 0.0050 m") != std::string::npos &&
-              document.header_right.find("Red Primary MAX_ITER") != std::string::npos,
+              document.header_right.find("Red Primary MAX_ITER") !=
+                  std::string::npos,
           "compact header must expose mode, focus, step, and solver exit");
   require(document.help_lines.size() == 6U &&
               document.help_lines.at(1).find("Space") != std::string::npos &&
@@ -310,7 +315,8 @@ int main()
                   std::string::npos,
           "help must expose the complete app-local hybrid replay key map");
   for (std::size_t index = 0U; index < expected_titles.size(); ++index) {
-    require(document.pages[index].title == expected_titles[index], "page order mismatch");
+    require(document.pages[index].title == expected_titles[index],
+            "page order mismatch");
   }
   requireSingleTableSheets(document);
   const auto & overview = page(document, "Monitor");
@@ -320,19 +326,25 @@ int main()
               overview.rows.at(1).column_weights == std::vector<int>({3, 2}) &&
               overview.rows.at(1).height_weight == 2 &&
               overview.rows.at(2).column_weights == std::vector<int>({1}),
-          "Monitor must use the shared 160x72 dashboard grid and failure preview row");
+          "Monitor must use the shared 160x72 dashboard grid and failure "
+          "preview row");
 
   const auto &nullspace_page = page(document, "Null-space");
-  require(nullspace_page.responsive_layouts.empty() &&
+  require(
+      nullspace_page.responsive_layouts.empty() &&
               nullspace_page.rows.size() == 2U &&
-              nullspace_page.rows.at(0).column_weights == std::vector<int>({1, 1}) &&
-              nullspace_page.rows.at(1).column_weights == std::vector<int>({1, 1}) &&
+          nullspace_page.rows.at(0).column_weights ==
+              std::vector<int>({1, 1}) &&
+          nullspace_page.rows.at(1).column_weights ==
+              std::vector<int>({1, 1}) &&
               nullspace_page.sections.size() == 4U,
           "null-space must use the shared fixed 160x72 capability-page geometry");
-  require(section(nullspace_page, "Control").style == mcl::TuiSectionStyle::Panel &&
-              section(nullspace_page, "Control").tables.front().rows.at(0).at(1) == "right" &&
+  require(
+      section(nullspace_page, "Control").style == mcl::TuiSectionStyle::Panel &&
+          section(nullspace_page, "Control").tables.front().rows.at(0).at(1) ==
+              "right" &&
               section(nullspace_page, "TCP hierarchy status").column == 1U &&
-              section(nullspace_page, "Tertiary objectives").row == 1U,
+          section(nullspace_page, "Secondary objectives").row == 1U,
           "null-space semantics must be projected into shared panels");
 
   const auto & overview_cartesian =
@@ -340,30 +352,35 @@ int main()
   require(overview_cartesian.row == 0U && overview_cartesian.column == 0U &&
               overview_cartesian.style == mcl::TuiSectionStyle::Panel &&
               overview_cartesian.tables.size() == 1U &&
-              overview_cartesian.tables.front().style == mcl::TuiTableStyle::Compact &&
+              overview_cartesian.tables.front().style ==
+                  mcl::TuiTableStyle::Compact &&
               overview_cartesian.tables.front().rows.size() == 2U,
           "Monitor must show one compact tracking row per arm");
   require(section(overview, "Workers").row == 1U &&
               section(overview, "Safety and hold").column == 1U &&
-              section(overview, "Failure focus · top violations from failed candidate")
-                    .tables.front().rows.front().at(3) == "left-position",
+              section(overview,
+                      "Failure focus · top violations from failed candidate")
+                      .tables.front()
+                      .rows.front()
+                      .at(3) == "left-position",
           "Monitor panels must preserve shared scan order");
 
   const auto & poses =
       section(page(document, "Motion"), "Cartesian states").tables.at(0);
   require(poses.columns.size() == 9U && poses.rows.size() == 6U,
           "Cartesian pose sheet shape mismatch");
-  const auto & targets =
-      section(page(document, "Joints"), "Joint chain · Raw IK → Target → Executed").tables.at(0);
-  require(targets.columns.size() == 14U && targets.rows.size() == 20U,
+  const auto &targets = section(page(document, "Joints"),
+                                "Joint chain · Raw IK → Target → Executed")
+                            .tables.at(0);
+  require(
+      targets.columns.size() == 14U && targets.rows.size() == 20U,
           "joint chain must expose raw, target, executed, bounds, and utilization");
-  require(targets.rows.at(3).at(0) == "joint_3" && targets.rows.at(3).at(13) == "VA",
+  require(targets.rows.at(3).at(0) == "joint_3" &&
+              targets.rows.at(3).at(13) == "VA",
           "joint projection mapping mismatch");
   require(targets.columns.at(1).alignment == mcl::TuiTableAlignment::Right,
           "joint numeric columns must be right aligned");
-  const auto &passes =
-      section(page(document, "Solver"), "Passes")
-          .tables.at(0);
+  const auto &passes = section(page(document, "Solver"), "Passes").tables.at(0);
   require(passes.columns.size() == 10U && passes.rows.size() == 4U,
           "solver pass master table shape mismatch");
   require(passes.rows.at(0).at(1) == "Primary" &&
@@ -396,25 +413,27 @@ int main()
       section(page(document, "Requirements"),
               "Constraint status and slack · failed candidate")
           .tables.at(0);
-  require(rejected_constraints.rows.front().at(0) ==
-              "failed-last-iterate" &&
-              rejected_constraints.rows.front().at(6) ==
-                  "left_arm_joint6" &&
+  require(rejected_constraints.rows.front().at(0) == "failed-last-iterate" &&
+              rejected_constraints.rows.front().at(6) == "left_arm_joint6" &&
               rejected_constraints.rows.front().at(9) == "-0.000750000" &&
               rejected_constraints.rows.front().at(11) == "-",
-          "failed constraint provenance, slack, and unavailable cost were not preserved");
+          "failed constraint provenance, slack, and unavailable cost were not "
+          "preserved");
   const auto & projection =
       section(page(document, "System"), "Projection events").tables.at(0);
-  require(projection.rows.at(0).at(0) == "joint_3" && projection.rows.at(0).at(2) == "12.000000" &&
+  require(projection.rows.at(0).at(0) == "joint_3" &&
+              projection.rows.at(0).at(2) == "12.000000" &&
               projection.rows.at(0).at(3) == "10.000000",
           "projection event values were not mapped");
-  const auto & affinity = section(page(document, "System"), "Processor affinity");
+  const auto &affinity =
+      section(page(document, "System"), "Processor affinity");
   require(affinity.tables.at(0).rows.at(0).at(3) == "5",
           "requested/effective CPU mapping mismatch");
   for (const std::string forbidden :
-       {"Overview", "Cartesian Planning", "Joint Planning", "QP Solver", "Joint State",
-        "Runtime", "Events"}) {
-    require(!hasUiLabel(document, forbidden), "TUI contains a retired page or panel label");
+       {"Overview", "Cartesian Planning", "Joint Planning", "QP Solver",
+        "Joint State", "Runtime", "Events"}) {
+    require(!hasUiLabel(document, forbidden),
+            "TUI contains a retired page or panel label");
   }
   return EXIT_SUCCESS;
 }

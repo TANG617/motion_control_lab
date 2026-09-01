@@ -100,10 +100,9 @@ struct SolverOptions {
   bool joint_position_braking_velocity_envelope_enabled{false};
   bool red_joint_acceleration_limits_enabled{false};
 
-  // The first three profiles retain the original shared Cartesian scale and
-  // Secondary posture-coupling topology.  The two null-space profiles use the
-  // explicit Primary position / Secondary orientation / Tertiary posture
-  // topology below.
+  // The first three profiles retain their legacy tuning. The two null-space
+  // profiles use one Primary Cartesian scale per arm and place link4/posture
+  // objectives together in Secondary.
   double legacy_cartesian_progress_weight{100.0};
   double legacy_cartesian_preservation_tolerance{5.0e-4};
   double legacy_scale_preservation_tolerance{1.0e-4};
@@ -114,16 +113,15 @@ struct SolverOptions {
   double legacy_collision_influence_distance_m{0.15};
   double legacy_collision_damping_gain_per_s{2.0};
   double legacy_collision_weight{10.0};
-  double red_primary_task_tcp_position_progress_weight{100.0};
+  double red_primary_task_tcp_cartesian_progress_weight{100.0};
+  double red_primary_task_tcp_cartesian_progress_preservation_tolerance{1.0e-4};
   double red_primary_task_tcp_position_preservation_tolerance_mps{5.0e-4};
-  double red_primary_task_tcp_position_progress_preservation_tolerance{1.0e-4};
-  double red_secondary_task_tcp_orientation_progress_weight{100.0};
-  double red_secondary_task_tcp_orientation_preservation_tolerance_radps{5.0e-4};
-  double red_secondary_task_tcp_orientation_progress_preservation_tolerance{1.0e-4};
-  double red_tertiary_task_yellow_posture_coupling_preservation_tolerance{1.0e-5};
-  double red_tertiary_task_link4_position_weight{100.0};
-  double red_tertiary_task_link4_position_servo_gain_per_s{10.0};
-  double red_tertiary_task_link4_position_preservation_tolerance_mps{5.0e-4};
+  double red_primary_task_tcp_orientation_preservation_tolerance_radps{5.0e-4};
+  double red_secondary_task_yellow_posture_coupling_preservation_tolerance{
+      1.0e-5};
+  double red_secondary_task_link4_position_weight{100.0};
+  double red_secondary_task_link4_position_servo_gain_per_s{10.0};
+  double red_secondary_task_link4_position_preservation_tolerance_mps{5.0e-4};
   int yellow_maximum_iterations{1};
   int red_proxqp_maximum_iterations{200};
   double red_proxqp_absolute_tolerance{2.0e-5};
@@ -133,10 +131,10 @@ struct SolverOptions {
   double yellow_task_posture_preference_servo_gain_per_s{10.0};
   std::vector<std::pair<std::string, double>>
       yellow_task_posture_preference_joint_weight_multipliers;
-  double red_tertiary_task_yellow_posture_coupling_weight{1.0};
-  double red_tertiary_task_yellow_posture_coupling_servo_gain_per_s{10.0};
+  double red_secondary_task_yellow_posture_coupling_weight{1.0};
+  double red_secondary_task_yellow_posture_coupling_servo_gain_per_s{10.0};
   std::vector<std::pair<std::string, double>>
-      red_tertiary_task_yellow_posture_coupling_joint_weight_multipliers;
+      red_secondary_task_yellow_posture_coupling_joint_weight_multipliers;
   double yellow_constraints_self_collision_avoidance_minimum_distance_m{0.1};
   double yellow_constraints_self_collision_avoidance_influence_distance_m{0.15};
   double yellow_constraints_self_collision_avoidance_damping_gain_per_s{2.0};
@@ -213,8 +211,7 @@ struct RobotOptions {
       0.0, 0.31, 0.0, 0.5, 0.5, -0.5, 0.9, -1.38, -1.57, -1.4,
       -0.45, 0.0, 0.0, -0.9, 1.38, 1.57, 1.4, 0.45, 0.0, 0.0};
   std::vector<std::size_t> left_arm_joint_indices{6, 7, 8, 9, 10, 11, 12};
-  std::vector<std::size_t> right_arm_joint_indices{13, 14, 15, 16, 17, 18,
-                                                    19};
+  std::vector<std::size_t> right_arm_joint_indices{13, 14, 15, 16, 17, 18, 19};
   std::vector<double> effort_limits{
       16.0, 16.0, 450.0, 450.0, 600.0, 600.0, 108.0, 108.0, 66.0, 66.0,
       19.0, 19.0, 19.0, 108.0, 108.0, 66.0, 66.0, 19.0, 19.0, 19.0};
@@ -250,7 +247,7 @@ struct SimulationOptions {
 };
 
 struct HierarchicalOptions {
-  std::string urdf_path;
+  std::string urdf_path{"/workspace/models/Psi_R1_visual_collision.urdf"};
   double red_rate_hz{1000.0};
   double yellow_rate_hz{100.0};
   double ui_rate_hz{100.0};
@@ -275,8 +272,7 @@ struct PlanningOptions {
   PlanningSynchronization cartesian_synchronization{
       PlanningSynchronization::Time};
   JointPlanningAlgorithm joint_algorithm{JointPlanningAlgorithm::JerkLimited};
-  PlanningSynchronization joint_synchronization{
-      PlanningSynchronization::Phase};
+  PlanningSynchronization joint_synchronization{PlanningSynchronization::Phase};
 };
 
 struct JointTargetOptions {

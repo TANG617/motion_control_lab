@@ -4,8 +4,7 @@
 #include <chrono>
 #include <stdexcept>
 
-namespace motion_control_lab::
-    hierarchical_kinematics_step {
+namespace motion_control_lab::hierarchical_kinematics_step {
 namespace {
 
 bool isInactiveJoint(const std::string &name, const RobotOptions &options) {
@@ -92,39 +91,35 @@ addCartesianTasks(mcc::HierarchicalKinematicsSolverBuilder &builder,
     mcc::TaskScaleGroupConfig scale;
     scale.progress_weight = options.legacy_cartesian_progress_weight;
     scale.name = "red-left-cartesian-progress";
-    requireOk(
-        builder.addTaskScaleGroup(
+    requireOk(builder.addTaskScaleGroup(
             mcc::PriorityLevel::Primary,
             {scale, options.legacy_scale_preservation_tolerance},
-            handles.left_position_scale),
+                  handles.left_cartesian_scale),
         "register " + scale.name);
-    handles.left_orientation_scale = handles.left_position_scale;
     scale.name = "red-right-cartesian-progress";
-    requireOk(
-        builder.addTaskScaleGroup(
+    requireOk(builder.addTaskScaleGroup(
             mcc::PriorityLevel::Primary,
             {scale, options.legacy_scale_preservation_tolerance},
-            handles.right_position_scale),
+                  handles.right_cartesian_scale),
         "register " + scale.name);
-    handles.right_orientation_scale = handles.right_position_scale;
 
     mcc::PositionTaskConfig position;
     position.name = "red-left-position";
     position.enforcement = mcc::ScaledEnforcement{
-        handles.left_position_scale, options.maximum_accepted_hard_violation};
+        handles.left_cartesian_scale, options.maximum_accepted_hard_violation};
     requireOk(builder.addPositionTask(
-                  mcc::PriorityLevel::Primary,
-                  robot.left_end_effector_frame, position,
+                  mcc::PriorityLevel::Primary, robot.left_end_effector_frame,
+                  position,
                   Eigen::Vector3d::Constant(
                       options.legacy_cartesian_preservation_tolerance),
                   handles.left_position),
               "register " + position.name);
     position.name = "red-right-position";
     position.enforcement = mcc::ScaledEnforcement{
-        handles.right_position_scale, options.maximum_accepted_hard_violation};
+        handles.right_cartesian_scale, options.maximum_accepted_hard_violation};
     requireOk(builder.addPositionTask(
-                  mcc::PriorityLevel::Primary,
-                  robot.right_end_effector_frame, position,
+                  mcc::PriorityLevel::Primary, robot.right_end_effector_frame,
+                  position,
                   Eigen::Vector3d::Constant(
                       options.legacy_cartesian_preservation_tolerance),
                   handles.right_position),
@@ -133,20 +128,20 @@ addCartesianTasks(mcc::HierarchicalKinematicsSolverBuilder &builder,
     mcc::OrientationTaskConfig orientation;
     orientation.name = "red-left-orientation";
     orientation.enforcement = mcc::ScaledEnforcement{
-        handles.left_position_scale, options.maximum_accepted_hard_violation};
+        handles.left_cartesian_scale, options.maximum_accepted_hard_violation};
     requireOk(builder.addOrientationTask(
-                  mcc::PriorityLevel::Primary,
-                  robot.left_end_effector_frame, orientation,
+                  mcc::PriorityLevel::Primary, robot.left_end_effector_frame,
+                  orientation,
                   Eigen::Vector3d::Constant(
                       options.legacy_cartesian_preservation_tolerance),
                   handles.left_orientation),
               "register " + orientation.name);
     orientation.name = "red-right-orientation";
     orientation.enforcement = mcc::ScaledEnforcement{
-        handles.right_position_scale, options.maximum_accepted_hard_violation};
+        handles.right_cartesian_scale, options.maximum_accepted_hard_violation};
     requireOk(builder.addOrientationTask(
-                  mcc::PriorityLevel::Primary,
-                  robot.right_end_effector_frame, orientation,
+                  mcc::PriorityLevel::Primary, robot.right_end_effector_frame,
+                  orientation,
                   Eigen::Vector3d::Constant(
                       options.legacy_cartesian_preservation_tolerance),
                   handles.right_orientation),
@@ -155,51 +150,31 @@ addCartesianTasks(mcc::HierarchicalKinematicsSolverBuilder &builder,
   }
 
   mcc::TaskScaleGroupConfig scale;
-  scale.progress_weight = options.red_primary_task_tcp_position_progress_weight;
-  scale.name = "red-primary/task/left-tcp-position-progress";
-  requireOk(
-      builder.addTaskScaleGroup(
-          mcc::PriorityLevel::Primary,
-          {scale,
-           options
-               .red_primary_task_tcp_position_progress_preservation_tolerance},
-          handles.left_position_scale),
-      "register " + scale.name);
-  scale.name = "red-primary/task/right-tcp-position-progress";
-  requireOk(
-      builder.addTaskScaleGroup(
-          mcc::PriorityLevel::Primary,
-          {scale,
-           options
-               .red_primary_task_tcp_position_progress_preservation_tolerance},
-          handles.right_position_scale),
-      "register " + scale.name);
-
   scale.progress_weight =
-      options.red_secondary_task_tcp_orientation_progress_weight;
-  scale.name = "red-secondary/task/left-tcp-orientation-progress";
+      options.red_primary_task_tcp_cartesian_progress_weight;
+  scale.name = "red-primary/task/left-tcp-cartesian-progress";
   requireOk(
       builder.addTaskScaleGroup(
-          mcc::PriorityLevel::Secondary,
+          mcc::PriorityLevel::Primary,
           {scale,
            options
-               .red_secondary_task_tcp_orientation_progress_preservation_tolerance},
-          handles.left_orientation_scale),
+               .red_primary_task_tcp_cartesian_progress_preservation_tolerance},
+          handles.left_cartesian_scale),
       "register " + scale.name);
-  scale.name = "red-secondary/task/right-tcp-orientation-progress";
+  scale.name = "red-primary/task/right-tcp-cartesian-progress";
   requireOk(
       builder.addTaskScaleGroup(
-          mcc::PriorityLevel::Secondary,
+          mcc::PriorityLevel::Primary,
           {scale,
            options
-               .red_secondary_task_tcp_orientation_progress_preservation_tolerance},
-          handles.right_orientation_scale),
+               .red_primary_task_tcp_cartesian_progress_preservation_tolerance},
+          handles.right_cartesian_scale),
       "register " + scale.name);
 
   mcc::PositionTaskConfig position;
   position.name = "red-primary/task/left-tcp-position";
   position.enforcement = mcc::ScaledEnforcement{
-      handles.left_position_scale, options.maximum_accepted_hard_violation};
+      handles.left_cartesian_scale, options.maximum_accepted_hard_violation};
   requireOk(
       builder.addPositionTask(
           mcc::PriorityLevel::Primary, robot.left_end_effector_frame, position,
@@ -209,7 +184,7 @@ addCartesianTasks(mcc::HierarchicalKinematicsSolverBuilder &builder,
       "register " + position.name);
   position.name = "red-primary/task/right-tcp-position";
   position.enforcement = mcc::ScaledEnforcement{
-      handles.right_position_scale, options.maximum_accepted_hard_violation};
+      handles.right_cartesian_scale, options.maximum_accepted_hard_violation};
   requireOk(
       builder.addPositionTask(
           mcc::PriorityLevel::Primary, robot.right_end_effector_frame, position,
@@ -219,28 +194,28 @@ addCartesianTasks(mcc::HierarchicalKinematicsSolverBuilder &builder,
       "register " + position.name);
 
   mcc::OrientationTaskConfig orientation;
-  orientation.name = "red-secondary/task/left-tcp-orientation";
+  orientation.name = "red-primary/task/left-tcp-orientation";
   orientation.enforcement = mcc::ScaledEnforcement{
-      handles.left_orientation_scale, options.maximum_accepted_hard_violation};
+      handles.left_cartesian_scale, options.maximum_accepted_hard_violation};
   requireOk(
       builder.addOrientationTask(
-          mcc::PriorityLevel::Secondary, robot.left_end_effector_frame,
+          mcc::PriorityLevel::Primary, robot.left_end_effector_frame,
           orientation,
           Eigen::Vector3d::Constant(
               options
-                  .red_secondary_task_tcp_orientation_preservation_tolerance_radps),
+                  .red_primary_task_tcp_orientation_preservation_tolerance_radps),
           handles.left_orientation),
       "register " + orientation.name);
-  orientation.name = "red-secondary/task/right-tcp-orientation";
+  orientation.name = "red-primary/task/right-tcp-orientation";
   orientation.enforcement = mcc::ScaledEnforcement{
-      handles.right_orientation_scale, options.maximum_accepted_hard_violation};
+      handles.right_cartesian_scale, options.maximum_accepted_hard_violation};
   requireOk(
       builder.addOrientationTask(
-          mcc::PriorityLevel::Secondary, robot.right_end_effector_frame,
+          mcc::PriorityLevel::Primary, robot.right_end_effector_frame,
           orientation,
           Eigen::Vector3d::Constant(
               options
-                  .red_secondary_task_tcp_orientation_preservation_tolerance_radps),
+                  .red_primary_task_tcp_orientation_preservation_tolerance_radps),
           handles.right_orientation),
       "register " + orientation.name);
   return handles;
@@ -389,64 +364,63 @@ void configureSolver(
   handles.red = addCartesianTasks(red_builder, robot, solver_options,
                                   strict_priority_topology);
   mcc::PositionTaskConfig elbow;
-  elbow.name = "red-tertiary/task/left-link4-position";
+  elbow.name = "red-secondary/task/left-link4-position";
   elbow.enforcement = mcc::squaredL2Penalty(
-      solver_options.red_tertiary_task_link4_position_weight, 3);
+      solver_options.red_secondary_task_link4_position_weight, 3);
   elbow.servo_gain_per_s =
-      solver_options.red_tertiary_task_link4_position_servo_gain_per_s;
+      solver_options.red_secondary_task_link4_position_servo_gain_per_s;
   requireOk(
       red_builder.addPositionTask(
-          mcc::PriorityLevel::Tertiary, robot.left_link4_frame, elbow,
+          mcc::PriorityLevel::Secondary, robot.left_link4_frame, elbow,
           Eigen::Vector3d::Constant(
               solver_options
-                  .red_tertiary_task_link4_position_preservation_tolerance_mps),
+                  .red_secondary_task_link4_position_preservation_tolerance_mps),
           handles.red_left_link4),
       "register " + elbow.name);
-  elbow.name = "red-tertiary/task/right-link4-position";
+  elbow.name = "red-secondary/task/right-link4-position";
   requireOk(
       red_builder.addPositionTask(
-          mcc::PriorityLevel::Tertiary, robot.right_link4_frame, elbow,
+          mcc::PriorityLevel::Secondary, robot.right_link4_frame, elbow,
           Eigen::Vector3d::Constant(
               solver_options
-                  .red_tertiary_task_link4_position_preservation_tolerance_mps),
+                  .red_secondary_task_link4_position_preservation_tolerance_mps),
           handles.red_right_link4),
       "register " + elbow.name);
   mcc::PostureTaskConfig coupling;
   coupling.name = strict_priority_topology
-                      ? "red-tertiary/task/yellow-posture-coupling"
+                      ? "red-secondary/task/yellow-posture-coupling"
                       : "yellow-posture-preference";
   coupling.enforcement = mcc::squaredL2Penalty(
       strict_priority_topology
-          ? solver_options.red_tertiary_task_yellow_posture_coupling_weight
+          ? solver_options.red_secondary_task_yellow_posture_coupling_weight
           : solver_options.legacy_yellow_to_red_coupling_weight,
       1);
   coupling.reference_positions = Eigen::VectorXd::Zero(
       static_cast<Eigen::Index>(active_joint_names.size()));
-  coupling.servo_gain_per_s = strict_priority_topology
-                                  ? solver_options
-                                        .red_tertiary_task_yellow_posture_coupling_servo_gain_per_s
-                                  : 1.0;
+  coupling.servo_gain_per_s =
+      strict_priority_topology
+          ? solver_options
+                .red_secondary_task_yellow_posture_coupling_servo_gain_per_s
+          : 1.0;
   if (strict_priority_topology) {
     coupling.joint_weight_multipliers = jointWeightMultipliers(
         active_joint_names,
         solver_options
-            .red_tertiary_task_yellow_posture_coupling_joint_weight_multipliers);
+            .red_secondary_task_yellow_posture_coupling_joint_weight_multipliers);
   }
   coupling.role = mcc::PostureTaskRole::Regularization;
   requireOk(
       red_builder.addPostureTask(
-          strict_priority_topology ? mcc::PriorityLevel::Tertiary
-                                   : mcc::PriorityLevel::Secondary,
-          coupling,
+          mcc::PriorityLevel::Secondary, coupling,
           Eigen::VectorXd::Constant(
               static_cast<Eigen::Index>(active_joint_names.size()),
               strict_priority_topology
                   ? solver_options
-                        .red_tertiary_task_yellow_posture_coupling_preservation_tolerance
+                        .red_secondary_task_yellow_posture_coupling_preservation_tolerance
                   : solver_options.legacy_posture_preservation_tolerance),
           handles.red_yellow_posture),
       strict_priority_topology
-          ? "register Tertiary Yellow posture coupling"
+          ? "register Secondary Yellow posture coupling"
           : "register Secondary Yellow posture preference");
   addRedLimits(red_builder, solver_options);
   requireOk(red_builder.finalize(runtime.redSolver()), "finalize Red HKS");
@@ -500,9 +474,9 @@ void configureSolver(
           ? solver_options
                 .yellow_constraints_self_collision_avoidance_damping_gain_per_s
           : solver_options.legacy_collision_damping_gain_per_s;
-  collision.weight = strict_priority_topology
-                         ? solver_options
-                               .yellow_constraints_self_collision_avoidance_weight
+  collision.weight =
+      strict_priority_topology
+          ? solver_options.yellow_constraints_self_collision_avoidance_weight
                          : solver_options.legacy_collision_weight;
   requireOk(yellow_builder.addSelfCollisionAvoidance(collision_model, collision,
                                                      handles.yellow_collision),

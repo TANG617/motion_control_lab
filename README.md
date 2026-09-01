@@ -80,8 +80,7 @@ Lab standalone build 中存在同名旧文件而选择它。需要验证其他 i
 
 ```bash
 MCL_BINARY=/workspace/build/algorithm/motion_control_lab/mcl_hierarchical_kinematics_step \
-  apps/hierarchical_kinematics_step/scripts/run_keyboard.py \
-  --profile planned-otg-nullspace
+  apps/hierarchical_kinematics_step/scripts/profiles/planned_otg_nullspace/run_keyboard.py
 ```
 
 `COLCON_PREFIX_PATH` 用于已安装 package 的发现，不决定本次 build/install 目录，也不决定启动脚本
@@ -465,8 +464,8 @@ Yellow、Red 启动前会顺序预热一次；正式 run 中两者完全异步�
 `mcl_hierarchical_kinematics_step` 用必选 `--profile` 保留五条历史数据流：
 `hierarchical`、`planned`、`planned-otg`、`planned-otg-nullspace`、
 `planned-otg-nullspace-admittance-kinematic-sim`。前三个 profile 保留原 shared Cartesian
-scale/legacy Red-Yellow topology；后两个使用严格 position > orientation > posture/link4
-三级 hierarchy。planner、JointPlanner、nullspace、admittance、MuJoCo 与 telemetry 都只由
+scale/legacy Red-Yellow topology；后两个使用双臂 Cartesian Primary > posture/link4 Secondary
+两级 hierarchy。planner、JointPlanner、nullspace、admittance、MuJoCo 与 telemetry 都只由
 profile 能力推导，不能通过独立阶段开关组成非法数据流。
 
 Yellow 当前使用 4 对 app-local R1 link pair 的 Soft self-collision velocity damping：minimum
@@ -514,11 +513,13 @@ app-local TUI 增加 Dynamics 页。
 app compiled defaults < script preset/environment < trailing explicit arguments
 ```
 
-`hierarchical_kinematics_step` 不使用上述 Bash wrapper，而提供可 import 的纯标准库
-`launcher.py` 与三个 Python 入口。Python 未设置字段使用 `argparse.SUPPRESS`，C++ profile
-defaults 是默认值唯一来源；历史 launcher preset 位于 Python preset 表，显式 argparse 参数
-优先级最高。只保留 `MCL_BINARY`、`MCL_INSTALL_PREFIX`、`MCL_LD_LIBRARY_PATH`、
-`MCL_CPU_SET`、`MCL_RT_PRIORITY` 五个运行环境变量，算法、robot、replay 与 UI/Viz 全部走参数。
+`hierarchical_kinematics_step` 不使用上述 Bash wrapper，而在
+`scripts/profiles/<profile>/` 为五个 profile 分别提供 keyboard、MCAP interactive、MCAP
+headless 和 CSV batch 四个纯标准库 Python recipe。各 profile 的 `config.py` 完整列出 Python
+launcher overrides；每个 recipe 固定 profile/source，并导出 `build_command(argv)` 与
+`run(argv)` 供 experiments import。Python 未设置字段使用 `argparse.SUPPRESS`，C++ profile
+defaults 仍是 typed defaults 唯一来源，显式 argparse 参数优先级最高。只保留 `MCL_BINARY`、
+`MCL_INSTALL_PREFIX`、`MCL_LD_LIBRARY_PATH`、`MCL_CPU_SET`、`MCL_RT_PRIORITY` 五个运行环境变量。
 
 replay artifact 记录 resolved config、原始 argv、`--launcher` 标识和输入 SHA-256/provenance。
 `mcl_baseline` 接受 source/UI/Viz/output 选择，但明确拒绝 solver、backend、rate、tolerance、

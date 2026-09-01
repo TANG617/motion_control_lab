@@ -364,24 +364,29 @@ flowchart LR
 
 ## App-local 启动与 runtime override
 
-> 本节更新日期：2026-08-26
+> 本节更新日期：2026-09-01
 
-不增加跨 app 的统一 CLI。合并后的 profile app 使用自己的 Python 入口：
+不增加跨 app 的统一 CLI。合并后的 profile app 使用自己的 Python recipe 树：
 
 ```text
-apps/hierarchical_kinematics_step/scripts/run_keyboard.py
-apps/hierarchical_kinematics_step/scripts/run_mcap_replay.py
-apps/hierarchical_kinematics_step/scripts/run_csv_replay.py
+apps/hierarchical_kinematics_step/scripts/profiles/<profile>/config.py
+apps/hierarchical_kinematics_step/scripts/profiles/<profile>/run_keyboard.py
+apps/hierarchical_kinematics_step/scripts/profiles/<profile>/run_mcap_interactive.py
+apps/hierarchical_kinematics_step/scripts/profiles/<profile>/run_mcap_headless.py
+apps/hierarchical_kinematics_step/scripts/profiles/<profile>/run_csv_batch.py
 ```
 
 脚本负责表达可读、可审查的实验 preset：
 
 - 从 `${MCL_INSTALL_PREFIX:-/workspace/install/algorithm}/bin` 选择 workspace colcon install
   executable；只有显式的 `MCL_BINARY` 才覆盖到 standalone 或临时产物；
-- Python preset 表中的 URDF、input/topic 和 output root；
+- profile-local `config.py` 中完整展开的 URDF、input/topic、output root 和运行 preset；
+- 五个 profile 的默认 URDF 统一为 `/workspace/models/Psi_R1_visual_collision.urdf`，其
+  mesh 使用 `/workspace/models/meshes/` 下的相对引用，不跨到 production robot description；
 - `MCL_LD_LIBRARY_PATH` 等本机运行环境；
 - `chrt`、`taskset`、CPU mask 和 realtime priority 等 OS policy；
 - 本 app 的推荐 rate、deadline、solver 和 planner/OTG 参数；
+- recipe 固定 profile/source，并导出 `build_command(argv)` 和 `run(argv)` 供 experiments import；
 - argparse 显式参数覆盖 preset；未设置字段不转发，由 C++ profile defaults 决定。
 
 启动脚本不执行 configure/build，也不以 `labs/motion-control-lab/build/` 作为隐式 fallback。

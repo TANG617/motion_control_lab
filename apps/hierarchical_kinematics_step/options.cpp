@@ -22,10 +22,6 @@ namespace {
 #define MCL_R1_MUJOCO_MODEL_PATH ""
 #endif
 
-#ifndef MCL_R1_MUJOCO_URDF_PATH
-#define MCL_R1_MUJOCO_URDF_PATH ""
-#endif
-
 std::string requireValue(int &index, int argc, char **argv,
                          const std::string &option) {
   if (index + 1 >= argc) {
@@ -107,8 +103,7 @@ Eigen::Isometry3d parseTransform(const std::string &argument,
                                  const std::string &value) {
   const auto values = parseNumbers(argument, value);
   if (values.size() != 7U)
-    throw std::runtime_error(
-        argument + " requires x,y,z,qx,qy,qz,qw");
+    throw std::runtime_error(argument + " requires x,y,z,qx,qy,qz,qw");
   Eigen::Quaterniond rotation{values[6], values[3], values[4], values[5]};
   if (!(rotation.norm() > 0.0) || !std::isfinite(rotation.norm()))
     throw std::runtime_error(argument + " quaternion must be finite/non-zero");
@@ -127,8 +122,9 @@ CollisionLinkPairOptions parseCollisionPair(const std::string &argument,
   return {value.substr(0U, separator), value.substr(separator + 1U)};
 }
 
-std::vector<std::pair<std::string, double>> parseJointWeightMultipliers(
-    const std::string &argument, const std::string &value) {
+std::vector<std::pair<std::string, double>>
+parseJointWeightMultipliers(const std::string &argument,
+                            const std::string &value) {
   std::vector<std::pair<std::string, double>> result;
   std::istringstream input(value);
   std::string entry;
@@ -142,8 +138,8 @@ std::vector<std::pair<std::string, double>> parseJointWeightMultipliers(
     const std::string name = entry.substr(0U, separator);
     const double weight = parseNonnegativeDouble(
         argument + " weight for " + name, entry.substr(separator + 1U));
-    const auto existing = std::find_if(
-        result.begin(), result.end(),
+    const auto existing =
+        std::find_if(result.begin(), result.end(),
         [&](const auto &item) { return item.first == name; });
     if (existing == result.end()) {
       result.emplace_back(name, weight);
@@ -161,8 +157,8 @@ void mergeJointWeightMultipliers(
     std::vector<std::pair<std::string, double>> &destination,
     const std::vector<std::pair<std::string, double>> &values) {
   for (const auto &[name, weight] : values) {
-    const auto existing = std::find_if(
-        destination.begin(), destination.end(),
+    const auto existing =
+        std::find_if(destination.begin(), destination.end(),
         [&](const auto &item) { return item.first == name; });
     if (existing == destination.end())
       destination.emplace_back(name, weight);
@@ -178,8 +174,9 @@ bool optionIn(const std::string &option,
       [&](const char *candidate) { return option == candidate; });
 }
 
-PlanningSynchronization parsePlanningSynchronization(
-    const std::string &argument, const std::string &value) {
+PlanningSynchronization
+parsePlanningSynchronization(const std::string &argument,
+                             const std::string &value) {
   if (value == "none") {
     return PlanningSynchronization::None;
   }
@@ -189,8 +186,8 @@ PlanningSynchronization parsePlanningSynchronization(
   if (value == "phase") {
     return PlanningSynchronization::Phase;
   }
-  throw std::runtime_error(
-      argument + " must be one of 'none', 'time', or 'phase'");
+  throw std::runtime_error(argument +
+                           " must be one of 'none', 'time', or 'phase'");
 }
 
 bool parseSolverOption(const std::string &argument, const std::string &value,
@@ -230,38 +227,30 @@ bool parseSolverOption(const std::string &argument, const std::string &value,
     options.legacy_collision_damping_gain_per_s = parsed;
   else if (argument == "--legacy-collision-weight")
     options.legacy_collision_weight = parsed;
-  else if (argument == "--red-primary-task-tcp-position-progress-weight")
-    options.red_primary_task_tcp_position_progress_weight = parsed;
+  else if (argument == "--red-primary-task-tcp-cartesian-progress-weight")
+    options.red_primary_task_tcp_cartesian_progress_weight = parsed;
+  else if (argument ==
+           "--red-primary-task-tcp-cartesian-progress-preservation-tolerance")
+    options.red_primary_task_tcp_cartesian_progress_preservation_tolerance =
+        parsed;
   else if (argument ==
            "--red-primary-task-tcp-position-preservation-tolerance-mps")
     options.red_primary_task_tcp_position_preservation_tolerance_mps = parsed;
   else if (argument ==
-           "--red-primary-task-tcp-position-progress-preservation-tolerance")
-    options.red_primary_task_tcp_position_progress_preservation_tolerance =
+           "--red-primary-task-tcp-orientation-preservation-tolerance-radps")
+    options.red_primary_task_tcp_orientation_preservation_tolerance_radps =
         parsed;
-  else if (argument == "--red-secondary-task-tcp-orientation-progress-weight")
-    options.red_secondary_task_tcp_orientation_progress_weight = parsed;
-  else if (argument ==
-           "--red-secondary-task-tcp-orientation-preservation-tolerance-radps")
-    options.red_secondary_task_tcp_orientation_preservation_tolerance_radps =
+  else if (argument == "--red-secondary-task-yellow-posture-coupling-"
+                       "preservation-tolerance")
+    options.red_secondary_task_yellow_posture_coupling_preservation_tolerance =
         parsed;
+  else if (argument == "--red-secondary-task-link4-position-weight")
+    options.red_secondary_task_link4_position_weight = parsed;
+  else if (argument == "--red-secondary-task-link4-position-servo-gain-per-s")
+    options.red_secondary_task_link4_position_servo_gain_per_s = parsed;
   else if (argument ==
-           "--red-secondary-task-tcp-orientation-progress-preservation-tolerance")
-    options
-        .red_secondary_task_tcp_orientation_progress_preservation_tolerance =
-        parsed;
-  else if (argument ==
-           "--red-tertiary-task-yellow-posture-coupling-preservation-tolerance")
-    options.red_tertiary_task_yellow_posture_coupling_preservation_tolerance =
-        parsed;
-  else if (argument == "--red-tertiary-task-link4-position-weight")
-    options.red_tertiary_task_link4_position_weight = parsed;
-  else if (argument ==
-           "--red-tertiary-task-link4-position-servo-gain-per-s")
-    options.red_tertiary_task_link4_position_servo_gain_per_s = parsed;
-  else if (argument ==
-           "--red-tertiary-task-link4-position-preservation-tolerance-mps")
-    options.red_tertiary_task_link4_position_preservation_tolerance_mps =
+           "--red-secondary-task-link4-position-preservation-tolerance-mps")
+    options.red_secondary_task_link4_position_preservation_tolerance_mps =
         parsed;
   else if (argument == "--red-proxqp-absolute-tolerance")
     options.red_proxqp_absolute_tolerance = parsed;
@@ -269,15 +258,14 @@ bool parseSolverOption(const std::string &argument, const std::string &value,
     options.red_proxqp_primal_infeasibility_tolerance = parsed;
   else if (argument == "--yellow-task-posture-preference-weight")
     options.yellow_task_posture_preference_weight = parsed;
-  else if (argument ==
-           "--yellow-task-posture-preference-servo-gain-per-s")
+  else if (argument == "--yellow-task-posture-preference-servo-gain-per-s")
     options.yellow_task_posture_preference_servo_gain_per_s = parsed;
+  else if (argument == "--red-secondary-task-yellow-posture-coupling-weight")
+    options.red_secondary_task_yellow_posture_coupling_weight = parsed;
   else if (argument ==
-           "--red-tertiary-task-yellow-posture-coupling-weight")
-    options.red_tertiary_task_yellow_posture_coupling_weight = parsed;
-  else if (argument ==
-           "--red-tertiary-task-yellow-posture-coupling-servo-gain-per-s")
-    options.red_tertiary_task_yellow_posture_coupling_servo_gain_per_s = parsed;
+           "--red-secondary-task-yellow-posture-coupling-servo-gain-per-s")
+    options.red_secondary_task_yellow_posture_coupling_servo_gain_per_s =
+        parsed;
   else if (argument ==
            "--yellow-constraints-self-collision-avoidance-minimum-distance-m")
     options.yellow_constraints_self_collision_avoidance_minimum_distance_m =
@@ -290,8 +278,7 @@ bool parseSolverOption(const std::string &argument, const std::string &value,
            "--yellow-constraints-self-collision-avoidance-damping-gain-per-s")
     options.yellow_constraints_self_collision_avoidance_damping_gain_per_s =
         parsed;
-  else if (argument ==
-           "--yellow-constraints-self-collision-avoidance-weight")
+  else if (argument == "--yellow-constraints-self-collision-avoidance-weight")
     options.yellow_constraints_self_collision_avoidance_weight = parsed;
   else
     return false;
@@ -306,8 +293,8 @@ void validateJointWeightMultipliers(
     static_cast<void>(weight);
     if (std::find(joint_names.begin(), joint_names.end(), name) ==
         joint_names.end()) {
-      throw std::runtime_error(option_name + " contains unknown R1 joint: " +
-                               name);
+      throw std::runtime_error(option_name +
+                               " contains unknown R1 joint: " + name);
     }
   }
 }
@@ -332,7 +319,8 @@ void validate(const HierarchicalOptions &options, Profile profile) {
     throw std::runtime_error("--urdf is required");
   }
   const auto joint_count = options.robot.joint_names.size();
-  if (joint_count == 0U || options.robot.default_positions.size() != joint_count ||
+  if (joint_count == 0U ||
+      options.robot.default_positions.size() != joint_count ||
       options.robot.effort_limits.size() != joint_count ||
       options.robot.joint_stream.joint_names.size() != joint_count) {
     throw std::runtime_error(
@@ -378,8 +366,8 @@ void validate(const HierarchicalOptions &options, Profile profile) {
       options.robot.joint_names);
   validateJointWeightMultipliers(
       options.solver
-          .red_tertiary_task_yellow_posture_coupling_joint_weight_multipliers,
-      "--red-tertiary-task-yellow-posture-coupling-joint-weight-multipliers",
+          .red_secondary_task_yellow_posture_coupling_joint_weight_multipliers,
+      "--red-secondary-task-yellow-posture-coupling-joint-weight-multipliers",
       options.robot.joint_names);
   if (options.solver
           .yellow_constraints_self_collision_avoidance_influence_distance_m <=
@@ -395,14 +383,18 @@ void validate(const HierarchicalOptions &options, Profile profile) {
 std::string collisionMeshSearchRoot(const std::filesystem::path &urdf_path,
                                     Profile profile) {
   const auto canonical_urdf = std::filesystem::weakly_canonical(urdf_path);
+  // Workspace-local robot descriptions keep their meshes next to the URDF,
+  // so the description remains self-contained under /workspace/models.
+  if (std::filesystem::is_directory(canonical_urdf.parent_path() / "meshes")) {
+    return canonical_urdf.parent_path().string();
+  }
   // The app's installed simulation URDF uses ../meshes/... paths, which
   // Pinocchio resolves from the URDF directory.  Keep the inherited
   // package://psi_r1 layout compatible for explicit production-URDF
   // overrides, where the package search root is three levels above the file.
-  if (profile ==
-          Profile::PlannedOtgNullspaceAdmittanceKinematicSim &&
-      std::filesystem::is_directory(
-          canonical_urdf.parent_path().parent_path() / "meshes")) {
+  if (profile == Profile::PlannedOtgNullspaceAdmittanceKinematicSim &&
+      std::filesystem::is_directory(canonical_urdf.parent_path().parent_path() /
+                                    "meshes")) {
     return canonical_urdf.parent_path().string();
   }
   return canonical_urdf.parent_path().parent_path().parent_path().string();
@@ -446,13 +438,13 @@ Profile parseProfile(const std::string &value) {
 ProfileCapabilities profileCapabilities(Profile profile) {
   ProfileCapabilities result;
   result.cartesian_planning = profile != Profile::Hierarchical;
-  result.joint_otg = profile == Profile::PlannedOtg ||
+  result.joint_otg =
+      profile == Profile::PlannedOtg ||
+      profile == Profile::PlannedOtgNullspace ||
+      profile == Profile::PlannedOtgNullspaceAdmittanceKinematicSim;
+  result.nullspace =
                      profile == Profile::PlannedOtgNullspace ||
-                     profile ==
-                         Profile::PlannedOtgNullspaceAdmittanceKinematicSim;
-  result.nullspace = profile == Profile::PlannedOtgNullspace ||
-                     profile ==
-                         Profile::PlannedOtgNullspaceAdmittanceKinematicSim;
+      profile == Profile::PlannedOtgNullspaceAdmittanceKinematicSim;
   result.admittance =
       profile == Profile::PlannedOtgNullspaceAdmittanceKinematicSim;
   result.kinematic_simulation = result.admittance;
@@ -485,9 +477,8 @@ Options profileDefaults(Profile profile) {
     solver.legacy_collision_damping_gain_per_s = 2.0;
     solver.legacy_collision_weight = 100.0;
     solver.red_proxqp_absolute_tolerance = 1.0e-6;
-    robot.inactive_joint_names = {
-        "torso_yaw_joint", "torso_pitch_joint", "knee_pitch_joint",
-        "ankle_pitch_joint"};
+    robot.inactive_joint_names = {"torso_yaw_joint", "torso_pitch_joint",
+                                  "knee_pitch_joint", "ankle_pitch_joint"};
     break;
   case Profile::Planned:
     app.red_rate_hz = 100.0;
@@ -529,7 +520,6 @@ Options profileDefaults(Profile profile) {
   case Profile::PlannedOtgNullspaceAdmittanceKinematicSim:
     app.red_rate_hz = 1000.0;
     app.yellow_rate_hz = 100.0;
-    app.urdf_path = MCL_R1_MUJOCO_URDF_PATH;
     app.simulation.mujoco_model_path = MCL_R1_MUJOCO_MODEL_PATH;
     app.simulation.viewer_enabled = true;
     // Preserve the pre-existing local tuning as explicit configuration.
@@ -577,8 +567,7 @@ std::string resolvedOptionsJson(const Options &options) {
   root["source_mode"] =
       options.source_mode == SourceMode::Teleop ? "teleop" : "replay";
   const auto capabilities = profileCapabilities(options.profile);
-  root["capabilities"]["cartesian_planning"] =
-      capabilities.cartesian_planning;
+  root["capabilities"]["cartesian_planning"] = capabilities.cartesian_planning;
   root["capabilities"]["joint_otg"] = capabilities.joint_otg;
   root["capabilities"]["nullspace"] = capabilities.nullspace;
   root["capabilities"]["admittance"] = capabilities.admittance;
@@ -630,21 +619,18 @@ std::string resolvedOptionsJson(const Options &options) {
   MCL_SOLVER_FIELD(legacy_collision_influence_distance_m);
   MCL_SOLVER_FIELD(legacy_collision_damping_gain_per_s);
   MCL_SOLVER_FIELD(legacy_collision_weight);
-  MCL_SOLVER_FIELD(red_primary_task_tcp_position_progress_weight);
+  MCL_SOLVER_FIELD(red_primary_task_tcp_cartesian_progress_weight);
+  MCL_SOLVER_FIELD(
+      red_primary_task_tcp_cartesian_progress_preservation_tolerance);
   MCL_SOLVER_FIELD(red_primary_task_tcp_position_preservation_tolerance_mps);
   MCL_SOLVER_FIELD(
-      red_primary_task_tcp_position_progress_preservation_tolerance);
-  MCL_SOLVER_FIELD(red_secondary_task_tcp_orientation_progress_weight);
+      red_primary_task_tcp_orientation_preservation_tolerance_radps);
   MCL_SOLVER_FIELD(
-      red_secondary_task_tcp_orientation_preservation_tolerance_radps);
+      red_secondary_task_yellow_posture_coupling_preservation_tolerance);
+  MCL_SOLVER_FIELD(red_secondary_task_link4_position_weight);
+  MCL_SOLVER_FIELD(red_secondary_task_link4_position_servo_gain_per_s);
   MCL_SOLVER_FIELD(
-      red_secondary_task_tcp_orientation_progress_preservation_tolerance);
-  MCL_SOLVER_FIELD(
-      red_tertiary_task_yellow_posture_coupling_preservation_tolerance);
-  MCL_SOLVER_FIELD(red_tertiary_task_link4_position_weight);
-  MCL_SOLVER_FIELD(red_tertiary_task_link4_position_servo_gain_per_s);
-  MCL_SOLVER_FIELD(
-      red_tertiary_task_link4_position_preservation_tolerance_mps);
+      red_secondary_task_link4_position_preservation_tolerance_mps);
   MCL_SOLVER_FIELD(yellow_maximum_iterations);
   MCL_SOLVER_FIELD(red_proxqp_maximum_iterations);
   MCL_SOLVER_FIELD(red_proxqp_absolute_tolerance);
@@ -652,9 +638,8 @@ std::string resolvedOptionsJson(const Options &options) {
   MCL_SOLVER_FIELD(red_proxqp_warm_start_enabled);
   MCL_SOLVER_FIELD(yellow_task_posture_preference_weight);
   MCL_SOLVER_FIELD(yellow_task_posture_preference_servo_gain_per_s);
-  MCL_SOLVER_FIELD(red_tertiary_task_yellow_posture_coupling_weight);
-  MCL_SOLVER_FIELD(
-      red_tertiary_task_yellow_posture_coupling_servo_gain_per_s);
+  MCL_SOLVER_FIELD(red_secondary_task_yellow_posture_coupling_weight);
+  MCL_SOLVER_FIELD(red_secondary_task_yellow_posture_coupling_servo_gain_per_s);
   MCL_SOLVER_FIELD(
       yellow_constraints_self_collision_avoidance_minimum_distance_m);
   MCL_SOLVER_FIELD(
@@ -669,9 +654,9 @@ std::string resolvedOptionsJson(const Options &options) {
                [name] = weight;
   for (const auto &[name, weight] :
        solver
-           .red_tertiary_task_yellow_posture_coupling_joint_weight_multipliers)
+           .red_secondary_task_yellow_posture_coupling_joint_weight_multipliers)
     solver_json
-        ["red_tertiary_task_yellow_posture_coupling_joint_weight_multipliers"]
+        ["red_secondary_task_yellow_posture_coupling_joint_weight_multipliers"]
         [name] = weight;
 
   const auto &robot = app.robot;
@@ -712,8 +697,7 @@ std::string resolvedOptionsJson(const Options &options) {
       numbers(stream.max_velocity_rad_per_s);
   stream_json["max_acceleration_rad_per_s2"] =
       numbers(stream.max_acceleration_rad_per_s2);
-  stream_json["max_jerk_rad_per_s3"] =
-      numbers(stream.max_jerk_rad_per_s3);
+  stream_json["max_jerk_rad_per_s3"] = numbers(stream.max_jerk_rad_per_s3);
 
   auto &planning = root["planning"];
   planning["max_linear_velocity_mps"] =
@@ -725,8 +709,7 @@ std::string resolvedOptionsJson(const Options &options) {
       options.planning.max_angular_velocity_rps;
   planning["max_angular_acceleration_rps2"] =
       options.planning.max_angular_acceleration_rps2;
-  planning["max_angular_jerk_rps3"] =
-      options.planning.max_angular_jerk_rps3;
+  planning["max_angular_jerk_rps3"] = options.planning.max_angular_jerk_rps3;
   planning["cartesian_synchronization"] =
       planningSynchronizationName(options.planning.cartesian_synchronization);
   planning["joint_algorithm"] =
@@ -750,8 +733,7 @@ std::string resolvedOptionsJson(const Options &options) {
 
   const auto &admittance = app.admittance;
   auto &admittance_json = root["admittance"];
-  admittance_json["enabled"] =
-      profileCapabilities(options.profile).admittance;
+  admittance_json["enabled"] = profileCapabilities(options.profile).admittance;
   admittance_json["angular_enabled"] = admittance.angular_enabled;
   admittance_json["linear_environment_stiffness_n_per_m"] =
       admittance.linear_environment_stiffness_n_per_m;
@@ -764,8 +746,7 @@ std::string resolvedOptionsJson(const Options &options) {
       admittance.angular_environment_damping_nms_per_rad;
   admittance_json["maximum_torque_nm"] = admittance.maximum_torque_nm;
   admittance_json["wrench_filter_alpha"] = admittance.wrench_filter_alpha;
-  root["simulation"]["mujoco_model_path"] =
-      app.simulation.mujoco_model_path;
+  root["simulation"]["mujoco_model_path"] = app.simulation.mujoco_model_path;
   root["simulation"]["viewer_enabled"] = app.simulation.viewer_enabled;
 
   root["replay_trace_enabled"] = options.replay_trace_enabled;
@@ -781,8 +762,7 @@ std::string resolvedOptionsJson(const Options &options) {
     value["left_stream"] = replay.left_stream;
     value["right_stream"] = replay.right_stream;
     if (replay.initial_joint_state_stream.has_value())
-      value["initial_joint_state_stream"] =
-          *replay.initial_joint_state_stream;
+      value["initial_joint_state_stream"] = *replay.initial_joint_state_stream;
     value["csv_mapping_path"] = optionalPath(replay.csv_mapping_path);
     value["target_period_ns"] = Json::Int64(replay.target_period_ns);
     value["timestamp_source"] = data::toString(replay.timestamp_source);
@@ -874,23 +854,21 @@ void printHierarchicalUsage(const char *program) {
       << "  --orientation-tolerance-rad <value>      Orientation tolerance\n"
       << "  --maximum-hard-violation <value>         App acceptance tolerance\n"
       << "  --joint-position-margin-rad <value>      Joint limit margin\n"
-      << "  --red-primary-task-tcp-position-progress-weight <value> Primary "
-         "position progress weight\n"
-      << "  --red-secondary-task-tcp-orientation-progress-weight <value> "
-         "Secondary orientation progress weight\n"
-      << "  --red-tertiary-task-link4-position-weight <value> Tertiary "
+      << "  --red-primary-task-tcp-cartesian-progress-weight <value> Primary "
+         "per-arm Cartesian progress weight\n"
+      << "  --red-secondary-task-link4-position-weight <value> Secondary "
          "link4 weight "
          "(default: "
-      << defaults.solver.red_tertiary_task_link4_position_weight << ")\n"
-      << "  --red-tertiary-task-link4-position-servo-gain-per-s <value> "
-         "Tertiary link4 gain "
+      << defaults.solver.red_secondary_task_link4_position_weight << ")\n"
+      << "  --red-secondary-task-link4-position-servo-gain-per-s <value> "
+         "Secondary link4 gain "
          "(default: "
-      << defaults.solver.red_tertiary_task_link4_position_servo_gain_per_s
+      << defaults.solver.red_secondary_task_link4_position_servo_gain_per_s
       << ")\n"
-      << "  --red-tertiary-task-link4-position-preservation-tolerance-mps "
+      << "  --red-secondary-task-link4-position-preservation-tolerance-mps "
          "<value> Link4 preservation tolerance (default: "
       << defaults.solver
-             .red_tertiary_task_link4_position_preservation_tolerance_mps
+             .red_secondary_task_link4_position_preservation_tolerance_mps
       << ")\n"
       << "  --red-proxqp-absolute-tolerance <value>  Red QP tolerance\n"
       << "  --red-proxqp-primal-infeasibility-tolerance <value> Red "
@@ -901,12 +879,12 @@ void printHierarchicalUsage(const char *program) {
          "posture gain\n"
       << "  --yellow-task-posture-preference-joint-weight-multipliers "
          "<joint=value,...> Yellow posture joint weights\n"
-      << "  --red-tertiary-task-yellow-posture-coupling-weight <value> "
-         "Tertiary Yellow-to-Red coupling weight\n"
-      << "  --red-tertiary-task-yellow-posture-coupling-servo-gain-per-s "
-         "<value> Tertiary Yellow-to-Red coupling gain\n"
-      << "  --red-tertiary-task-yellow-posture-coupling-joint-weight-"
-         "multipliers <joint=value,...> Tertiary coupling joint weights\n"
+      << "  --red-secondary-task-yellow-posture-coupling-weight <value> "
+         "Secondary Yellow-to-Red coupling weight\n"
+      << "  --red-secondary-task-yellow-posture-coupling-servo-gain-per-s "
+         "<value> Secondary Yellow-to-Red coupling gain\n"
+      << "  --red-secondary-task-yellow-posture-coupling-joint-weight-"
+         "multipliers <joint=value,...> Secondary coupling joint weights\n"
       << "  --yellow-constraints-self-collision-avoidance-minimum-distance-m "
          "<value> Collision minimum distance\n"
       << "  --yellow-constraints-self-collision-avoidance-influence-distance-m "
@@ -956,10 +934,12 @@ void printPlannedUsage(const char *program, SourceMode source_mode) {
             << "  --joint-target-mode <future-o1-pv|ik-pv> (default: "
             << jointTargetModeName(defaults.joint_target.mode) << ")\n";
   if (source_mode == SourceMode::Replay) {
-    std::cout << "\nReplay startup:\n"
+    std::cout
+        << "\nReplay startup:\n"
               << "  --start-paused  Hold the replay at timeline zero until "
                  "space is pressed\n"
-              << "  --replay-elbow-teleop/--no-replay-elbow-teleop Allow realtime link4 "
+        << "  --replay-elbow-teleop/--no-replay-elbow-teleop Allow realtime "
+           "link4 "
                  "Secondary target editing (default: off)\n"
               << "  --replay-trace/--no-replay-trace Write detailed per-Red-tick "
                  "trace.csv (default: on)\n";
@@ -990,11 +970,9 @@ HierarchicalOptions parseHierarchicalOptions(int argc, char **argv,
       options.admittance.angular_enabled = true;
     } else if (argument == "--no-angular-admittance") {
       options.admittance.angular_enabled = false;
-    } else if (argument ==
-               "--joint-position-braking-velocity-envelope") {
+    } else if (argument == "--joint-position-braking-velocity-envelope") {
       options.solver.joint_position_braking_velocity_envelope_enabled = true;
-    } else if (argument ==
-               "--no-joint-position-braking-velocity-envelope") {
+    } else if (argument == "--no-joint-position-braking-velocity-envelope") {
       options.solver.joint_position_braking_velocity_envelope_enabled = false;
     } else if (argument == "--red-joint-acceleration-limits") {
       options.solver.red_joint_acceleration_limits_enabled = true;
@@ -1019,11 +997,11 @@ HierarchicalOptions parseHierarchicalOptions(int argc, char **argv,
       options.robot.right_link4_frame =
           requireValue(index, argc, argv, argument);
     } else if (argument == "--left-tcp-offset") {
-      options.robot.left_tcp_offset = parseTransform(
-          argument, requireValue(index, argc, argv, argument));
+      options.robot.left_tcp_offset =
+          parseTransform(argument, requireValue(index, argc, argv, argument));
     } else if (argument == "--right-tcp-offset") {
-      options.robot.right_tcp_offset = parseTransform(
-          argument, requireValue(index, argc, argv, argument));
+      options.robot.right_tcp_offset =
+          parseTransform(argument, requireValue(index, argc, argv, argument));
     } else if (argument == "--joint-names") {
       options.robot.joint_names =
           parseStrings(argument, requireValue(index, argc, argv, argument));
@@ -1041,8 +1019,8 @@ HierarchicalOptions parseHierarchicalOptions(int argc, char **argv,
           parseNumbers(argument, requireValue(index, argc, argv, argument));
     } else if (argument == "--inactive-joints") {
       const auto value = requireValue(index, argc, argv, argument);
-      options.robot.inactive_joint_names =
-          value.empty() ? std::vector<std::string>{}
+      options.robot.inactive_joint_names = value.empty()
+                                               ? std::vector<std::string>{}
                         : parseStrings(argument, value);
     } else if (argument == "--collision-mesh-search-paths") {
       const auto value = requireValue(index, argc, argv, argument);
@@ -1069,34 +1047,34 @@ HierarchicalOptions parseHierarchicalOptions(int argc, char **argv,
       options.robot.joint_stream.jerk_override_reason =
           requireValue(index, argc, argv, argument);
     } else if (argument == "--joint-stream-joint-names") {
-      assignFixedArray(argument,
-                       parseStrings(argument,
-                                    requireValue(index, argc, argv, argument)),
+      assignFixedArray(
+          argument,
+          parseStrings(argument, requireValue(index, argc, argv, argument)),
                        options.robot.joint_stream.joint_names);
     } else if (argument == "--joint-stream-position-lower-rad") {
-      assignFixedArray(argument,
-                       parseNumbers(argument,
-                                    requireValue(index, argc, argv, argument)),
+      assignFixedArray(
+          argument,
+          parseNumbers(argument, requireValue(index, argc, argv, argument)),
                        options.robot.joint_stream.position_lower_rad);
     } else if (argument == "--joint-stream-position-upper-rad") {
-      assignFixedArray(argument,
-                       parseNumbers(argument,
-                                    requireValue(index, argc, argv, argument)),
+      assignFixedArray(
+          argument,
+          parseNumbers(argument, requireValue(index, argc, argv, argument)),
                        options.robot.joint_stream.position_upper_rad);
     } else if (argument == "--joint-stream-max-velocity-rad-per-s") {
-      assignFixedArray(argument,
-                       parseNumbers(argument,
-                                    requireValue(index, argc, argv, argument)),
+      assignFixedArray(
+          argument,
+          parseNumbers(argument, requireValue(index, argc, argv, argument)),
                        options.robot.joint_stream.max_velocity_rad_per_s);
     } else if (argument == "--joint-stream-max-acceleration-rad-per-s2") {
-      assignFixedArray(argument,
-                       parseNumbers(argument,
-                                    requireValue(index, argc, argv, argument)),
+      assignFixedArray(
+          argument,
+          parseNumbers(argument, requireValue(index, argc, argv, argument)),
                        options.robot.joint_stream.max_acceleration_rad_per_s2);
     } else if (argument == "--joint-stream-max-jerk-rad-per-s3") {
-      assignFixedArray(argument,
-                       parseNumbers(argument,
-                                    requireValue(index, argc, argv, argument)),
+      assignFixedArray(
+          argument,
+          parseNumbers(argument, requireValue(index, argc, argv, argument)),
                        options.robot.joint_stream.max_jerk_rad_per_s3);
     } else if (argument == "--host") {
       options.visualization.host = requireValue(index, argc, argv, argument);
@@ -1188,15 +1166,15 @@ HierarchicalOptions parseHierarchicalOptions(int argc, char **argv,
     } else if (argument ==
                "--yellow-task-posture-preference-joint-weight-multipliers") {
       mergeJointWeightMultipliers(
-          options.solver.yellow_task_posture_preference_joint_weight_multipliers,
+          options.solver
+              .yellow_task_posture_preference_joint_weight_multipliers,
           parseJointWeightMultipliers(
               argument, requireValue(index, argc, argv, argument)));
-    } else if (
-        argument ==
-        "--red-tertiary-task-yellow-posture-coupling-joint-weight-multipliers") {
+    } else if (argument == "--red-secondary-task-yellow-posture-coupling-joint-"
+                           "weight-multipliers") {
       mergeJointWeightMultipliers(
           options.solver
-              .red_tertiary_task_yellow_posture_coupling_joint_weight_multipliers,
+              .red_secondary_task_yellow_posture_coupling_joint_weight_multipliers,
           parseJointWeightMultipliers(
               argument, requireValue(index, argc, argv, argument)));
     } else if (argument == "--yellow-maximum-iterations") {
@@ -1209,10 +1187,13 @@ HierarchicalOptions parseHierarchicalOptions(int argc, char **argv,
       if (value <= 0)
         throw std::runtime_error(argument + " must be positive");
       options.solver.red_proxqp_maximum_iterations = value;
-    } else if (optionIn(
+    } else if (
+        optionIn(
                    argument,
-                   {"--regularization", "--position-tolerance-m",
-                    "--orientation-tolerance-rad", "--maximum-hard-violation",
+            {"--regularization",
+             "--position-tolerance-m",
+             "--orientation-tolerance-rad",
+             "--maximum-hard-violation",
                     "--joint-position-margin-rad",
                     "--minimum-position-improvement-m",
                     "--minimum-orientation-improvement-rad",
@@ -1226,24 +1207,24 @@ HierarchicalOptions parseHierarchicalOptions(int argc, char **argv,
                     "--legacy-collision-influence-distance-m",
                     "--legacy-collision-damping-gain-per-s",
                     "--legacy-collision-weight",
-                    "--red-primary-task-tcp-position-progress-weight",
+             "--red-primary-task-tcp-cartesian-progress-weight",
+             "--red-primary-task-tcp-cartesian-progress-preservation-tolerance",
                     "--red-primary-task-tcp-position-preservation-tolerance-mps",
-                    "--red-primary-task-tcp-position-progress-preservation-tolerance",
-                    "--red-secondary-task-tcp-orientation-progress-weight",
-                    "--red-secondary-task-tcp-orientation-preservation-tolerance-radps",
-                    "--red-secondary-task-tcp-orientation-progress-preservation-tolerance",
-                    "--red-tertiary-task-yellow-posture-coupling-preservation-tolerance",
-                    "--red-tertiary-task-link4-position-weight",
-                    "--red-tertiary-task-link4-position-servo-gain-per-s",
-                    "--red-tertiary-task-link4-position-preservation-tolerance-mps",
+             "--red-primary-task-tcp-orientation-preservation-tolerance-radps",
+             "--red-secondary-task-yellow-posture-coupling-preservation-"
+             "tolerance",
+             "--red-secondary-task-link4-position-weight",
+             "--red-secondary-task-link4-position-servo-gain-per-s",
+             "--red-secondary-task-link4-position-preservation-tolerance-mps",
                     "--red-proxqp-absolute-tolerance",
                     "--red-proxqp-primal-infeasibility-tolerance",
                     "--yellow-task-posture-preference-weight",
                     "--yellow-task-posture-preference-servo-gain-per-s",
-                    "--red-tertiary-task-yellow-posture-coupling-weight",
-                    "--red-tertiary-task-yellow-posture-coupling-servo-gain-per-s",
+             "--red-secondary-task-yellow-posture-coupling-weight",
+             "--red-secondary-task-yellow-posture-coupling-servo-gain-per-s",
                     "--yellow-constraints-self-collision-avoidance-minimum-distance-m",
-                    "--yellow-constraints-self-collision-avoidance-influence-distance-m",
+             "--yellow-constraints-self-collision-avoidance-influence-distance-"
+             "m",
                     "--yellow-constraints-self-collision-avoidance-damping-gain-per-s",
                     "--yellow-constraints-self-collision-avoidance-weight"})) {
       parseSolverOption(argument, requireValue(index, argc, argv, argument),
@@ -1283,7 +1264,8 @@ Options parseOptions(int argc, char **argv) {
     std::exit(EXIT_SUCCESS);
   }
   if (argc < 4 || std::string{argv[1]} != "--profile") {
-    throw std::runtime_error("--profile must be specified before the subcommand");
+    throw std::runtime_error(
+        "--profile must be specified before the subcommand");
   }
   const Profile profile = parseProfile(argv[2]);
   Options result = profileDefaults(profile);
@@ -1312,24 +1294,26 @@ Options parseOptions(int argc, char **argv) {
   bool admittance_or_simulation_option_seen = false;
   for (int index = 4; index < argc; ++index) {
     const std::string argument{argv[index]};
-    nullspace_option_seen = nullspace_option_seen || optionIn(
+    nullspace_option_seen =
+        nullspace_option_seen ||
+        optionIn(
         argument,
-        {"--red-primary-task-tcp-position-progress-weight",
+            {"--red-primary-task-tcp-cartesian-progress-weight",
+             "--red-primary-task-tcp-cartesian-progress-preservation-tolerance",
          "--red-primary-task-tcp-position-preservation-tolerance-mps",
-         "--red-primary-task-tcp-position-progress-preservation-tolerance",
-         "--red-secondary-task-tcp-orientation-progress-weight",
-         "--red-secondary-task-tcp-orientation-preservation-tolerance-radps",
-         "--red-secondary-task-tcp-orientation-progress-preservation-tolerance",
-         "--red-tertiary-task-yellow-posture-coupling-preservation-tolerance",
-         "--red-tertiary-task-link4-position-weight",
-         "--red-tertiary-task-link4-position-servo-gain-per-s",
-         "--red-tertiary-task-link4-position-preservation-tolerance-mps",
-         "--red-tertiary-task-yellow-posture-coupling-weight",
-         "--red-tertiary-task-yellow-posture-coupling-servo-gain-per-s",
-         "--red-tertiary-task-yellow-posture-coupling-joint-weight-multipliers"});
-    legacy_topology_option_seen = legacy_topology_option_seen || optionIn(
-        argument,
-        {"--legacy-cartesian-progress-weight",
+             "--red-primary-task-tcp-orientation-preservation-tolerance-radps",
+             "--red-secondary-task-yellow-posture-coupling-preservation-"
+             "tolerance",
+             "--red-secondary-task-link4-position-weight",
+             "--red-secondary-task-link4-position-servo-gain-per-s",
+             "--red-secondary-task-link4-position-preservation-tolerance-mps",
+             "--red-secondary-task-yellow-posture-coupling-weight",
+             "--red-secondary-task-yellow-posture-coupling-servo-gain-per-s",
+             "--red-secondary-task-yellow-posture-coupling-joint-weight-"
+             "multipliers"});
+    legacy_topology_option_seen =
+        legacy_topology_option_seen ||
+        optionIn(argument, {"--legacy-cartesian-progress-weight",
          "--legacy-cartesian-preservation-tolerance",
          "--legacy-scale-preservation-tolerance",
          "--legacy-posture-preservation-tolerance",
@@ -1373,8 +1357,7 @@ Options parseOptions(int argc, char **argv) {
       joint_otg_option_seen = true;
       const auto value = requireValue(index, argc, argv, argument);
       if (value != "jerk-limited") {
-        throw std::runtime_error(
-            "--joint-algorithm must be 'jerk-limited'");
+        throw std::runtime_error("--joint-algorithm must be 'jerk-limited'");
       }
       result.planning.joint_algorithm = JointPlanningAlgorithm::JerkLimited;
     } else if (argument == "--dump-resolved-options") {
@@ -1403,16 +1386,15 @@ Options parseOptions(int argc, char **argv) {
         throw std::runtime_error(
             "--replay-elbow-teleop is only valid with replay");
       }
-      result.replay_elbow_teleop_enabled =
-          argument == "--replay-elbow-teleop";
+      result.replay_elbow_teleop_enabled = argument == "--replay-elbow-teleop";
     } else if (argument == "--terminal-input" ||
                argument == "--no-terminal-input") {
       if (result.source_mode != SourceMode::Replay) {
         throw std::runtime_error("--terminal-input is only valid with replay");
       }
       replay_arguments.push_back(const_cast<char *>("--terminal-input"));
-      replay_arguments.push_back(const_cast<char *>(
-          argument == "--terminal-input" ? "on" : "off"));
+      replay_arguments.push_back(
+          const_cast<char *>(argument == "--terminal-input" ? "on" : "off"));
     } else if (argument == "--joint-target-mode") {
       joint_otg_option_seen = true;
       const auto value = requireValue(index, argc, argv, argument);
@@ -1427,8 +1409,8 @@ Options parseOptions(int argc, char **argv) {
     } else if (argument == "--future-o1-velocity-deadband-rad-per-s") {
       joint_otg_option_seen = true;
       result.joint_target.future_o1_velocity_deadband_rad_per_s =
-          parseNonnegativeDouble(
-              argument, requireValue(index, argc, argv, argument));
+          parseNonnegativeDouble(argument,
+                                 requireValue(index, argc, argv, argument));
     } else if (argument == "--settling-fk-position-m") {
       joint_otg_option_seen = true;
       result.replay_settling.fk_position_m = parsePositiveDouble(
@@ -1447,21 +1429,18 @@ Options parseOptions(int argc, char **argv) {
           argument, requireValue(index, argc, argv, argument));
     } else if (argument == "--settling-required-cycles") {
       joint_otg_option_seen = true;
-      const auto value =
-          std::stoull(requireValue(index, argc, argv, argument));
+      const auto value = std::stoull(requireValue(index, argc, argv, argument));
       if (value == 0U)
         throw std::runtime_error(argument + " must be positive");
-      result.replay_settling.required_cycles =
-          static_cast<std::size_t>(value);
+      result.replay_settling.required_cycles = static_cast<std::size_t>(value);
     } else if (result.source_mode == SourceMode::Teleop) {
       admittance_or_simulation_option_seen =
           admittance_or_simulation_option_seen ||
           optionIn(argument,
-                   {"--mujoco-model", "--mujoco-viewer",
-                    "--no-mujoco-viewer", "--angular-admittance",
-                    "--no-angular-admittance", "--environment-stiffness",
-                    "--environment-damping", "--maximum-force",
-                    "--rotation-environment-stiffness",
+                   {"--mujoco-model", "--mujoco-viewer", "--no-mujoco-viewer",
+                    "--angular-admittance", "--no-angular-admittance",
+                    "--environment-stiffness", "--environment-damping",
+                    "--maximum-force", "--rotation-environment-stiffness",
                     "--rotation-environment-damping", "--maximum-torque",
                     "--wrench-filter-alpha"});
       hierarchical_arguments.push_back(argv[index]);
@@ -1473,8 +1452,7 @@ Options parseOptions(int argc, char **argv) {
                     "--no-joint-position-braking-velocity-envelope",
                     "--red-joint-acceleration-limits",
                     "--no-red-joint-acceleration-limits",
-                    "--red-proxqp-warm-start",
-                    "--no-red-proxqp-warm-start"})) {
+                    "--red-proxqp-warm-start", "--no-red-proxqp-warm-start"})) {
         admittance_or_simulation_option_seen =
             admittance_or_simulation_option_seen ||
             optionIn(argument,
@@ -1487,14 +1465,24 @@ Options parseOptions(int argc, char **argv) {
           argument, {"--urdf", "--ui", "--viz", "--host", "--port", "--mcap"});
       const bool hierarchical_value = optionIn(
           argument,
-          {"--mujoco-model", "--environment-stiffness",
-           "--environment-damping", "--maximum-force",
+          {"--mujoco-model",
+           "--environment-stiffness",
+           "--environment-damping",
+           "--maximum-force",
            "--rotation-environment-stiffness",
-           "--rotation-environment-damping", "--maximum-torque",
-           "--wrench-filter-alpha", "--red-rate", "--yellow-rate",
-           "--ui-rate", "--deadline-policy", "--joint-algorithm",
-           "--duration", "--regularization", "--position-tolerance-m",
-           "--orientation-tolerance-rad", "--maximum-hard-violation",
+           "--rotation-environment-damping",
+           "--maximum-torque",
+           "--wrench-filter-alpha",
+           "--red-rate",
+           "--yellow-rate",
+           "--ui-rate",
+           "--deadline-policy",
+           "--joint-algorithm",
+           "--duration",
+           "--regularization",
+           "--position-tolerance-m",
+           "--orientation-tolerance-rad",
+           "--maximum-hard-violation",
            "--joint-position-margin-rad",
            "--minimum-position-improvement-m",
            "--minimum-orientation-improvement-rad",
@@ -1508,16 +1496,15 @@ Options parseOptions(int argc, char **argv) {
            "--legacy-collision-influence-distance-m",
            "--legacy-collision-damping-gain-per-s",
            "--legacy-collision-weight",
-           "--red-primary-task-tcp-position-progress-weight",
+           "--red-primary-task-tcp-cartesian-progress-weight",
+           "--red-primary-task-tcp-cartesian-progress-preservation-tolerance",
            "--red-primary-task-tcp-position-preservation-tolerance-mps",
-           "--red-primary-task-tcp-position-progress-preservation-tolerance",
-           "--red-secondary-task-tcp-orientation-progress-weight",
-           "--red-secondary-task-tcp-orientation-preservation-tolerance-radps",
-           "--red-secondary-task-tcp-orientation-progress-preservation-tolerance",
-           "--red-tertiary-task-yellow-posture-coupling-preservation-tolerance",
-           "--red-tertiary-task-link4-position-weight",
-           "--red-tertiary-task-link4-position-servo-gain-per-s",
-           "--red-tertiary-task-link4-position-preservation-tolerance-mps",
+           "--red-primary-task-tcp-orientation-preservation-tolerance-radps",
+           "--red-secondary-task-yellow-posture-coupling-preservation-"
+           "tolerance",
+           "--red-secondary-task-link4-position-weight",
+           "--red-secondary-task-link4-position-servo-gain-per-s",
+           "--red-secondary-task-link4-position-preservation-tolerance-mps",
            "--yellow-maximum-iterations",
            "--red-proxqp-maximum-iterations",
            "--red-proxqp-absolute-tolerance",
@@ -1525,22 +1512,31 @@ Options parseOptions(int argc, char **argv) {
            "--yellow-task-posture-preference-weight",
            "--yellow-task-posture-preference-servo-gain-per-s",
            "--yellow-task-posture-preference-joint-weight-multipliers",
-           "--red-tertiary-task-yellow-posture-coupling-weight",
-           "--red-tertiary-task-yellow-posture-coupling-servo-gain-per-s",
-           "--red-tertiary-task-yellow-posture-coupling-joint-weight-multipliers",
+           "--red-secondary-task-yellow-posture-coupling-weight",
+           "--red-secondary-task-yellow-posture-coupling-servo-gain-per-s",
+           "--red-secondary-task-yellow-posture-coupling-joint-weight-"
+           "multipliers",
            "--yellow-constraints-self-collision-avoidance-minimum-distance-m",
            "--yellow-constraints-self-collision-avoidance-influence-distance-m",
            "--yellow-constraints-self-collision-avoidance-damping-gain-per-s",
            "--yellow-constraints-self-collision-avoidance-weight",
-           "--base-frame", "--left-end-effector-frame",
-           "--right-end-effector-frame", "--left-link4-frame",
-           "--right-link4-frame", "--left-tcp-offset",
-           "--right-tcp-offset", "--joint-names",
-           "--default-joint-positions", "--left-arm-joint-indices",
-           "--right-arm-joint-indices", "--effort-limits",
-           "--inactive-joints", "--self-collision-pair",
+           "--base-frame",
+           "--left-end-effector-frame",
+           "--right-end-effector-frame",
+           "--left-link4-frame",
+           "--right-link4-frame",
+           "--left-tcp-offset",
+           "--right-tcp-offset",
+           "--joint-names",
+           "--default-joint-positions",
+           "--left-arm-joint-indices",
+           "--right-arm-joint-indices",
+           "--effort-limits",
+           "--inactive-joints",
+           "--self-collision-pair",
            "--collision-mesh-search-paths",
-           "--joint-stream-source-revision", "--joint-stream-source-path",
+           "--joint-stream-source-revision",
+           "--joint-stream-source-path",
            "--joint-stream-source-sha256",
            "--joint-stream-jerk-override-reason",
            "--joint-stream-joint-names",
@@ -1551,12 +1547,11 @@ Options parseOptions(int argc, char **argv) {
            "--joint-stream-max-jerk-rad-per-s3"});
       admittance_or_simulation_option_seen =
           admittance_or_simulation_option_seen ||
-          optionIn(argument,
-                   {"--mujoco-model", "--environment-stiffness",
+          optionIn(argument, {"--mujoco-model", "--environment-stiffness",
                     "--environment-damping", "--maximum-force",
                     "--rotation-environment-stiffness",
-                    "--rotation-environment-damping", "--maximum-torque",
-                    "--wrench-filter-alpha"});
+                              "--rotation-environment-damping",
+                              "--maximum-torque", "--wrench-filter-alpha"});
       const bool replay_value =
           optionIn(argument, {"--input",
                               "--input-format",
@@ -1606,7 +1601,8 @@ Options parseOptions(int argc, char **argv) {
 
   const auto capabilities = profileCapabilities(profile);
   if (planning_option_seen && !capabilities.cartesian_planning) {
-    throw std::runtime_error("Cartesian planning options are not valid for profile " +
+    throw std::runtime_error(
+        "Cartesian planning options are not valid for profile " +
                              std::string{profileName(profile)});
   }
   if (joint_otg_option_seen && !capabilities.joint_otg) {
@@ -1618,7 +1614,8 @@ Options parseOptions(int argc, char **argv) {
                              std::string{profileName(profile)});
   }
   if (legacy_topology_option_seen && capabilities.nullspace) {
-    throw std::runtime_error("legacy topology options are not valid for profile " +
+    throw std::runtime_error(
+        "legacy topology options are not valid for profile " +
                              std::string{profileName(profile)});
   }
   if (admittance_or_simulation_option_seen && !capabilities.admittance) {

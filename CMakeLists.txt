@@ -855,14 +855,14 @@ if(BUILD_TESTING)
 
   if(TARGET mcl_hierarchical_kinematics_step)
     add_test(
-      NAME scripts.hierarchical_kinematics_source_launcher_path_resolution
+      NAME scripts.hierarchical_kinematics_source_recipe_path_resolution
       COMMAND
         "${CMAKE_COMMAND}" -E env
         --unset=MCL_BINARY
         "PATH=$<TARGET_FILE_DIR:mcl_hierarchical_kinematics_step>:$ENV{PATH}"
         "MCL_CPU_SET="
         "MCL_RT_PRIORITY="
-        "${CMAKE_CURRENT_SOURCE_DIR}/apps/hierarchical_kinematics_step/scripts/run_keyboard.py"
+        "${CMAKE_CURRENT_SOURCE_DIR}/apps/hierarchical_kinematics_step/scripts/profiles/planned_otg_nullspace_admittance_kinematic_sim/run_keyboard.py"
         --help
     )
     add_test(
@@ -872,8 +872,7 @@ if(BUILD_TESTING)
         "MCL_BINARY=${MCL_TRUE_EXECUTABLE}"
         "MCL_CPU_SET="
         "MCL_RT_PRIORITY="
-        "${CMAKE_CURRENT_SOURCE_DIR}/apps/hierarchical_kinematics_step/scripts/run_mcap_replay.py"
-        --profile planned-otg-nullspace-admittance-kinematic-sim
+        "${CMAKE_CURRENT_SOURCE_DIR}/apps/hierarchical_kinematics_step/scripts/profiles/planned_otg_nullspace_admittance_kinematic_sim/run_mcap_interactive.py"
     )
     add_test(
       NAME scripts.hierarchical_kinematics_csv_preset_smoke
@@ -882,8 +881,7 @@ if(BUILD_TESTING)
         "MCL_BINARY=${MCL_TRUE_EXECUTABLE}"
         "MCL_CPU_SET="
         "MCL_RT_PRIORITY="
-        "${CMAKE_CURRENT_SOURCE_DIR}/apps/hierarchical_kinematics_step/scripts/run_csv_replay.py"
-        --profile planned-otg-nullspace-admittance-kinematic-sim
+        "${CMAKE_CURRENT_SOURCE_DIR}/apps/hierarchical_kinematics_step/scripts/profiles/planned_otg_nullspace_admittance_kinematic_sim/run_csv_batch.py"
         --input /tmp/mcl-nullspace-admittance-csv-launcher-smoke.csv
     )
     if(MCL_SCRIPT_EXECUTABLE)
@@ -895,7 +893,7 @@ if(BUILD_TESTING)
           "MCL_CPU_SET="
           "MCL_RT_PRIORITY="
           "${MCL_SCRIPT_EXECUTABLE}" -qec
-          "${CMAKE_CURRENT_SOURCE_DIR}/apps/hierarchical_kinematics_step/scripts/run_keyboard.py --profile planned-otg-nullspace-admittance-kinematic-sim --no-mujoco-viewer --ui none --viz none --duration 0.05"
+          "${CMAKE_CURRENT_SOURCE_DIR}/apps/hierarchical_kinematics_step/scripts/profiles/planned_otg_nullspace_admittance_kinematic_sim/run_keyboard.py --no-mujoco-viewer --ui none --viz none --duration 0.05"
           /dev/null
       )
       set_tests_properties(
