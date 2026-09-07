@@ -68,6 +68,8 @@ std::vector<TuiSection> nullspacePanels(const NullspaceTuiDebug &debug) {
         debug.tertiary_attempted
             ? (debug.tertiary_succeeded ? "succeeded" : "failed")
             : "not attempted"},
+       {"Solution quality", debug.solution_quality},
+       {"Selected priority", debug.selected_priority},
        {"Highest priority", debug.highest_completed_priority},
        {"Fallback", debug.fallback_priority},
        {"Left primary scale", fixed(debug.left_task_scale)},

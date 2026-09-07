@@ -226,6 +226,19 @@ const char *priorityName(mcc::PriorityLevel value) {
 }
 
 const char *
+hierarchicalSolutionQualityName(mcc::HierarchicalSolutionQuality value) {
+  switch (value) {
+  case mcc::HierarchicalSolutionQuality::NotAccepted:
+    return "not-accepted";
+  case mcc::HierarchicalSolutionQuality::Converged:
+    return "converged";
+  case mcc::HierarchicalSolutionQuality::FeasibleSuboptimal:
+    return "feasible-suboptimal";
+  }
+  return "unknown";
+}
+
+const char *
 hierarchicalConstraintKindName(mcc::HierarchicalConstraintKind value) {
   switch (value) {
   case mcc::HierarchicalConstraintKind::TaskEquation:
@@ -468,11 +481,15 @@ void updateSolverDebug(mcl::SolverDebug &output,
     output.joint_limit_policy =
         jointLimitPolicyName(diagnostics.hierarchy.joint_limit_policy);
     output.termination_reason =
-        diagnostics.hierarchy.same_tick_fallback_level.has_value()
-            ? "same-tick-fallback"
-            : "hierarchical-servo-step";
+        diagnostics.hierarchy.solution_quality ==
+                mcc::HierarchicalSolutionQuality::FeasibleSuboptimal
+            ? "feasible-suboptimal"
+            : (diagnostics.hierarchy.same_tick_fallback_level.has_value()
+                   ? "same-tick-fallback"
+                   : "hierarchical-servo-step");
     output.ik_iterations = diagnostics.iterations;
-    output.converged = false;
+    output.converged = diagnostics.hierarchy.solution_quality ==
+                       mcc::HierarchicalSolutionQuality::Converged;
     output.ik_solve_time_ms = diagnostics.solve_time_ms;
     output.saturated_joints.clear();
     output.backend = "proxqp";
@@ -734,8 +751,11 @@ struct RedOutputSnapshot {
   double primary_maximum_orientation_preservation_drift_radps{0.0};
   double link4_task_error_m{0.0};
   double yellow_posture_error_rad{0.0};
+  std::optional<mcc::PriorityLevel> selected_priority;
   std::optional<mcc::PriorityLevel> highest_completed_priority;
   std::optional<mcc::PriorityLevel> fallback_priority;
+  mcc::HierarchicalSolutionQuality solution_quality{
+      mcc::HierarchicalSolutionQuality::NotAccepted};
   std::array<bool, 4> pass_attempted{};
   std::array<bool, 4> pass_succeeded{};
   mcc::QpSolveStatus terminal_status{mcc::QpSolveStatus::NotRun};
@@ -1189,6 +1209,12 @@ proto::SolverTelemetry makeSolverTelemetry(const proto::SampleContext &context,
   message.set_maximum_hard_violation(diagnostics.maximum_hard_violation);
 
   if (diagnostics.hierarchical) {
+    message.set_solution_quality(hierarchicalSolutionQualityName(
+        diagnostics.hierarchy.solution_quality));
+    if (diagnostics.hierarchy.selected_priority.has_value()) {
+      message.set_selected_priority(
+          priorityNumber(*diagnostics.hierarchy.selected_priority));
+    }
     if (diagnostics.hierarchy.highest_completed_priority.has_value()) {
       message.set_highest_completed_priority(
           priorityNumber(*diagnostics.hierarchy.highest_completed_priority));
@@ -2024,9 +2050,11 @@ void fillRedDiagnostics(const SolverHandles &handles,
   const auto &scales = diagnostics.hierarchy.task_scales;
   output.left_scale = taskScaleSnapshot(scales.at(0));
   output.right_scale = taskScaleSnapshot(scales.at(1));
+  output.selected_priority = diagnostics.hierarchy.selected_priority;
   output.highest_completed_priority =
       diagnostics.hierarchy.highest_completed_priority;
   output.fallback_priority = diagnostics.hierarchy.same_tick_fallback_level;
+  output.solution_quality = diagnostics.hierarchy.solution_quality;
   for (std::size_t index = 0; index < diagnostics.hierarchy.passes.size();
        ++index) {
     output.pass_attempted[index] =
@@ -3084,6 +3112,15 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
                       std::to_string(priorityNumber(
                           *diagnostics.hierarchy.same_tick_fallback_level))));
             }
+            if (diagnostics.hierarchy.solution_quality ==
+                mcc::HierarchicalSolutionQuality::FeasibleSuboptimal) {
+              red_telemetry->tryPush(TelemetryRecord::log(
+                  telemetry_stamp, contracts::mcl_telemetry_v1::kEventsTopic,
+                  motion_control::viz::LogLevel::Warning,
+                  "ik-feasible-suboptimal",
+                  "hierarchical IK accepted a constraint-feasible Primary "
+                  "MAX_ITER last iterate and skipped lower passes"));
+            }
           }
 
           const auto mapped_raw_ik =
@@ -3153,6 +3190,8 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
               joint_otg_limits.max_acceleration;
           joint_request.limits.max_jerk = joint_otg_limits.max_jerk;
           joint_request.sample_period = 1.0 / options.red_rate_hz;
+          joint_request.maximum_sample_count =
+              planned_options.planning.joint_maximum_sample_count;
 
           auto joint_status =
               joint_planner->plan(joint_request, joint_plan_diagnostics);
@@ -3896,9 +3935,13 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
         }
       } else {
         frame.runtime_state = mcl::IkRuntimeState::Running;
+        const bool feasible_suboptimal =
+            latest_output.solution_quality ==
+            mcc::HierarchicalSolutionQuality::FeasibleSuboptimal;
         frame.ik_status =
-            "running " + taskScaleStatus(latest_output) +
-            " deadline_misses R=" +
+            std::string{feasible_suboptimal ? "running degraded-max-iter "
+                                            : "running "} +
+            taskScaleStatus(latest_output) + " deadline_misses R=" +
             std::to_string(red_stats.deadline_miss_count) +
             " Y=" + std::to_string(yellow_stats.deadline_miss_count) +
             " skipped R=" + std::to_string(red_stats.skipped_release_count) +
@@ -3908,6 +3951,10 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
                        std::to_string(yellow_stats.skipped_release_count) +
                        " recoverable_rejections R=" +
                        std::to_string(red_stats.recoverable_rejection_count);
+        if (feasible_suboptimal) {
+          frame.status +=
+              " | Primary MAX_ITER candidate accepted as feasible-suboptimal";
+        }
       }
       if (!clamp_detail.empty()) {
         frame.ik_status +=
@@ -4239,11 +4286,19 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
                   ? "true"
                   : "false");
           add_option(
+              "red_qp_regularization",
+              std::to_string(options.solver.red_qp_regularization));
+          add_option(
               "red_proxqp_maximum_iterations",
               std::to_string(options.solver.red_proxqp_maximum_iterations));
           add_option("red_proxqp_warm_start_enabled",
                      options.solver.red_proxqp_warm_start_enabled ? "true"
                                                                   : "false");
+          add_option(
+              "red_primary_maximum_iterations_policy",
+              options.solver.red_accept_feasible_primary_maximum_iterations
+                  ? "accept-feasible"
+                  : "reject");
           add_option("joint_target_mode",
                      jointTargetModeName(planned_options.joint_target.mode));
           add_option("simulation_mode", "mujoco-kinematic-forward");
@@ -4609,6 +4664,12 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
           options.solver.red_secondary_task_yellow_posture_coupling_weight;
       nullspace_debug.left_task_scale = latest_output.left_scale.scale;
       nullspace_debug.right_task_scale = latest_output.right_scale.scale;
+      nullspace_debug.solution_quality =
+          hierarchicalSolutionQualityName(latest_output.solution_quality);
+      if (latest_output.selected_priority.has_value()) {
+        nullspace_debug.selected_priority =
+            priorityName(*latest_output.selected_priority);
+      }
       if (latest_output.highest_completed_priority.has_value()) {
         nullspace_debug.highest_completed_priority =
             priorityName(*latest_output.highest_completed_priority);
@@ -4716,7 +4777,10 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
     execution.resolved_config = {
         {"profile", profileName(planned_options.profile)},
         {"resolved_options_json", resolvedOptionsJson(planned_options)},
-        {"regularization", std::to_string(options.solver.regularization)},
+        {"red_qp_regularization",
+         std::to_string(options.solver.red_qp_regularization)},
+        {"yellow_qp_regularization",
+         std::to_string(options.solver.yellow_qp_regularization)},
         {"maximum_hard_violation",
          std::to_string(options.solver.maximum_accepted_hard_violation)},
         {"joint_position_margin_rad",
@@ -4755,11 +4819,28 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
          std::to_string(options.solver.red_proxqp_maximum_iterations)},
         {"red_proxqp_absolute_tolerance",
          std::to_string(options.solver.red_proxqp_absolute_tolerance)},
+        {"red_proxqp_relative_tolerance",
+         std::to_string(options.solver.red_proxqp_relative_tolerance)},
         {"red_proxqp_primal_infeasibility_tolerance",
          std::to_string(
              options.solver.red_proxqp_primal_infeasibility_tolerance)},
         {"red_proxqp_warm_start_enabled",
          options.solver.red_proxqp_warm_start_enabled ? "true" : "false"},
+        {"yellow_proxqp_maximum_iterations",
+         std::to_string(options.solver.yellow_proxqp_maximum_iterations)},
+        {"yellow_proxqp_absolute_tolerance",
+         std::to_string(options.solver.yellow_proxqp_absolute_tolerance)},
+        {"yellow_proxqp_relative_tolerance",
+         std::to_string(options.solver.yellow_proxqp_relative_tolerance)},
+        {"yellow_proxqp_primal_infeasibility_tolerance",
+         std::to_string(
+             options.solver.yellow_proxqp_primal_infeasibility_tolerance)},
+        {"yellow_proxqp_warm_start_enabled",
+         options.solver.yellow_proxqp_warm_start_enabled ? "true" : "false"},
+        {"red_primary_maximum_iterations_policy",
+         options.solver.red_accept_feasible_primary_maximum_iterations
+             ? "accept-feasible"
+             : "reject"},
         {"yellow_task_posture_preference_weight",
          std::to_string(options.solver.yellow_task_posture_preference_weight)},
         {"yellow_task_posture_preference_servo_gain_per_s",

@@ -7,6 +7,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <iostream>
+#include <optional>
 #include <stdexcept>
 
 namespace app = motion_control_lab::hierarchical_kinematics_step;
@@ -69,6 +70,62 @@ int main(int argc, char **argv) {
                 std::find(custom_indices.begin(), custom_indices.end(), 5U) !=
                     custom_indices.end(),
             "custom inactive joint policy retained hidden waist behavior");
+
+    const auto hierarchical_defaults =
+        app::profileDefaults(app::Profile::Hierarchical);
+    const auto nullspace_defaults =
+        app::profileDefaults(app::Profile::PlannedOtgNullspace);
+    const auto hierarchical_red =
+        app::makeRedSolverConfig(hierarchical_defaults);
+    const auto hierarchical_yellow =
+        app::makeYellowSolverConfig(hierarchical_defaults);
+    const auto nullspace_red = app::makeRedSolverConfig(nullspace_defaults);
+    require(hierarchical_red.qp.backend ==
+                    motion_control::core::QpBackend::ProxQp &&
+                hierarchical_red.qp.regularization == 1.0e-8 &&
+                hierarchical_red.qp.proxqp.maximum_iterations == 1000 &&
+                std::holds_alternative<motion_control::core::ServoStepOptions>(
+                    hierarchical_yellow.execution) &&
+                std::get<motion_control::core::ServoStepOptions>(
+                    hierarchical_yellow.execution).servo_period ==
+                    1.0 / hierarchical_defaults.interactive.yellow_rate_hz &&
+                hierarchical_yellow.qp.regularization == 1.0e-4 &&
+                hierarchical_yellow.qp.proxqp.maximum_iterations == 1000 &&
+                nullspace_red.qp.proxqp.maximum_iterations == 200,
+            "profile QP defaults were not applied to solver configs");
+
+    auto tuned = app::profileDefaults(app::Profile::PlannedOtg);
+    tuned.interactive.solver.red_qp_regularization = 3.0e-8;
+    tuned.interactive.solver.red_proxqp_maximum_iterations = 321;
+    tuned.interactive.solver.red_proxqp_absolute_tolerance = 4.0e-6;
+    tuned.interactive.solver.red_proxqp_relative_tolerance = 5.0e-5;
+    tuned.interactive.solver.red_proxqp_primal_infeasibility_tolerance =
+        6.0e-12;
+    tuned.interactive.solver.red_proxqp_warm_start_enabled = true;
+    tuned.interactive.solver.yellow_qp_regularization = 7.0e-8;
+    tuned.interactive.solver.yellow_proxqp_maximum_iterations = 654;
+    tuned.interactive.solver.yellow_proxqp_absolute_tolerance = 8.0e-7;
+    tuned.interactive.solver.yellow_proxqp_relative_tolerance = 9.0e-6;
+    tuned.interactive.solver.yellow_proxqp_primal_infeasibility_tolerance =
+        1.0e-9;
+    tuned.interactive.solver.yellow_proxqp_warm_start_enabled = false;
+    const auto tuned_red = app::makeRedSolverConfig(tuned);
+    const auto tuned_yellow = app::makeYellowSolverConfig(tuned);
+    require(tuned_red.qp.regularization == 3.0e-8 &&
+                tuned_red.qp.proxqp.maximum_iterations == 321 &&
+                tuned_red.qp.proxqp.absolute_tolerance == 4.0e-6 &&
+                tuned_red.qp.proxqp.relative_tolerance == 5.0e-5 &&
+                tuned_red.qp.proxqp.primal_infeasibility_tolerance ==
+                    std::optional<double>{6.0e-12} &&
+                tuned_red.qp.proxqp.warm_start_enabled &&
+                tuned_yellow.qp.regularization == 7.0e-8 &&
+                tuned_yellow.qp.proxqp.maximum_iterations == 654 &&
+                tuned_yellow.qp.proxqp.absolute_tolerance == 8.0e-7 &&
+                tuned_yellow.qp.proxqp.relative_tolerance == 9.0e-6 &&
+                tuned_yellow.qp.proxqp.primal_infeasibility_tolerance ==
+                    std::optional<double>{1.0e-9} &&
+                !tuned_yellow.qp.proxqp.warm_start_enabled,
+            "explicit QP options were not applied to solver configs");
 
     require(argc == 2, "solver topology test requires an R1 URDF path");
     app::Options app_options;
@@ -189,6 +246,12 @@ int main(int argc, char **argv) {
     require(red_diagnostics.hierarchy.highest_completed_priority ==
                 motion_control::core::PriorityLevel::Secondary,
             "highest completed priority is not Secondary");
+    require(red_diagnostics.hierarchy.selected_priority ==
+                motion_control::core::PriorityLevel::Secondary,
+            "selected priority is not Secondary");
+    require(red_diagnostics.hierarchy.solution_quality ==
+                motion_control::core::HierarchicalSolutionQuality::Converged,
+            "normal two-pass solve is not marked converged");
 
     std::size_t enabled_primary = 0U;
     std::size_t enabled_primary_scaled = 0U;

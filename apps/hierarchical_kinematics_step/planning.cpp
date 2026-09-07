@@ -297,6 +297,7 @@ motion_control::core::CartesianRetargetRequest makeRetargetRequest(
   mcc::CartesianRetargetRequest request;
   request.reference_frame_name = robot.base_frame;
   request.sample_period = 1.0 / rate_hz;
+  request.maximum_sample_count = options.cartesian_maximum_sample_count;
   request.synchronization =
       toCoreSynchronization(options.cartesian_synchronization);
   request.limits.max_linear_velocity =

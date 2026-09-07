@@ -8,18 +8,54 @@ SCRIPT_ROOT = Path(__file__).resolve().parents[2]
 if str(SCRIPT_ROOT) not in sys.path:
     sys.path.insert(0, str(SCRIPT_ROOT))
 
-from _launcher.entrypoint import bind  # noqa: E402
-from profiles.planned_otg_nullspace.config import RECIPES  # noqa: E402
+from _launcher.command import run_recipe  # noqa: E402
+from _launcher.recipe import Recipe  # noqa: E402
 
-_BOUND = bind(RECIPES["mcap_headless"], __file__)
-build_command = _BOUND.build_command
-run = _BOUND.run
+_RECIPE = Recipe(
+    profile='planned-otg-nullspace',
+    name='mcap_headless',
+    source='mcap',
+    options={
+        'urdf': '/workspace/models/Psi_R1_visual_collision.urdf',
+        'input-format': 'mcap',
+        'input': '/workspace/fixtures/raw/sliced-RW1AZHYCSEFT5_RW1AZHYCSEFT5260310002_20260813164525_0.mcap',
+        'left-stream': '/hal/tracker/htc/left/calib_target_pose',
+        'right-stream': '/hal/tracker/htc/right/calib_target_pose',
+        'initial-joint-state-stream': '/mc/ik/joint_states',
+        'timestamp-source': 'header_stamp',
+        'target-period-ms': 10,
+        'pairing-policy': 'nearest',
+        'nearest-tolerance-ms': 5,
+        'unmatched-policy': 'drop_with_diagnostics',
+        'execution-mode': 'batch',
+        'playback-rate': 1,
+        'red-rate': 1000,
+        'yellow-rate': 500,
+        'deadline-policy': 'monitor',
+        'ui': 'none',
+        'terminal-input': False,
+        'replay-trace': True,
+        'replay-elbow-teleop': False,
+        'viz': 'none',
+        'host': '127.0.0.1',
+        'port': 8765,
+        'mcap': None,
+        'output-root': '/workspace/runs/mcl_hierarchical_kinematics_step',
+        'start-paused': False,
+        'max-linear-velocity-mps': 3.0,
+        'max-linear-acceleration-mps2': 20.0,
+        'max-linear-jerk-mps3': 400.0,
+        'max-angular-velocity-rps': 3.0,
+        'max-angular-acceleration-rps2': 20.0,
+        'max-angular-jerk-rps3': 300.0,
+        'joint-target-mode': 'future-o1-pv',
+    },
+)
 
 
 def main() -> None:
-    run(sys.argv[1:])
+    run_recipe(_RECIPE, sys.argv[1:], __file__)
 
 
 if __name__ == "__main__":
     main()
-

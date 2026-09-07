@@ -97,6 +97,11 @@ std::string solverExit(const SolverDebug & solver)
 {
   for (const auto & pass : solver.qp_passes) {
     if (pass.attempted && !pass.succeeded) {
+      if (solver.disposition == "accepted" &&
+          solver.termination_reason == "feasible-suboptimal") {
+        return pass.label + " DEGRADED · " +
+               statusToken(pass.status + " " + pass.native_status);
+      }
       return pass.label + " " + statusToken(pass.status + " " + pass.native_status);
     }
   }

@@ -14,6 +14,28 @@
 `--dump-resolved-options` 在加载模型前输出 profile、能力、robot、solver、planning、replay、
 binary argv 与 launcher provenance 的完整 JSON。
 
+Red HKS 默认允许 Core 验收 constraint-feasible 的 Primary `MAX_ITER` 最后迭代：该 tick
+发布新输出、标记 `feasible-suboptimal`，并跳过 Secondary；任何 task equation、scale box
+或 joint hard bound 超限仍会拒绝并 HOLD。使用
+`--no-red-accept-feasible-primary-max-iterations`（或原生二进制别名
+`--red-reject-primary-max-iterations`）可恢复严格拒绝策略，
+`--red-accept-feasible-primary-max-iterations` 可显式恢复默认策略。
+
+Red 与 Yellow 的 QP 数值配置相互独立。`planned-otg` 的 Red ProxQP 历史实际默认
+`maximum_iterations=1000`，两个 nullspace profile 为 `200`；Yellow 默认为 `1000`。
+例如调整 interactive MCAP 的 Red 迭代预算：
+
+```bash
+scripts/profiles/planned_otg/run_mcap_interactive.py \
+  --red-proxqp-maximum-iterations 500
+```
+
+对应的 regularization、absolute/relative/primal-infeasibility tolerance 和 warm start 使用
+`--red-qp-*`、`--red-proxqp-*`、`--yellow-qp-*`、`--yellow-proxqp-*` 参数。Cartesian 与
+Joint planner 的 schedule budget 分别使用 `--cartesian-maximum-sample-count` 和
+`--joint-maximum-sample-count`。这些值都会进入 `--dump-resolved-options`，并直接写入实际
+solver/planner request。
+
 五个 profile 默认使用 `/workspace/models/Psi_R1_visual_collision.urdf`。该 URDF 的 mesh
 引用均为同目录下的 `meshes/<name>.obj`，不依赖 `products/synrobot` 中的 robot description。
 
@@ -59,15 +81,15 @@ apps/hierarchical_kinematics_step/scripts/profiles/planned_otg_nullspace_admitta
   --no-mujoco-viewer --ui none --viz none --duration 0.25
 ```
 
-`scripts/profiles/<profile>/config.py` 完整列出该 profile 的 Python launcher overrides；每个
-profile 提供 `run_keyboard.py`、`run_mcap_interactive.py`、`run_mcap_headless.py` 和
-`run_csv_batch.py`。MCAP interactive 使用 realtime、TUI、start-paused 和 Foxglove；MCAP
-headless 使用 batch 并关闭 TUI/Viz/viewer/terminal。`hierarchical` 的两个 MCAP recipe 要求
-显式 `--input`，其他 profile 继续使用默认 tracker fixture。
+每个 profile 提供 `run_keyboard.py`、`run_mcap_interactive.py`、`run_mcap_headless.py` 和
+`run_csv_batch.py`；完整 launcher overrides 直接写在对应脚本的私有 `_RECIPE` 中。MCAP
+interactive 使用 realtime、TUI、start-paused 和 Foxglove；MCAP headless 使用 batch 并关闭
+TUI/Viz/viewer/terminal。`hierarchical` 的两个 MCAP recipe 要求显式 `--input`，其他 profile
+继续使用默认 tracker fixture。
 
-每个 recipe 模块均导出 `build_command(argv)` 与 `run(argv)`，供 experiments import；profile
-和 source 已由模块固定，不能通过参数改写。模块只依赖 Python 标准库。唯一支持的环境变量是
-`MCL_BINARY`、`MCL_INSTALL_PREFIX`、`MCL_LD_LIBRARY_PATH`、`MCL_CPU_SET`、
+这些脚本是可执行 preset，不提供 Python import API。experiment 需要自己的配置时应创建自己的
+`Recipe`，不要 import 或修改现有脚本中的 `_RECIPE`。脚本只依赖 Python 标准库。唯一支持的
+环境变量是 `MCL_BINARY`、`MCL_INSTALL_PREFIX`、`MCL_LD_LIBRARY_PATH`、`MCL_CPU_SET`、
 `MCL_RT_PRIORITY`，其余配置全部使用 argparse。所有 interactive recipe 默认绑定
 `127.0.0.1:8765`；并行运行时用 `--port` 显式覆盖。
 

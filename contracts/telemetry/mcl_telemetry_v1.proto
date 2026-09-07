@@ -264,6 +264,8 @@ message SolverTelemetry {
   repeated SolverTask tasks = 12;
   repeated TaskScale task_scales = 13;
   repeated SolverRequirement requirements = 14;
+  string solution_quality = 15;
+  int32 selected_priority = 16;
 }
 
 message PlannerLimit {

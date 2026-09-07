@@ -134,6 +134,7 @@ void testPlanningOptionsAreApplied()
   options.max_angular_velocity_rps = 0.45;
   options.max_angular_acceleration_rps2 = 0.90;
   options.max_angular_jerk_rps3 = 1.80;
+  options.cartesian_maximum_sample_count = 4321U;
   options.cartesian_synchronization = planned::PlanningSynchronization::Phase;
   options.joint_synchronization = planned::PlanningSynchronization::Time;
 
@@ -145,6 +146,8 @@ void testPlanningOptionsAreApplied()
 
   require(request.reference_frame_name == robot.base_frame, "wrong planning reference frame");
   require(request.sample_period == 0.02, "planning rate was not applied");
+  require(request.maximum_sample_count == 4321U,
+          "Cartesian sample budget was not applied");
   require(
     request.synchronization == mcc::TrajectorySynchronization::Phase,
     "Cartesian synchronization was not applied");

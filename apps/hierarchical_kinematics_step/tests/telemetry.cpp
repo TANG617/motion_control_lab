@@ -53,6 +53,8 @@ int main()
     false, 2U, 7U, 8U, 6U);
   solver.set_solver_kind("hierarchical_ik");
   solver.set_backend("proxqp");
+  solver.set_solution_quality("feasible-suboptimal");
+  solver.set_selected_priority(1);
   auto * pass = solver.add_passes();
   pass->set_label("Primary");
   pass->set_priority(1);
@@ -108,6 +110,8 @@ int main()
     parsed_solver.context().outcome() !=
       proto::RECOVERABLE_REJECTED ||
     parsed_solver.passes(0).label() != "Primary" ||
+    parsed_solver.solution_quality() != "feasible-suboptimal" ||
+    parsed_solver.selected_priority() != 1 ||
     parsed_solver.context().timestamp().seconds() != 1 ||
     parsed_solver.context().timestamp().nanos() != 100 ||
     parsed_solver.context().emit_time().seconds() != 1 ||

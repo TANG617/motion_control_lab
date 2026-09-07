@@ -47,6 +47,17 @@ double parseNonnegativeDouble(const std::string &name,
   return parsed;
 }
 
+std::size_t parsePositiveSize(const std::string &name,
+                              const std::string &value) {
+  const auto parsed = std::stoll(value);
+  if (parsed <= 0 ||
+      static_cast<unsigned long long>(parsed) >
+          std::numeric_limits<std::size_t>::max()) {
+    throw std::runtime_error(name + " must be a positive integer");
+  }
+  return static_cast<std::size_t>(parsed);
+}
+
 template <typename Value, typename Parser>
 std::vector<Value> parseCsv(const std::string &argument,
                             const std::string &value, Parser parser) {
@@ -192,13 +203,15 @@ parsePlanningSynchronization(const std::string &argument,
 
 bool parseSolverOption(const std::string &argument, const std::string &value,
                        SolverOptions &options) {
-  const double parsed = parsePositiveDouble(argument, value);
-  if (argument == "--regularization")
-    options.regularization = parsed;
-  else if (argument == "--position-tolerance-m")
-    options.position_tolerance_m = parsed;
-  else if (argument == "--orientation-tolerance-rad")
-    options.orientation_tolerance_rad = parsed;
+  const bool nonnegative =
+      argument == "--red-proxqp-relative-tolerance" ||
+      argument == "--yellow-proxqp-relative-tolerance";
+  const double parsed = nonnegative ? parseNonnegativeDouble(argument, value)
+                                    : parsePositiveDouble(argument, value);
+  if (argument == "--red-qp-regularization")
+    options.red_qp_regularization = parsed;
+  else if (argument == "--yellow-qp-regularization")
+    options.yellow_qp_regularization = parsed;
   else if (argument == "--maximum-hard-violation")
     options.maximum_accepted_hard_violation = parsed;
   else if (argument == "--joint-position-margin-rad")
@@ -250,8 +263,16 @@ bool parseSolverOption(const std::string &argument, const std::string &value,
         parsed;
   else if (argument == "--red-proxqp-absolute-tolerance")
     options.red_proxqp_absolute_tolerance = parsed;
+  else if (argument == "--red-proxqp-relative-tolerance")
+    options.red_proxqp_relative_tolerance = parsed;
   else if (argument == "--red-proxqp-primal-infeasibility-tolerance")
     options.red_proxqp_primal_infeasibility_tolerance = parsed;
+  else if (argument == "--yellow-proxqp-absolute-tolerance")
+    options.yellow_proxqp_absolute_tolerance = parsed;
+  else if (argument == "--yellow-proxqp-relative-tolerance")
+    options.yellow_proxqp_relative_tolerance = parsed;
+  else if (argument == "--yellow-proxqp-primal-infeasibility-tolerance")
+    options.yellow_proxqp_primal_infeasibility_tolerance = parsed;
   else if (argument == "--yellow-task-posture-preference-weight")
     options.yellow_task_posture_preference_weight = parsed;
   else if (argument == "--yellow-task-posture-preference-servo-gain-per-s")
@@ -463,7 +484,7 @@ Options profileDefaults(Profile profile) {
   case Profile::Hierarchical:
     app.red_rate_hz = 1000.0;
     app.yellow_rate_hz = 100.0;
-    solver.regularization = 1.0e-4;
+    solver.yellow_qp_regularization = 1.0e-4;
     solver.maximum_accepted_hard_violation = 5.0e-4;
     solver.joint_position_braking_velocity_envelope_enabled = false;
     solver.legacy_cartesian_progress_weight = 3.0;
@@ -506,6 +527,7 @@ Options profileDefaults(Profile profile) {
     app.yellow_rate_hz = 100.0;
     solver.joint_position_braking_velocity_envelope_enabled = true;
     solver.red_joint_acceleration_limits_enabled = true;
+    solver.red_proxqp_maximum_iterations = 200;
     robot.joint_stream.position_lower_rad[11] = -0.9599;
     robot.joint_stream.position_lower_rad[12] = -0.9599;
     robot.joint_stream.position_lower_rad[18] = -0.9599;
@@ -521,6 +543,7 @@ Options profileDefaults(Profile profile) {
     // Preserve the pre-existing local tuning as explicit configuration.
     solver.joint_position_braking_velocity_envelope_enabled = false;
     solver.red_joint_acceleration_limits_enabled = false;
+    solver.red_proxqp_maximum_iterations = 200;
     break;
   }
   return result;
@@ -564,7 +587,7 @@ std::string resolvedOptionsJson(const Options &options) {
   };
 
   Json::Value root;
-  root["schema_version"] = "mcl.hierarchical_kinematics_step.options.v1";
+  root["schema_version"] = "mcl.hierarchical_kinematics_step.options.v2";
   root["profile"] = profileName(options.profile);
   root["source_mode"] =
       options.source_mode == SourceMode::Teleop ? "teleop" : "replay";
@@ -602,9 +625,6 @@ std::string resolvedOptionsJson(const Options &options) {
   const auto &solver = app.solver;
   auto &solver_json = root["solver"];
 #define MCL_SOLVER_FIELD(name) solver_json[#name] = solver.name
-  MCL_SOLVER_FIELD(regularization);
-  MCL_SOLVER_FIELD(position_tolerance_m);
-  MCL_SOLVER_FIELD(orientation_tolerance_rad);
   MCL_SOLVER_FIELD(maximum_accepted_hard_violation);
   MCL_SOLVER_FIELD(joint_position_margin_rad);
   MCL_SOLVER_FIELD(joint_position_braking_velocity_envelope_enabled);
@@ -631,10 +651,19 @@ std::string resolvedOptionsJson(const Options &options) {
   MCL_SOLVER_FIELD(red_secondary_task_link4_position_servo_gain_per_s);
   MCL_SOLVER_FIELD(
       red_secondary_task_link4_position_preservation_tolerance_mps);
+  MCL_SOLVER_FIELD(red_qp_regularization);
   MCL_SOLVER_FIELD(red_proxqp_maximum_iterations);
   MCL_SOLVER_FIELD(red_proxqp_absolute_tolerance);
+  MCL_SOLVER_FIELD(red_proxqp_relative_tolerance);
   MCL_SOLVER_FIELD(red_proxqp_primal_infeasibility_tolerance);
   MCL_SOLVER_FIELD(red_proxqp_warm_start_enabled);
+  MCL_SOLVER_FIELD(red_accept_feasible_primary_maximum_iterations);
+  MCL_SOLVER_FIELD(yellow_qp_regularization);
+  MCL_SOLVER_FIELD(yellow_proxqp_maximum_iterations);
+  MCL_SOLVER_FIELD(yellow_proxqp_absolute_tolerance);
+  MCL_SOLVER_FIELD(yellow_proxqp_relative_tolerance);
+  MCL_SOLVER_FIELD(yellow_proxqp_primal_infeasibility_tolerance);
+  MCL_SOLVER_FIELD(yellow_proxqp_warm_start_enabled);
   MCL_SOLVER_FIELD(yellow_task_posture_preference_weight);
   MCL_SOLVER_FIELD(yellow_task_posture_preference_servo_gain_per_s);
   MCL_SOLVER_FIELD(red_secondary_task_yellow_posture_coupling_weight);
@@ -709,10 +738,14 @@ std::string resolvedOptionsJson(const Options &options) {
   planning["max_angular_acceleration_rps2"] =
       options.planning.max_angular_acceleration_rps2;
   planning["max_angular_jerk_rps3"] = options.planning.max_angular_jerk_rps3;
+  planning["cartesian_maximum_sample_count"] =
+      Json::UInt64(options.planning.cartesian_maximum_sample_count);
   planning["cartesian_synchronization"] =
       planningSynchronizationName(options.planning.cartesian_synchronization);
   planning["joint_algorithm"] =
       jointPlanningAlgorithmName(options.planning.joint_algorithm);
+  planning["joint_maximum_sample_count"] =
+      Json::UInt64(options.planning.joint_maximum_sample_count);
   planning["joint_synchronization"] =
       planningSynchronizationName(options.planning.joint_synchronization);
 
@@ -848,9 +881,8 @@ void printHierarchicalUsage(const char *program) {
          "(default: 5)\n"
       << "  --wrench-filter-alpha <value>           Low-pass alpha "
          "(default: 0.08)\n"
-      << "  --regularization <value>                 QP regularization\n"
-      << "  --position-tolerance-m <value>           Position tolerance\n"
-      << "  --orientation-tolerance-rad <value>      Orientation tolerance\n"
+      << "  --red-qp-regularization <value>          Red QP regularization\n"
+      << "  --yellow-qp-regularization <value>       Yellow QP regularization\n"
       << "  --maximum-hard-violation <value>         App acceptance tolerance\n"
       << "  --joint-position-margin-rad <value>      Joint limit margin\n"
       << "  --red-primary-task-tcp-cartesian-progress-weight <value> Primary "
@@ -869,9 +901,25 @@ void printHierarchicalUsage(const char *program) {
       << defaults.solver
              .red_secondary_task_link4_position_preservation_tolerance_mps
       << ")\n"
-      << "  --red-proxqp-absolute-tolerance <value>  Red QP tolerance\n"
+      << "  --red-proxqp-maximum-iterations <count>  Red ProxQP iteration budget\n"
+      << "  --red-proxqp-absolute-tolerance <value>  Red absolute tolerance\n"
+      << "  --red-proxqp-relative-tolerance <value>  Red relative tolerance\n"
       << "  --red-proxqp-primal-infeasibility-tolerance <value> Red "
          "certificate tolerance\n"
+      << "  --red-proxqp-warm-start/--no-red-proxqp-warm-start\n"
+      << "  --red-accept-feasible-primary-max-iterations Accept a "
+         "constraint-feasible "
+         "Primary last iterate (default)\n"
+      << "  --no-red-accept-feasible-primary-max-iterations Reject every "
+         "Primary MAX_ITER result\n"
+      << "  --red-reject-primary-max-iterations Reject every Primary MAX_ITER "
+         "result (alias)\n"
+      << "  --yellow-proxqp-maximum-iterations <count> Yellow ProxQP iteration budget\n"
+      << "  --yellow-proxqp-absolute-tolerance <value> Yellow absolute tolerance\n"
+      << "  --yellow-proxqp-relative-tolerance <value> Yellow relative tolerance\n"
+      << "  --yellow-proxqp-primal-infeasibility-tolerance <value> Yellow "
+         "certificate tolerance\n"
+      << "  --yellow-proxqp-warm-start/--no-yellow-proxqp-warm-start\n"
       << "  --yellow-task-posture-preference-weight <value> Yellow posture "
          "preference weight\n"
       << "  --yellow-task-posture-preference-servo-gain-per-s <value> Yellow "
@@ -923,6 +971,12 @@ void printPlannedUsage(const char *program, SourceMode source_mode) {
             << defaults.planning.max_angular_acceleration_rps2 << ")\n"
             << "  --max-angular-jerk-rps3 <value>         (default: "
             << defaults.planning.max_angular_jerk_rps3 << ")\n"
+            << "  --cartesian-maximum-sample-count <count> (default: "
+            << defaults.planning.cartesian_maximum_sample_count << ")\n"
+            << "  --cartesian-synchronization <none|time|phase> (default: "
+            << planningSynchronizationName(
+                   defaults.planning.cartesian_synchronization)
+            << ")\n"
             << "  --joint-synchronization <none|time|phase> (default: "
             << planningSynchronizationName(
                    defaults.planning.joint_synchronization)
@@ -930,6 +984,8 @@ void printPlannedUsage(const char *program, SourceMode source_mode) {
             << "  --joint-algorithm <jerk-limited> (default: "
             << jointPlanningAlgorithmName(defaults.planning.joint_algorithm)
             << ")\n"
+            << "  --joint-maximum-sample-count <count> (default: "
+            << defaults.planning.joint_maximum_sample_count << ")\n"
             << "  --joint-target-mode <future-o1-pv|ik-pv> (default: "
             << jointTargetModeName(defaults.joint_target.mode) << ")\n";
   if (source_mode == SourceMode::Replay) {
@@ -981,6 +1037,16 @@ HierarchicalOptions parseHierarchicalOptions(int argc, char **argv,
       options.solver.red_proxqp_warm_start_enabled = true;
     } else if (argument == "--no-red-proxqp-warm-start") {
       options.solver.red_proxqp_warm_start_enabled = false;
+    } else if (argument == "--yellow-proxqp-warm-start") {
+      options.solver.yellow_proxqp_warm_start_enabled = true;
+    } else if (argument == "--no-yellow-proxqp-warm-start") {
+      options.solver.yellow_proxqp_warm_start_enabled = false;
+    } else if (argument == "--red-accept-feasible-primary-max-iterations") {
+      options.solver.red_accept_feasible_primary_maximum_iterations = true;
+    } else if (argument ==
+                   "--no-red-accept-feasible-primary-max-iterations" ||
+               argument == "--red-reject-primary-max-iterations") {
+      options.solver.red_accept_feasible_primary_maximum_iterations = false;
     } else if (argument == "--base-frame") {
       options.robot.base_frame = requireValue(index, argc, argv, argument);
     } else if (argument == "--left-end-effector-frame") {
@@ -1181,12 +1247,16 @@ HierarchicalOptions parseHierarchicalOptions(int argc, char **argv,
       if (value <= 0)
         throw std::runtime_error(argument + " must be positive");
       options.solver.red_proxqp_maximum_iterations = value;
+    } else if (argument == "--yellow-proxqp-maximum-iterations") {
+      const auto value = std::stoi(requireValue(index, argc, argv, argument));
+      if (value <= 0)
+        throw std::runtime_error(argument + " must be positive");
+      options.solver.yellow_proxqp_maximum_iterations = value;
     } else if (
         optionIn(
                    argument,
-            {"--regularization",
-             "--position-tolerance-m",
-             "--orientation-tolerance-rad",
+            {"--red-qp-regularization",
+             "--yellow-qp-regularization",
              "--maximum-hard-violation",
                     "--joint-position-margin-rad",
                     "--legacy-cartesian-progress-weight",
@@ -1207,9 +1277,13 @@ HierarchicalOptions parseHierarchicalOptions(int argc, char **argv,
              "tolerance",
              "--red-secondary-task-link4-position-weight",
              "--red-secondary-task-link4-position-servo-gain-per-s",
-             "--red-secondary-task-link4-position-preservation-tolerance-mps",
+                    "--red-secondary-task-link4-position-preservation-tolerance-mps",
                     "--red-proxqp-absolute-tolerance",
+                    "--red-proxqp-relative-tolerance",
                     "--red-proxqp-primal-infeasibility-tolerance",
+                    "--yellow-proxqp-absolute-tolerance",
+                    "--yellow-proxqp-relative-tolerance",
+                    "--yellow-proxqp-primal-infeasibility-tolerance",
                     "--yellow-task-posture-preference-weight",
                     "--yellow-task-posture-preference-servo-gain-per-s",
              "--red-secondary-task-yellow-posture-coupling-weight",
@@ -1337,6 +1411,10 @@ Options parseOptions(int argc, char **argv) {
     } else if (argument == "--max-angular-jerk-rps3") {
       planning_option_seen = true;
       planningValue(result.planning.max_angular_jerk_rps3);
+    } else if (argument == "--cartesian-maximum-sample-count") {
+      planning_option_seen = true;
+      result.planning.cartesian_maximum_sample_count = parsePositiveSize(
+          argument, requireValue(index, argc, argv, argument));
     } else if (argument == "--cartesian-synchronization") {
       planning_option_seen = true;
       result.planning.cartesian_synchronization = parsePlanningSynchronization(
@@ -1352,6 +1430,10 @@ Options parseOptions(int argc, char **argv) {
         throw std::runtime_error("--joint-algorithm must be 'jerk-limited'");
       }
       result.planning.joint_algorithm = JointPlanningAlgorithm::JerkLimited;
+    } else if (argument == "--joint-maximum-sample-count") {
+      joint_otg_option_seen = true;
+      result.planning.joint_maximum_sample_count = parsePositiveSize(
+          argument, requireValue(index, argc, argv, argument));
     } else if (argument == "--dump-resolved-options") {
       result.dump_resolved_options = true;
     } else if (argument == "--launcher-argv-json") {
@@ -1444,7 +1526,12 @@ Options parseOptions(int argc, char **argv) {
                     "--no-joint-position-braking-velocity-envelope",
                     "--red-joint-acceleration-limits",
                     "--no-red-joint-acceleration-limits",
-                    "--red-proxqp-warm-start", "--no-red-proxqp-warm-start"})) {
+                    "--red-proxqp-warm-start", "--no-red-proxqp-warm-start",
+                    "--yellow-proxqp-warm-start",
+                    "--no-yellow-proxqp-warm-start",
+                    "--red-accept-feasible-primary-max-iterations",
+                    "--no-red-accept-feasible-primary-max-iterations",
+                    "--red-reject-primary-max-iterations"})) {
         admittance_or_simulation_option_seen =
             admittance_or_simulation_option_seen ||
             optionIn(argument,
@@ -1471,9 +1558,8 @@ Options parseOptions(int argc, char **argv) {
            "--deadline-policy",
            "--joint-algorithm",
            "--duration",
-           "--regularization",
-           "--position-tolerance-m",
-           "--orientation-tolerance-rad",
+           "--red-qp-regularization",
+           "--yellow-qp-regularization",
            "--maximum-hard-violation",
            "--joint-position-margin-rad",
            "--legacy-cartesian-progress-weight",
@@ -1497,7 +1583,12 @@ Options parseOptions(int argc, char **argv) {
            "--red-secondary-task-link4-position-preservation-tolerance-mps",
            "--red-proxqp-maximum-iterations",
            "--red-proxqp-absolute-tolerance",
+           "--red-proxqp-relative-tolerance",
            "--red-proxqp-primal-infeasibility-tolerance",
+           "--yellow-proxqp-maximum-iterations",
+           "--yellow-proxqp-absolute-tolerance",
+           "--yellow-proxqp-relative-tolerance",
+           "--yellow-proxqp-primal-infeasibility-tolerance",
            "--yellow-task-posture-preference-weight",
            "--yellow-task-posture-preference-servo-gain-per-s",
            "--yellow-task-posture-preference-joint-weight-multipliers",

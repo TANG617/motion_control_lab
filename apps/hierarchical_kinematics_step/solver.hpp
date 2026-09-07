@@ -133,6 +133,9 @@ private:
 };
 
 void requireOk(const mcc::Status &status, const std::string &context);
+mcc::KinematicsSolverConfig makeYellowSolverConfig(const Options &options);
+mcc::HierarchicalKinematicsSolverConfig
+makeRedSolverConfig(const Options &options);
 mcc::JointNames activeJointNames(const R1RobotConfig &robot,
                                  const RobotOptions &options);
 std::vector<std::size_t> activeJointFullIndices(const R1RobotConfig &robot,

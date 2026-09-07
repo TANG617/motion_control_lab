@@ -90,10 +90,7 @@ inline const char *jointPlanningAlgorithmName(JointPlanningAlgorithm value) {
 }
 
 struct SolverOptions {
-  double regularization{1.0e-10};
-  double position_tolerance_m{1.0e-4};
-  double orientation_tolerance_rad{1.0e-4};
-  double maximum_accepted_hard_violation{1.0e-4};
+  double maximum_accepted_hard_violation{1.0e-3};
   double joint_position_margin_rad{1.0e-2};
   bool joint_position_braking_velocity_envelope_enabled{false};
   bool red_joint_acceleration_limits_enabled{false};
@@ -120,10 +117,19 @@ struct SolverOptions {
   double red_secondary_task_link4_position_weight{100.0};
   double red_secondary_task_link4_position_servo_gain_per_s{10.0};
   double red_secondary_task_link4_position_preservation_tolerance_mps{5.0e-4};
-  int red_proxqp_maximum_iterations{200};
+  double red_qp_regularization{1.0e-8};
+  int red_proxqp_maximum_iterations{1000};
   double red_proxqp_absolute_tolerance{2.0e-5};
+  double red_proxqp_relative_tolerance{0.0};
   double red_proxqp_primal_infeasibility_tolerance{1.0e-12};
   bool red_proxqp_warm_start_enabled{false};
+  bool red_accept_feasible_primary_maximum_iterations{true};
+  double yellow_qp_regularization{1.0e-10};
+  int yellow_proxqp_maximum_iterations{1000};
+  double yellow_proxqp_absolute_tolerance{1.0e-7};
+  double yellow_proxqp_relative_tolerance{0.0};
+  double yellow_proxqp_primal_infeasibility_tolerance{1.0e-7};
+  bool yellow_proxqp_warm_start_enabled{true};
   double yellow_task_posture_preference_weight{1.0};
   double yellow_task_posture_preference_servo_gain_per_s{10.0};
   std::vector<std::pair<std::string, double>>
@@ -266,9 +272,11 @@ struct PlanningOptions {
   double max_angular_velocity_rps{1.0};
   double max_angular_acceleration_rps2{2.0};
   double max_angular_jerk_rps3{10.0};
+  std::size_t cartesian_maximum_sample_count{100000U};
   PlanningSynchronization cartesian_synchronization{
       PlanningSynchronization::Time};
   JointPlanningAlgorithm joint_algorithm{JointPlanningAlgorithm::JerkLimited};
+  std::size_t joint_maximum_sample_count{100000U};
   PlanningSynchronization joint_synchronization{PlanningSynchronization::Phase};
 };
 

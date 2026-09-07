@@ -83,15 +83,6 @@ if(BUILD_TESTING)
     NAME apps.mcl_hierarchical_kinematics_step_options
     COMMAND test_hierarchical_kinematics_step_app_options
   )
-  add_test(
-    NAME apps.mcl_hierarchical_kinematics_step_python_launcher
-    COMMAND
-      "${Python3_EXECUTABLE}"
-      "${CMAKE_CURRENT_SOURCE_DIR}/tests/python_launcher_contract.py"
-      "$<TARGET_FILE:mcl_hierarchical_kinematics_step>"
-      "${PROJECT_SOURCE_DIR}/assets/robots/r1/mujoco/urdf/r1.urdf"
-      "${PROJECT_SOURCE_DIR}/assets/robots/r1/mujoco/mjcf/r1.xml"
-  )
 
   add_executable(
     test_hierarchical_kinematics_step_admittance

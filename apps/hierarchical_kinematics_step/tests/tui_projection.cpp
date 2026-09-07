@@ -114,8 +114,9 @@ int main() {
     mcl::SolverDebug solver;
     solver.label = label;
     solver.disposition = "accepted";
-    solver.termination_reason = "single-iteration";
-    solver.converged = true;
+    solver.termination_reason =
+        label == "Red" ? "feasible-suboptimal" : "single-iteration";
+    solver.converged = label != "Red";
     solver.ik_iterations = 1;
     solver.backend = "proxqp";
     solver.qp_status = "optimal";
@@ -260,10 +261,12 @@ int main() {
   nullspace.yellow_posture_error_rad = 0.2;
   nullspace.link4_weight = 100.0;
   nullspace.yellow_weight = 1.0;
-  nullspace.highest_completed_priority = "Secondary";
+  nullspace.solution_quality = "feasible-suboptimal";
+  nullspace.selected_priority = "Primary";
+  nullspace.highest_completed_priority = "none";
   nullspace.primary_attempted = true;
-  nullspace.secondary_attempted = true;
-  nullspace.secondary_succeeded = true;
+  nullspace.secondary_attempted = false;
+  nullspace.secondary_succeeded = false;
 
   mcl::PlannedGroupedTuiSnapshot snapshot;
   snapshot.frame = &frame;
@@ -300,7 +303,7 @@ int main() {
                   std::string::npos &&
               document.header_left.find("focus link4") != std::string::npos &&
               document.header_left.find("step 0.0050 m") != std::string::npos &&
-              document.header_right.find("Red Primary MAX_ITER") !=
+              document.header_right.find("Red Primary DEGRADED · MAX_ITER") !=
                   std::string::npos,
           "compact header must expose mode, focus, step, and solver exit");
   require(document.help_lines.size() == 6U &&
@@ -343,6 +346,10 @@ int main() {
       section(nullspace_page, "Control").style == mcl::TuiSectionStyle::Panel &&
           section(nullspace_page, "Control").tables.front().rows.at(0).at(1) ==
               "right" &&
+          section(nullspace_page, "Control").tables.front().rows.at(6).at(1) ==
+              "feasible-suboptimal" &&
+          section(nullspace_page, "Control").tables.front().rows.at(7).at(1) ==
+              "Primary" &&
               section(nullspace_page, "TCP hierarchy status").column == 1U &&
           section(nullspace_page, "Secondary objectives").row == 1U,
           "null-space semantics must be projected into shared panels");

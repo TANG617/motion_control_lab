@@ -150,6 +150,8 @@ struct NullspaceTuiDebug {
   double yellow_weight{0.0};
   double left_task_scale{1.0};
   double right_task_scale{1.0};
+  std::string solution_quality{"not-accepted"};
+  std::string selected_priority{"none"};
   std::string highest_completed_priority{"none"};
   std::string fallback_priority{"none"};
   bool primary_attempted{false};

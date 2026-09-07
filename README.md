@@ -519,11 +519,11 @@ app compiled defaults < script preset/environment < trailing explicit arguments
 
 `hierarchical_kinematics_step` 不使用上述 Bash wrapper，而在
 `scripts/profiles/<profile>/` 为五个 profile 分别提供 keyboard、MCAP interactive、MCAP
-headless 和 CSV batch 四个纯标准库 Python recipe。各 profile 的 `config.py` 完整列出 Python
-launcher overrides；每个 recipe 固定 profile/source，并导出 `build_command(argv)` 与
-`run(argv)` 供 experiments import。Python 未设置字段使用 `argparse.SUPPRESS`，C++ profile
-defaults 仍是 typed defaults 唯一来源，显式 argparse 参数优先级最高。只保留 `MCL_BINARY`、
-`MCL_INSTALL_PREFIX`、`MCL_LD_LIBRARY_PATH`、`MCL_CPU_SET`、`MCL_RT_PRIORITY` 五个运行环境变量。
+headless 和 CSV batch 四个纯标准库 Python recipe。每个脚本直接持有自己的私有 `_RECIPE`，
+不提供 import API；experiment 应创建自己的 recipe。Python 未设置字段使用
+`argparse.SUPPRESS`，C++ profile defaults 仍是 typed defaults 唯一来源，显式 argparse 参数
+优先级最高。只保留 `MCL_BINARY`、`MCL_INSTALL_PREFIX`、`MCL_LD_LIBRARY_PATH`、
+`MCL_CPU_SET`、`MCL_RT_PRIORITY` 五个运行环境变量。
 
 replay artifact 记录 resolved config、原始 argv、`--launcher` 标识和输入 SHA-256/provenance。
 `mcl_baseline` 接受 source/UI/Viz/output 选择，但明确拒绝 solver、backend、rate、tolerance、

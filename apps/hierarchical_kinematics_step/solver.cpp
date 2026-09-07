@@ -46,10 +46,17 @@ mcc::KinematicsSolverConfig makeYellowConfig(const Options &options) {
   config.joint_limit_policy =
       mcc::KinematicsJointLimitPolicy::ExplicitRequirements;
   config.qp.backend = mcc::QpBackend::ProxQp;
-  config.qp.regularization = app.solver.regularization;
-  config.convergence.position_tolerance_m = app.solver.position_tolerance_m;
-  config.convergence.orientation_tolerance_rad =
-      app.solver.orientation_tolerance_rad;
+  config.qp.regularization = app.solver.yellow_qp_regularization;
+  config.qp.proxqp.maximum_iterations =
+      app.solver.yellow_proxqp_maximum_iterations;
+  config.qp.proxqp.absolute_tolerance =
+      app.solver.yellow_proxqp_absolute_tolerance;
+  config.qp.proxqp.relative_tolerance =
+      app.solver.yellow_proxqp_relative_tolerance;
+  config.qp.proxqp.primal_infeasibility_tolerance =
+      app.solver.yellow_proxqp_primal_infeasibility_tolerance;
+  config.qp.proxqp.warm_start_enabled =
+      app.solver.yellow_proxqp_warm_start_enabled;
   config.maximum_accepted_hard_violation =
       app.solver.maximum_accepted_hard_violation;
   return config;
@@ -61,18 +68,24 @@ mcc::HierarchicalKinematicsSolverConfig makeRedConfig(const Options &options) {
   config.execution = mcc::ServoStepOptions{1.0 / app.red_rate_hz};
   config.joint_limit_policy =
       mcc::KinematicsJointLimitPolicy::ExplicitRequirements;
-  if (profileCapabilities(options.profile).nullspace) {
-    config.qp.proxqp.maximum_iterations =
-        app.solver.red_proxqp_maximum_iterations;
-  }
+  config.qp.backend = mcc::QpBackend::ProxQp;
+  config.qp.regularization = app.solver.red_qp_regularization;
+  config.qp.proxqp.maximum_iterations =
+      app.solver.red_proxqp_maximum_iterations;
   config.qp.proxqp.absolute_tolerance =
       app.solver.red_proxqp_absolute_tolerance;
+  config.qp.proxqp.relative_tolerance =
+      app.solver.red_proxqp_relative_tolerance;
   config.qp.proxqp.primal_infeasibility_tolerance =
       app.solver.red_proxqp_primal_infeasibility_tolerance;
   config.qp.proxqp.warm_start_enabled =
       app.solver.red_proxqp_warm_start_enabled;
   config.maximum_accepted_hard_violation =
       app.solver.maximum_accepted_hard_violation;
+  config.maximum_iterations_policy =
+      app.solver.red_accept_feasible_primary_maximum_iterations
+          ? mcc::HierarchicalMaximumIterationsPolicy::AcceptFeasiblePrimary
+          : mcc::HierarchicalMaximumIterationsPolicy::Reject;
   return config;
 }
 
@@ -284,6 +297,15 @@ void requireOk(const mcc::Status &status, const std::string &) {
   }
 }
 
+mcc::KinematicsSolverConfig makeYellowSolverConfig(const Options &options) {
+  return makeYellowConfig(options);
+}
+
+mcc::HierarchicalKinematicsSolverConfig
+makeRedSolverConfig(const Options &options) {
+  return makeRedConfig(options);
+}
+
 mcc::JointNames activeJointNames(const R1RobotConfig &robot,
                                  const RobotOptions &options) {
   mcc::JointNames result;
@@ -353,7 +375,8 @@ void configureSolver(
       profileCapabilities(options.profile).nullspace;
   mcc::HierarchicalKinematicsSolverBuilder red_builder;
   requireOk(
-      red_builder.configure(model, active_joint_names, makeRedConfig(options)),
+      red_builder.configure(model, active_joint_names,
+                            makeRedSolverConfig(options)),
       "configure Red HKS");
   handles.red = addCartesianTasks(red_builder, robot, solver_options,
                                   strict_priority_topology);
@@ -418,7 +441,7 @@ void configureSolver(
 
   mcc::KinematicsSolverBuilder yellow_builder;
   requireOk(yellow_builder.configure(model, active_joint_names,
-                                     makeYellowConfig(options)),
+                                     makeYellowSolverConfig(options)),
             "configure Yellow solver");
   const auto active_joint_full_indices =
       activeJointFullIndices(robot, options.interactive.robot);
@@ -480,7 +503,6 @@ void configureSolver(
   fk_config.execution = mcc::TargetSolveOptions{};
   fk_config.joint_limit_policy = mcc::KinematicsJointLimitPolicy::Unconstrained;
   fk_config.qp.backend = mcc::QpBackend::ProxQp;
-  fk_config.qp.regularization = solver_options.regularization;
   requireOk(fk_builder.configure(model, active_joint_names, fk_config),
             "configure FK solver");
   requireOk(fk_builder.finalize(runtime.fkSolver()), "finalize FK solver");
