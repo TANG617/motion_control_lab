@@ -206,19 +206,14 @@ public:
     throwIfError(mcc::RobotModel::load(model_description, model_));
 
     mcc::KinematicsSolverConfig solver_config;
-    solver_config.mode = mcc::IkSolveMode::ServoStep;
-    solver_config.servo_period = 1.0 / rate_hz;
+    solver_config.execution = mcc::ServoStepOptions{1.0 / rate_hz};
     solver_config.joint_limit_policy =
         mcc::KinematicsJointLimitPolicy::ExplicitRequirements;
     solver_config.qp.backend = mccQpBackend(backend_);
     solver_config.qp.regularization = algorithm.regularization;
-    solver_config.maximum_iterations = 1;
-    solver_config.soft_solve_time_budget_ms = 100.0;
-    solver_config.position_tolerance_m = algorithm.position_tolerance_m;
-    solver_config.orientation_tolerance_rad =
+    solver_config.convergence.position_tolerance_m = algorithm.position_tolerance_m;
+    solver_config.convergence.orientation_tolerance_rad =
         algorithm.orientation_tolerance_rad;
-    solver_config.minimum_position_improvement_m = 1.0e-8;
-    solver_config.minimum_orientation_improvement_rad = 1.0e-8;
 
     mcc::KinematicsSolverBuilder builder;
     throwIfError(builder.configure(model_, robot.joint_names, solver_config));

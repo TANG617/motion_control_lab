@@ -236,7 +236,7 @@ endif()
 
 if(MCL_BUILD_ANY_INTERACTIVE_IK OR MCL_BUILD_MCC_PLOTS OR MCL_BUILD_CARTESIAN_PLANNING OR
    MCL_BUILD_E03_BATCH_REPLAY_IK)
-  find_package(motion_control_core CONFIG REQUIRED)
+  find_package(motion_control_core 0.4 CONFIG REQUIRED)
 endif()
 
 if(MCL_BUILD_HIERARCHICAL_KINEMATICS_STEP OR
@@ -607,7 +607,8 @@ endif()
 
 set(E01_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/experiments/E01_placo_smoke")
 set(E01_DEFINITION "${E01_DIRECTORY}/definition.json")
-set(E01_MODEL "/workspace/models/r1.cos.urdf")
+set(E01_MODEL "/workspace/models/r1.cos.urdf" CACHE FILEPATH
+  "R1 URDF used by E01 and the standalone solver regression tests")
 set(MCL_PLACO_UPSTREAM_REVISION "e6c288604639d67b979a16cb2ad26913413c8e3a")
 set(
   MCL_RUNTIME_DESCRIPTION

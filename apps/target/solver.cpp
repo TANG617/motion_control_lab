@@ -207,27 +207,27 @@ public:
     throwIfError(mcc::RobotModel::load(model_description, model_));
 
     mcc::KinematicsSolverConfig solver_config;
-    solver_config.mode = mcc::IkSolveMode::TargetSolve;
-    solver_config.servo_period = 0.0;
+    mcc::TargetSolveOptions target_options;
     solver_config.joint_limit_policy =
         mcc::KinematicsJointLimitPolicy::ExplicitRequirements;
     solver_config.qp.backend = mccQpBackend(backend_);
     solver_config.qp.regularization = algorithm.regularization;
-    solver_config.maximum_iterations = algorithm.maximum_iterations;
-    solver_config.soft_solve_time_budget_ms =
+    target_options.maximum_iterations = algorithm.maximum_iterations;
+    target_options.soft_solve_time_budget_ms =
         algorithm.soft_solve_time_budget_ms;
-    solver_config.position_tolerance_m = algorithm.position_tolerance_m;
-    solver_config.orientation_tolerance_rad =
+    solver_config.convergence.position_tolerance_m = algorithm.position_tolerance_m;
+    solver_config.convergence.orientation_tolerance_rad =
         algorithm.orientation_tolerance_rad;
-    solver_config.minimum_position_improvement_m =
+    target_options.minimum_position_improvement_m =
         algorithm.minimum_position_improvement_m;
-    solver_config.minimum_orientation_improvement_rad =
+    target_options.minimum_orientation_improvement_rad =
         algorithm.minimum_orientation_improvement_rad;
     if (backend_ == MccBackend::Proxqp) {
       solver_config.qp.proxqp.absolute_tolerance =
           algorithm.proxqp_absolute_tolerance;
     }
 
+    solver_config.execution = target_options;
     mcc::KinematicsSolverBuilder builder;
     throwIfError(builder.configure(model_, robot.joint_names, solver_config));
 
@@ -263,10 +263,9 @@ public:
     posture_config.name = "initial-posture";
     posture_config.enforcement = mcc::squaredL2Penalty(
         algorithm.posture_weight, static_cast<int>(robot.joint_names.size()));
-    posture_config.reference_positions = mcl::toEigen(positions_);
-    posture_config.role = mcc::PostureTaskRole::Regularization;
     mcc::PostureTaskHandle posture_task;
     throwIfError(builder.addPostureTask(posture_config, posture_task));
+    request_.posture_targets.emplace_back(posture_task, mcl::toEigen(positions_));
 
     mcc::JointPositionLimitConfig joint_limit_config;
     joint_limit_config.margin = algorithm.joint_position_margin_rad;
@@ -296,7 +295,9 @@ public:
   TargetSolveResult solve(const std::vector<mcl::ArmTarget> &targets) {
     const auto &left_target = targets.at(0);
     const auto &right_target = targets.at(1);
-    mcc::InverseKinematicsRequest request;
+    auto &request = request_;
+    request.position_targets.clear();
+    request.orientation_targets.clear();
     request.reference_frame_name = robot_.base_frame;
     request.state = makeRobotState(positions_, velocities_);
     request.position_targets.push_back(
@@ -372,6 +373,8 @@ private:
   std::vector<double> velocities_;
   std::shared_ptr<const mcc::RobotModel> model_;
   mcc::KinematicsSolver solver_;
+  // The initial posture stays fixed; state and Cartesian goals are refreshed per call.
+  mcc::InverseKinematicsRequest request_;
   mcc::PositionTaskHandle left_position_task_;
   mcc::OrientationTaskHandle left_orientation_task_;
   mcc::PositionTaskHandle right_position_task_;

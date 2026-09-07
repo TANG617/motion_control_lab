@@ -196,17 +196,12 @@ ReplayIkCaseResult executeReplayIkCase(
   requireOk(mcc::RobotModel::load(model_description, model), "failed to load robot model");
 
   mcc::KinematicsSolverConfig solver_config;
-  solver_config.mode = mcc::IkSolveMode::ServoStep;
-  solver_config.servo_period = static_cast<double>(options.servo_period_ns) / 1.0e9;
+  solver_config.execution = mcc::ServoStepOptions{static_cast<double>(options.servo_period_ns) / 1.0e9};
   solver_config.joint_limit_policy = mcc::KinematicsJointLimitPolicy::ExplicitRequirements;
   solver_config.qp.backend = mcc::QpBackend::ProxQp;
   solver_config.qp.regularization = 1.0e-8;
-  solver_config.maximum_iterations = 1;
-  solver_config.soft_solve_time_budget_ms = 100.0;
-  solver_config.position_tolerance_m = 1.0e-4;
-  solver_config.orientation_tolerance_rad = 1.0e-4;
-  solver_config.minimum_position_improvement_m = 1.0e-8;
-  solver_config.minimum_orientation_improvement_rad = 1.0e-8;
+  solver_config.convergence.position_tolerance_m = 1.0e-4;
+  solver_config.convergence.orientation_tolerance_rad = 1.0e-4;
 
   mcc::KinematicsSolverBuilder builder;
   requireOk(builder.configure(model, robot.joint_names, solver_config), "failed to configure IK");

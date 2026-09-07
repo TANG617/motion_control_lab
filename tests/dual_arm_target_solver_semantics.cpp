@@ -125,6 +125,9 @@ void validateMccInfeasibleHold(MccTargetSolver & solver)
   require(!rejected.accepted, "MCC did not reject the infeasible target");
   require(
     solver.positions() == accepted_positions, "MCC changed accepted state after infeasible target");
+  targets.front().target_pose = solver.currentPose(motion_control_lab::ArmSide::Left);
+  const auto recovered = solver.solve(targets);
+  require(recovered.accepted, "MCC failed to recover with a complete request after rejection");
 }
 
 }  // namespace

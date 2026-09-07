@@ -212,7 +212,8 @@ void TelemetryEncoder::appendMessage(
   const auto size = message.ByteSizeLong();
   std::vector<std::byte> data(size);
   if (!message.SerializeToArray(data.data(), static_cast<int>(size))) {
-    throw std::runtime_error("failed to serialize " + message.GetDescriptor()->full_name());
+    throw std::runtime_error(
+      "failed to serialize " + std::string(message.GetDescriptor()->full_name()));
   }
   statistics.serialized_bytes += size;
   statistics.encode_time_ms += std::chrono::duration<double, std::milli>(
@@ -220,7 +221,7 @@ void TelemetryEncoder::appendMessage(
   batch.encoded_messages.push_back(motion_control::viz::EncodedMessageSample{
     std::move(channel),
     "protobuf",
-    message.GetDescriptor()->full_name(),
+    std::string(message.GetDescriptor()->full_name()),
     "protobuf",
     schema_data_,
     std::move(data),

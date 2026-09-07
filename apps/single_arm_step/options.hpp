@@ -15,7 +15,6 @@ struct AppOptions {
   CartesianTeleopOptions tui{"left", 0.005, 0.001, 0.5, 5.0};
   PreviewSinkOptions visualization{true, "127.0.0.1", 8765, std::nullopt};
   double regularization{1.0e-8};
-  int maximum_iterations{1};
   double position_tolerance_m{1.0e-4};
   double orientation_tolerance_rad{1.0e-4};
   double joint_position_margin_rad{0.0};

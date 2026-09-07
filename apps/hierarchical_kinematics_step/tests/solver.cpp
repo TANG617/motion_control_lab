@@ -131,6 +131,8 @@ int main(int argc, char **argv) {
     require(yellow_posture_error.role ==
                 motion_control::core::PostureTaskRole::Regularization,
             "Yellow posture diagnostic role mismatch");
+    require(yellow_posture_error.tolerance_rad == 0.0,
+            "Yellow posture must not introduce a convergence criterion");
     const auto yellow_posture_requirement = std::find_if(
         yellow_diagnostics.kinematics.optimization.requirements.begin(),
         yellow_diagnostics.kinematics.optimization.requirements.end(),
@@ -243,6 +245,25 @@ int main(int argc, char **argv) {
             scales[0].name == "red-primary/task/left-tcp-cartesian-progress" &&
             scales[1].name == "red-primary/task/right-tcp-cartesian-progress",
         "Primary must expose exactly one active Cartesian scale per arm");
+
+    // The app must submit a complete request even before Yellow has a value.
+    runtime.beginRun(2);
+    app::requireOk(runtime.solveRed(red, red_solution, red_diagnostics),
+                   "Red without a Yellow value");
+    require(red_diagnostics.coupling_state == app::CouplingState::WaitingForValue,
+            "Red must keep coupling disabled before the first Yellow value");
+
+    auto invalid_yellow = yellow;
+    invalid_yellow.position_targets.emplace_back(
+        motion_control::core::PositionTaskHandle{999}, Eigen::Vector3d::Zero());
+    require(runtime.solveYellow(invalid_yellow, yellow_solution, yellow_diagnostics).code ==
+                motion_control::core::StatusCode::InvalidTarget,
+            "Yellow must reject an unknown target");
+    app::requireOk(runtime.solveYellow(yellow, yellow_solution, yellow_diagnostics),
+                   "Yellow recovery with the fixed posture request");
+    require(yellow_diagnostics.kinematics.posture_errors.size() == 1U &&
+                yellow_diagnostics.kinematics.posture_errors.front().enabled,
+            "Yellow recovery lost the posture target");
 
     for (const bool exercise_left : {true, false}) {
       runtime.beginRun(exercise_left ? 2U : 3U);

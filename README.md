@@ -58,6 +58,10 @@ MoveIt 和 C++20 构建，Lab 目标继续保持 C++17。
 
 ## 构建与测试
 
+MCC 调用方现在要求 `motion_control_core 0.4`，需同时重新构建 core 和 Lab。
+配置、完整 posture 请求及删除的无效 ServoStep CLI 参数见
+[MCC 0.4 app 迁移说明](docs/mcc_0_4_migration.md)。
+
 ### Workspace colcon 构建与运行产物
 
 > 本节更新日期：2026-08-26

@@ -86,7 +86,7 @@ struct SolverDiagnostics {
 class SolverRuntime {
 public:
   void initialize(const SolverHandles &handles,
-                  Eigen::Index active_joint_count);
+                  const Eigen::VectorXd &yellow_posture_positions);
   mcc::KinematicsSolver &yellowSolver() { return yellow_solver_; }
   mcc::HierarchicalKinematicsSolver &redSolver() { return red_solver_; }
   mcc::KinematicsSolver &fkSolver() { return fk_solver_; }
@@ -121,6 +121,8 @@ private:
   mcc::HierarchicalKinematicsSolver red_solver_;
   mcc::KinematicsSolver fk_solver_;
   SolverHandles handles_;
+  // App-owned nominal posture in active-joint order, submitted on every Yellow solve.
+  mcc::InverseKinematicsRequest yellow_request_;
   mcc::SnapshotBuffer<YellowEnvelope> yellow_to_red_;
   YellowEnvelope yellow_publish_;
   YellowEnvelope yellow_read_;

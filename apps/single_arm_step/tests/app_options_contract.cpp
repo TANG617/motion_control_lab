@@ -48,6 +48,9 @@ int main() {
   };
   char unknown[] = "--unknown";
   char *unknown_argv[]{program, urdf_option, urdf, unknown};
+  char obsolete_iterations[] = "--maximum-iterations";
+  char iterations[] = "2";
+  char *obsolete_argv[]{program, urdf_option, urdf, obsolete_iterations, iterations};
   char *missing_argv[]{program, urdf_option, urdf, rate_option};
   char bad_ui[] = "invalid";
   char *bad_ui_argv[]{program, urdf_option, urdf, ui_option, bad_ui};
@@ -57,7 +60,8 @@ int main() {
   char max_value[] = "0.001";
   char *bad_range_argv[]{program,   urdf_option, urdf,     min_option,
                          min_value, max_option,  max_value};
-  if (!expectFailure(4, unknown_argv) || !expectFailure(4, missing_argv) ||
+  if (!expectFailure(5, obsolete_argv) ||
+      !expectFailure(4, unknown_argv) || !expectFailure(4, missing_argv) ||
       !expectFailure(5, bad_ui_argv) || !expectFailure(7, bad_range_argv)) {
     return EXIT_FAILURE;
   }

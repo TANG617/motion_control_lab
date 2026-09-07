@@ -93,8 +93,6 @@ struct SolverOptions {
   double regularization{1.0e-10};
   double position_tolerance_m{1.0e-4};
   double orientation_tolerance_rad{1.0e-4};
-  double minimum_position_improvement_m{1.0e-8};
-  double minimum_orientation_improvement_rad{1.0e-8};
   double maximum_accepted_hard_violation{1.0e-4};
   double joint_position_margin_rad{1.0e-2};
   bool joint_position_braking_velocity_envelope_enabled{false};
@@ -122,7 +120,6 @@ struct SolverOptions {
   double red_secondary_task_link4_position_weight{100.0};
   double red_secondary_task_link4_position_servo_gain_per_s{10.0};
   double red_secondary_task_link4_position_preservation_tolerance_mps{5.0e-4};
-  int yellow_maximum_iterations{1};
   int red_proxqp_maximum_iterations{200};
   double red_proxqp_absolute_tolerance{2.0e-5};
   double red_proxqp_primal_infeasibility_tolerance{1.0e-12};

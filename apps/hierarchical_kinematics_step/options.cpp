@@ -203,10 +203,6 @@ bool parseSolverOption(const std::string &argument, const std::string &value,
     options.maximum_accepted_hard_violation = parsed;
   else if (argument == "--joint-position-margin-rad")
     options.joint_position_margin_rad = parsed;
-  else if (argument == "--minimum-position-improvement-m")
-    options.minimum_position_improvement_m = parsed;
-  else if (argument == "--minimum-orientation-improvement-rad")
-    options.minimum_orientation_improvement_rad = parsed;
   else if (argument == "--legacy-cartesian-progress-weight")
     options.legacy_cartesian_progress_weight = parsed;
   else if (argument == "--legacy-cartesian-preservation-tolerance")
@@ -543,6 +539,12 @@ std::string resolvedOptionsJson(const Options &options) {
       result.append(value);
     return result;
   };
+  const auto indices = [](const std::vector<std::size_t> &values) {
+    Json::Value result{Json::arrayValue};
+    for (const auto value : values)
+      result.append(static_cast<Json::UInt64>(value));
+    return result;
+  };
   const auto transform = [](const Eigen::Isometry3d &value) {
     Json::Value result;
     const Eigen::Quaterniond rotation{value.rotation()};
@@ -603,8 +605,6 @@ std::string resolvedOptionsJson(const Options &options) {
   MCL_SOLVER_FIELD(regularization);
   MCL_SOLVER_FIELD(position_tolerance_m);
   MCL_SOLVER_FIELD(orientation_tolerance_rad);
-  MCL_SOLVER_FIELD(minimum_position_improvement_m);
-  MCL_SOLVER_FIELD(minimum_orientation_improvement_rad);
   MCL_SOLVER_FIELD(maximum_accepted_hard_violation);
   MCL_SOLVER_FIELD(joint_position_margin_rad);
   MCL_SOLVER_FIELD(joint_position_braking_velocity_envelope_enabled);
@@ -631,7 +631,6 @@ std::string resolvedOptionsJson(const Options &options) {
   MCL_SOLVER_FIELD(red_secondary_task_link4_position_servo_gain_per_s);
   MCL_SOLVER_FIELD(
       red_secondary_task_link4_position_preservation_tolerance_mps);
-  MCL_SOLVER_FIELD(yellow_maximum_iterations);
   MCL_SOLVER_FIELD(red_proxqp_maximum_iterations);
   MCL_SOLVER_FIELD(red_proxqp_absolute_tolerance);
   MCL_SOLVER_FIELD(red_proxqp_primal_infeasibility_tolerance);
@@ -671,9 +670,9 @@ std::string resolvedOptionsJson(const Options &options) {
   robot_json["right_tcp_offset"] = transform(robot.right_tcp_offset);
   robot_json["joint_names"] = strings(robot.joint_names);
   robot_json["default_positions"] = numbers(robot.default_positions);
-  robot_json["left_arm_joint_indices"] = numbers(robot.left_arm_joint_indices);
+  robot_json["left_arm_joint_indices"] = indices(robot.left_arm_joint_indices);
   robot_json["right_arm_joint_indices"] =
-      numbers(robot.right_arm_joint_indices);
+      indices(robot.right_arm_joint_indices);
   robot_json["effort_limits"] = numbers(robot.effort_limits);
   robot_json["inactive_joint_names"] = strings(robot.inactive_joint_names);
   robot_json["collision_mesh_search_paths"] =
@@ -1177,11 +1176,6 @@ HierarchicalOptions parseHierarchicalOptions(int argc, char **argv,
               .red_secondary_task_yellow_posture_coupling_joint_weight_multipliers,
           parseJointWeightMultipliers(
               argument, requireValue(index, argc, argv, argument)));
-    } else if (argument == "--yellow-maximum-iterations") {
-      const auto value = std::stoi(requireValue(index, argc, argv, argument));
-      if (value <= 0)
-        throw std::runtime_error(argument + " must be positive");
-      options.solver.yellow_maximum_iterations = value;
     } else if (argument == "--red-proxqp-maximum-iterations") {
       const auto value = std::stoi(requireValue(index, argc, argv, argument));
       if (value <= 0)
@@ -1195,8 +1189,6 @@ HierarchicalOptions parseHierarchicalOptions(int argc, char **argv,
              "--orientation-tolerance-rad",
              "--maximum-hard-violation",
                     "--joint-position-margin-rad",
-                    "--minimum-position-improvement-m",
-                    "--minimum-orientation-improvement-rad",
                     "--legacy-cartesian-progress-weight",
                     "--legacy-cartesian-preservation-tolerance",
                     "--legacy-scale-preservation-tolerance",
@@ -1484,8 +1476,6 @@ Options parseOptions(int argc, char **argv) {
            "--orientation-tolerance-rad",
            "--maximum-hard-violation",
            "--joint-position-margin-rad",
-           "--minimum-position-improvement-m",
-           "--minimum-orientation-improvement-rad",
            "--legacy-cartesian-progress-weight",
            "--legacy-cartesian-preservation-tolerance",
            "--legacy-scale-preservation-tolerance",
@@ -1505,7 +1495,6 @@ Options parseOptions(int argc, char **argv) {
            "--red-secondary-task-link4-position-weight",
            "--red-secondary-task-link4-position-servo-gain-per-s",
            "--red-secondary-task-link4-position-preservation-tolerance-mps",
-           "--yellow-maximum-iterations",
            "--red-proxqp-maximum-iterations",
            "--red-proxqp-absolute-tolerance",
            "--red-proxqp-primal-infeasibility-tolerance",

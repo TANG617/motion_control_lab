@@ -32,6 +32,15 @@ bool rejects(const std::function<void()> &call) {
 } // namespace
 
 int main() {
+  for (const char *obsolete : {"--yellow-maximum-iterations",
+                               "--minimum-position-improvement-m",
+                               "--minimum-orientation-improvement-rad"}) {
+    if (!rejects([&] {
+          (void)parse({"app", "--profile", "planned", "teleop", obsolete, "1"});
+        })) {
+      return EXIT_FAILURE;
+    }
+  }
   constexpr const char *kDefaultUrdf =
       "/workspace/models/Psi_R1_visual_collision.urdf";
   const auto hierarchical = app::profileDefaults(app::Profile::Hierarchical);
@@ -126,9 +135,7 @@ int main() {
 
   const auto default_planned =
       parse({"app", "--profile", "planned", "teleop"});
-  if (default_planned.interactive.urdf_path != kDefaultUrdf ||
-      default_planned.interactive.robot.collision_mesh_search_paths !=
-          std::vector<std::string>{"/workspace/models"}) {
+  if (default_planned.interactive.urdf_path != kDefaultUrdf) {
     return EXIT_FAILURE;
   }
 
@@ -141,6 +148,8 @@ int main() {
              "/tmp/r1.urdf",
              "--mujoco-model",
              "/tmp/r1.xml",
+             "--collision-mesh-search-paths",
+             "/tmp/meshes",
        "--joint-position-braking-velocity-envelope",
              "--red-joint-acceleration-limits",
              "--left-tcp-offset",
@@ -155,7 +164,9 @@ int main() {
              "800",
              "--yellow-rate",
              "80"});
-  if (!custom.interactive.solver
+  if (custom.interactive.robot.collision_mesh_search_paths !=
+          std::vector<std::string>{"/tmp/meshes"} ||
+      !custom.interactive.solver
            .joint_position_braking_velocity_envelope_enabled ||
       !custom.interactive.solver.red_joint_acceleration_limits_enabled ||
       custom.interactive.robot.left_tcp_offset.translation().x() != 0.1 ||

@@ -24,18 +24,13 @@ loadRobotModel(const R1RobotConfig &robot, const AppOptions &options) {
 
 mcc::KinematicsSolverConfig makeSolverConfig(const AppOptions &options) {
   mcc::KinematicsSolverConfig config;
-  config.mode = mcc::IkSolveMode::ServoStep;
-  config.servo_period = 1.0 / options.rate_hz;
+  config.execution = mcc::ServoStepOptions{1.0 / options.rate_hz};
   config.joint_limit_policy =
       mcc::KinematicsJointLimitPolicy::ExplicitRequirements;
   config.qp.backend = mcc::QpBackend::ProxQp;
   config.qp.regularization = options.regularization;
-  config.maximum_iterations = options.maximum_iterations;
-  config.soft_solve_time_budget_ms = 100.0;
-  config.position_tolerance_m = options.position_tolerance_m;
-  config.orientation_tolerance_rad = options.orientation_tolerance_rad;
-  config.minimum_position_improvement_m = 1.0e-8;
-  config.minimum_orientation_improvement_rad = 1.0e-8;
+  config.convergence.position_tolerance_m = options.position_tolerance_m;
+  config.convergence.orientation_tolerance_rad = options.orientation_tolerance_rad;
   return config;
 }
 

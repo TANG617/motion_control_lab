@@ -42,20 +42,14 @@ collisionModelDescription(const RobotOptions &options) {
 mcc::KinematicsSolverConfig makeYellowConfig(const Options &options) {
   const auto &app = options.interactive;
   mcc::KinematicsSolverConfig config;
-  config.mode = mcc::IkSolveMode::ServoStep;
-  config.servo_period = 1.0 / app.yellow_rate_hz;
-  config.maximum_iterations = app.solver.yellow_maximum_iterations;
-  config.soft_solve_time_budget_ms = 1000.0 / app.yellow_rate_hz;
+  config.execution = mcc::ServoStepOptions{1.0 / app.yellow_rate_hz};
   config.joint_limit_policy =
       mcc::KinematicsJointLimitPolicy::ExplicitRequirements;
   config.qp.backend = mcc::QpBackend::ProxQp;
   config.qp.regularization = app.solver.regularization;
-  config.position_tolerance_m = app.solver.position_tolerance_m;
-  config.orientation_tolerance_rad = app.solver.orientation_tolerance_rad;
-  config.minimum_position_improvement_m =
-      app.solver.minimum_position_improvement_m;
-  config.minimum_orientation_improvement_rad =
-      app.solver.minimum_orientation_improvement_rad;
+  config.convergence.position_tolerance_m = app.solver.position_tolerance_m;
+  config.convergence.orientation_tolerance_rad =
+      app.solver.orientation_tolerance_rad;
   config.maximum_accepted_hard_violation =
       app.solver.maximum_accepted_hard_violation;
   return config;
@@ -64,7 +58,7 @@ mcc::KinematicsSolverConfig makeYellowConfig(const Options &options) {
 mcc::HierarchicalKinematicsSolverConfig makeRedConfig(const Options &options) {
   const auto &app = options.interactive;
   mcc::HierarchicalKinematicsSolverConfig config;
-  config.servo_period = 1.0 / app.red_rate_hz;
+  config.execution = mcc::ServoStepOptions{1.0 / app.red_rate_hz};
   config.joint_limit_policy =
       mcc::KinematicsJointLimitPolicy::ExplicitRequirements;
   if (profileCapabilities(options.profile).nullspace) {
@@ -395,8 +389,6 @@ void configureSolver(
           ? solver_options.red_secondary_task_yellow_posture_coupling_weight
           : solver_options.legacy_yellow_to_red_coupling_weight,
       1);
-  coupling.reference_positions = Eigen::VectorXd::Zero(
-      static_cast<Eigen::Index>(active_joint_names.size()));
   coupling.servo_gain_per_s =
       strict_priority_topology
           ? solver_options
@@ -408,7 +400,6 @@ void configureSolver(
         solver_options
             .red_secondary_task_yellow_posture_coupling_joint_weight_multipliers);
   }
-  coupling.role = mcc::PostureTaskRole::Regularization;
   requireOk(
       red_builder.addPostureTask(
           mcc::PriorityLevel::Secondary, coupling,
@@ -438,11 +429,11 @@ void configureSolver(
           ? solver_options.yellow_task_posture_preference_weight
           : solver_options.legacy_yellow_posture_weight,
       1);
-  posture.reference_positions.resize(
+  Eigen::VectorXd yellow_posture_positions(
       static_cast<Eigen::Index>(active_joint_full_indices.size()));
   for (std::size_t index = 0; index < active_joint_full_indices.size();
        ++index) {
-    posture.reference_positions(static_cast<Eigen::Index>(index)) =
+    yellow_posture_positions(static_cast<Eigen::Index>(index)) =
         robot.default_positions.at(active_joint_full_indices[index]);
   }
   posture.servo_gain_per_s =
@@ -454,7 +445,6 @@ void configureSolver(
         active_joint_names,
         solver_options.yellow_task_posture_preference_joint_weight_multipliers);
   }
-  posture.role = mcc::PostureTaskRole::Regularization;
   requireOk(yellow_builder.addPostureTask(posture, handles.yellow_posture),
             "register " + posture.name);
   mcc::SelfCollisionAvoidanceConfig collision;
@@ -487,19 +477,21 @@ void configureSolver(
 
   mcc::KinematicsSolverBuilder fk_builder;
   mcc::KinematicsSolverConfig fk_config;
-  fk_config.mode = mcc::IkSolveMode::TargetSolve;
+  fk_config.execution = mcc::TargetSolveOptions{};
   fk_config.joint_limit_policy = mcc::KinematicsJointLimitPolicy::Unconstrained;
   fk_config.qp.backend = mcc::QpBackend::ProxQp;
   fk_config.qp.regularization = solver_options.regularization;
   requireOk(fk_builder.configure(model, active_joint_names, fk_config),
             "configure FK solver");
   requireOk(fk_builder.finalize(runtime.fkSolver()), "finalize FK solver");
-  runtime.initialize(handles,
-                     static_cast<Eigen::Index>(active_joint_names.size()));
+  runtime.initialize(handles, yellow_posture_positions);
 }
 
 void SolverRuntime::initialize(const SolverHandles &handles,
-                               Eigen::Index active_joint_count) {
+                               const Eigen::VectorXd &yellow_posture_positions) {
+  const Eigen::Index active_joint_count = yellow_posture_positions.size();
+  yellow_request_.posture_targets = {
+      {handles.yellow_posture, yellow_posture_positions, true}};
   handles_ = handles;
   YellowEnvelope prototype;
   prototype.accepted_positions.setZero(active_joint_count);
@@ -542,7 +534,7 @@ mcc::Status SolverRuntime::solveYellow(const SolverRequest &request,
   ++yellow_state_.attempt_revision;
   initializeDiagnostics(WorkerGroup::Yellow, request, yellow_state_,
                         diagnostics);
-  mcc::InverseKinematicsRequest local;
+  auto &local = yellow_request_;
   local.state = request.captured_state.state;
   local.reference_frame_name = request.reference_frame_name;
   local.position_targets = request.position_targets;

@@ -89,8 +89,6 @@ void printUsage(const char *program) {
       << defaults.tui.rotation_step_deg << ")\n"
       << "  --regularization <value> QP regularization (default: "
       << defaults.regularization << ")\n"
-      << "  --maximum-iterations <count> Servo solver iterations (default: "
-      << defaults.maximum_iterations << ")\n"
       << "  --position-tolerance-m <value> Position tolerance (default: "
       << defaults.position_tolerance_m << ")\n"
       << "  --orientation-tolerance-rad <value> Orientation tolerance "
@@ -169,12 +167,6 @@ AppOptions parseOptions(int argc, char **argv) {
     } else if (argument == "--regularization") {
       options.regularization = parsePositiveDouble(
           "regularization", requireValue(index, argc, argv, argument));
-    } else if (argument == "--maximum-iterations") {
-      options.maximum_iterations =
-          std::stoi(requireValue(index, argc, argv, argument));
-      if (options.maximum_iterations <= 0) {
-        throw std::runtime_error("maximum iterations must be positive");
-      }
     } else if (argument == "--position-tolerance-m") {
       options.position_tolerance_m = parsePositiveDouble(
           "position tolerance", requireValue(index, argc, argv, argument));
