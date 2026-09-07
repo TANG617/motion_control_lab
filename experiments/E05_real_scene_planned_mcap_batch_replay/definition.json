@@ -1,0 +1,38 @@
+{
+  "schema_version": "experiment.v1",
+  "experiment_id": "E05",
+  "title": "Real-scene planned hierarchical kinematics MCAP batch replay",
+  "question": "Which real-scene recordings complete the planned hierarchical kinematics replay, and what tracking and timing evidence does each produce?",
+  "hypothesis": "Recordings with the required streams can be independently initialized and replayed, with failures preserved per recording.",
+  "independent_factors": ["recording"],
+  "controlled_factors": {
+    "launcher": "apps/hierarchical_kinematics_step/scripts/profiles/planned/run_mcap_interactive.py",
+    "algorithm_options": "launcher defaults plus explicit trailing arguments; native resolved options are authoritative",
+    "concurrency": 1,
+    "ordering": "relative_path_lexicographic",
+    "state_isolation": "fresh_process_per_recording",
+    "start_paused": false,
+    "replay_exit_on_fault": true,
+    "replay_trace": true,
+    "record_visualization_mcap": true
+  },
+  "allowed_differences": ["dataset_directory", "file_selection", "output_root", "run_id", "explicit_launcher_arguments"],
+  "inputs": [{"input_id": "real_scene_mcap", "artifact": "inputs/dataset.json", "required": true}],
+  "arms": [{"arm_id": "planned", "method": "planned/run_mcap_interactive.py", "required": true}],
+  "evaluation_windows": [{"window_id": "per_recording", "description": "Each recording through native completion, failure, or user stop."}],
+  "metrics": {
+    "primary": ["completed_recording_count"],
+    "secondary": ["accepted_count", "rejected_count"],
+    "guardrail": ["failed_recording_count", "deadline_miss_count"],
+    "diagnostic": ["tracking", "red_timing", "source_frame_count", "consumed_frame_count", "dropped_frame_count"]
+  },
+  "comparisons": [],
+  "failure_policy": {
+    "continue_after_failed_recording": true,
+    "any_failure_fails_batch": true,
+    "user_stop_ends_batch": true,
+    "preserve_partial_artifacts": true,
+    "no_algorithm_or_data_repair": true
+  },
+  "artifact_requirements": ["manifest.json", "definition/resolved.json", "definition/batch_options.json", "inputs/inventory.json", "evaluation/action_summary.csv", "evaluation/failures.json", "evaluation/report.md"]
+}

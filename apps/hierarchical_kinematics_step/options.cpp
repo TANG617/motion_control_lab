@@ -795,6 +795,7 @@ std::string resolvedOptionsJson(const Options &options) {
   root["simulation"]["viewer_enabled"] = app.simulation.viewer_enabled;
 
   root["replay_trace_enabled"] = options.replay_trace_enabled;
+  root["replay_exit_on_fault"] = options.replay_exit_on_fault;
   root["replay_elbow_teleop_enabled"] = options.replay_elbow_teleop_enabled;
   root["start_paused"] = options.start_paused;
   root["launcher_argv_json"] = options.launcher_argv_json;
@@ -1020,6 +1021,8 @@ void printPlannedUsage(const char *program, SourceMode source_mode) {
   if (source_mode == SourceMode::Replay) {
     std::cout
         << "\nReplay startup:\n"
+        << "  --replay-exit-on-fault/--no-replay-exit-on-fault Exit after "
+           "writing replay fault artifacts, including with TUI (default: off)\n"
               << "  --start-paused  Hold the replay at timeline zero until "
                  "space is pressed\n"
         << "  --replay-elbow-teleop/--no-replay-elbow-teleop Allow realtime "
@@ -1480,6 +1483,12 @@ Options parseOptions(int argc, char **argv) {
       if (result.source_mode != SourceMode::Replay)
         throw std::runtime_error("--no-start-paused is only valid with replay");
       result.start_paused = false;
+    } else if (argument == "--replay-exit-on-fault" ||
+               argument == "--no-replay-exit-on-fault") {
+      if (result.source_mode != SourceMode::Replay) {
+        throw std::runtime_error("--replay-exit-on-fault is only valid with replay");
+      }
+      result.replay_exit_on_fault = argument == "--replay-exit-on-fault";
     } else if (argument == "--replay-trace" ||
                argument == "--no-replay-trace") {
       if (result.source_mode != SourceMode::Replay) {

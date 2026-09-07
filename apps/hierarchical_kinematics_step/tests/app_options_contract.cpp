@@ -32,6 +32,21 @@ bool rejects(const std::function<void()> &call) {
 } // namespace
 
 int main() {
+  const auto replay_fault_exit = parse(
+      {"app", "--profile", "planned", "replay", "--input", "/tmp/input.mcap",
+       "--urdf", "/tmp/r1.urdf",
+       "--left-stream", "/left", "--right-stream", "/right",
+       "--target-period-ms", "10", "--replay-exit-on-fault"});
+  if (!replay_fault_exit.replay_exit_on_fault ||
+      app::profileDefaults(app::Profile::Planned).replay_exit_on_fault ||
+      app::resolvedOptionsJson(replay_fault_exit).find("\"replay_exit_on_fault\" : true") ==
+          std::string::npos ||
+      !rejects([] {
+        (void)parse({"app", "--profile", "planned", "teleop",
+                     "--replay-exit-on-fault"});
+      })) {
+    return EXIT_FAILURE;
+  }
   for (const char *obsolete : {"--yellow-maximum-iterations",
                                "--minimum-position-improvement-m",
                                "--minimum-orientation-improvement-rad"}) {

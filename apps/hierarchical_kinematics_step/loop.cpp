@@ -3798,7 +3798,7 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
                        mcl::workerGroupName(recorded_fault->group) + " " +
                        mcl::workerFailureName(recorded_fault->failure));
         if (planned_options.source_mode == SourceMode::Replay &&
-            !options.presentation.enabled) {
+            (!options.presentation.enabled || planned_options.replay_exit_on_fault)) {
           break;
         }
       }

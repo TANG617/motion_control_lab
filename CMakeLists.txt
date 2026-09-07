@@ -842,6 +842,12 @@ install(
 )
 
 if(BUILD_TESTING)
+  add_test(
+    NAME experiments.e05_batch_replay
+    COMMAND "${Python3_EXECUTABLE}" -m unittest discover
+      -s "${CMAKE_CURRENT_SOURCE_DIR}/experiments/E05_real_scene_planned_mcap_batch_replay/tests" -v
+  )
+  set_tests_properties(experiments.e05_batch_replay PROPERTIES TIMEOUT 60)
   find_program(MCL_BASH_EXECUTABLE bash REQUIRED)
   find_program(MCL_TRUE_EXECUTABLE true REQUIRED)
   file(

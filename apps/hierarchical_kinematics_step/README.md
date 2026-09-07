@@ -31,6 +31,11 @@ position 的历史 `*-cartesian-progress-*` 配置名继续保留，现仅控制
 `--dump-resolved-options` 在加载模型前输出 profile、能力、robot、solver、planning、replay、
 binary argv 与 launcher provenance 的完整 JSON。
 
+批量交互回放可显式开启 `--replay-exit-on-fault`：Replay 遇到致命错误后关闭输出、
+写入失败产物并退出，即使 TUI 开启也不等待人工退出 FAULT HOLD。默认关闭，
+`--no-replay-exit-on-fault` 恢复交互检查行为。该选项不改变求解或错误判定。
+可复用批量入口见 [E05](../../experiments/E05_real_scene_planned_mcap_batch_replay/README.md)。
+
 Red HKS 默认允许 Core 验收 constraint-feasible 的 Primary `MAX_ITER` 最后迭代：该 tick
 发布新输出、标记 `feasible-suboptimal`，并跳过 Secondary；任何 task equation、scale box
 或 joint hard bound 超限仍会拒绝并 HOLD。使用

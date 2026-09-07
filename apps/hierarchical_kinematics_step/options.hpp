@@ -306,6 +306,7 @@ struct Options {
   ReplaySettlingOptions replay_settling;
   std::optional<replay::ReplayOptions> replay;
   bool replay_trace_enabled{true};
+  bool replay_exit_on_fault{false};
   bool replay_elbow_teleop_enabled{false};
   bool start_paused{false};
   bool dump_resolved_options{false};

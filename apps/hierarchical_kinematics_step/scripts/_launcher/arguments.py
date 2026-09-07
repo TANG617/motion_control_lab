@@ -96,6 +96,7 @@ REPLAY_VALUE_FLAGS = (
 
 REPLAY_BOOL_FLAGS = (
     "start-paused", "replay-trace", "replay-elbow-teleop", "terminal-input",
+    "replay-exit-on-fault",
 )
 
 
