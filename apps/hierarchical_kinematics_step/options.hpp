@@ -95,9 +95,9 @@ struct SolverOptions {
   bool joint_position_braking_velocity_envelope_enabled{false};
   bool red_joint_acceleration_limits_enabled{false};
 
-  // The first three profiles retain their legacy tuning. The two null-space
-  // profiles use one Primary Cartesian scale per arm and place link4/posture
-  // objectives together in Secondary.
+  // All profiles use per-arm Primary position scales. Secondary optimizes
+  // soft TCP orientation together with posture and optional link4 tasks.
+  // The first three profiles retain their position/posture tuning.
   double legacy_cartesian_progress_weight{100.0};
   double legacy_cartesian_preservation_tolerance{5.0e-4};
   double legacy_scale_preservation_tolerance{1.0e-4};
@@ -111,7 +111,11 @@ struct SolverOptions {
   double red_primary_task_tcp_cartesian_progress_weight{100.0};
   double red_primary_task_tcp_cartesian_progress_preservation_tolerance{1.0e-4};
   double red_primary_task_tcp_position_preservation_tolerance_mps{5.0e-4};
-  double red_primary_task_tcp_orientation_preservation_tolerance_radps{5.0e-4};
+  double red_secondary_task_tcp_orientation_weight{100.0};
+  double red_secondary_task_tcp_orientation_servo_gain_per_s{10.0};
+  double red_secondary_task_tcp_orientation_residual_normalization_radps{1.0};
+  double red_secondary_task_tcp_orientation_preservation_tolerance_radps{
+      5.0e-4};
   double red_secondary_task_yellow_posture_coupling_preservation_tolerance{
       1.0e-5};
   double red_secondary_task_link4_position_weight{100.0};

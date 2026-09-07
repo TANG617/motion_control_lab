@@ -600,9 +600,12 @@ TuiPage makeRequirementsPage(const IkDebugFrame & frame)
         if (acceptedEvidence(scale.evidence) != accepted) {
           continue;
         }
-        const std::string state = !scale.evaluated
-                                    ? "not-run"
-                                    : scale.stuck ? "stuck" : scale.degraded ? "degraded" : "full";
+        const std::string state = !scale.evaluated ? "not-run"
+                                  : !scale.state_label.empty()
+                                      ? scale.state_label
+                                  : scale.stuck    ? "stuck"
+                                  : scale.degraded ? "degraded"
+                                                   : "full";
         scale_rows.push_back(
           {scale.evidence, solver.label, scale.pass, scale.name, state,
            scale.evaluated ? fixed(scale.scale, 6) : "-",

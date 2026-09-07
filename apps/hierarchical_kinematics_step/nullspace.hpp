@@ -146,8 +146,13 @@ struct NullspaceTuiDebug {
   double primary_orientation_preservation_tolerance_radps{0.0};
   double link4_task_error_m{0.0};
   double yellow_posture_error_rad{0.0};
+  double orientation_weight{0.0};
   double link4_weight{0.0};
   double yellow_weight{0.0};
+  Eigen::VectorXd scale_reference;
+  double scale_reference_projection_max_change{0.0};
+  Eigen::Vector3d left_baseline_velocity{Eigen::Vector3d::Zero()};
+  Eigen::Vector3d right_baseline_velocity{Eigen::Vector3d::Zero()};
   double left_task_scale{1.0};
   double right_task_scale{1.0};
   std::string solution_quality{"not-accepted"};

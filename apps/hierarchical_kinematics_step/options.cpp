@@ -245,9 +245,17 @@ bool parseSolverOption(const std::string &argument, const std::string &value,
   else if (argument ==
            "--red-primary-task-tcp-position-preservation-tolerance-mps")
     options.red_primary_task_tcp_position_preservation_tolerance_mps = parsed;
+  else if (argument == "--red-secondary-task-tcp-orientation-weight")
+    options.red_secondary_task_tcp_orientation_weight = parsed;
+  else if (argument == "--red-secondary-task-tcp-orientation-servo-gain-per-s")
+    options.red_secondary_task_tcp_orientation_servo_gain_per_s = parsed;
   else if (argument ==
-           "--red-primary-task-tcp-orientation-preservation-tolerance-radps")
-    options.red_primary_task_tcp_orientation_preservation_tolerance_radps =
+           "--red-secondary-task-tcp-orientation-residual-normalization-radps")
+    options.red_secondary_task_tcp_orientation_residual_normalization_radps =
+        parsed;
+  else if (argument ==
+           "--red-secondary-task-tcp-orientation-preservation-tolerance-radps")
+    options.red_secondary_task_tcp_orientation_preservation_tolerance_radps =
         parsed;
   else if (argument == "--red-secondary-task-yellow-posture-coupling-"
                        "preservation-tolerance")
@@ -643,8 +651,13 @@ std::string resolvedOptionsJson(const Options &options) {
   MCL_SOLVER_FIELD(
       red_primary_task_tcp_cartesian_progress_preservation_tolerance);
   MCL_SOLVER_FIELD(red_primary_task_tcp_position_preservation_tolerance_mps);
+  MCL_SOLVER_FIELD(red_secondary_task_tcp_orientation_weight);
+  MCL_SOLVER_FIELD(red_secondary_task_tcp_orientation_servo_gain_per_s);
   MCL_SOLVER_FIELD(
-      red_primary_task_tcp_orientation_preservation_tolerance_radps);
+      red_secondary_task_tcp_orientation_residual_normalization_radps);
+
+  MCL_SOLVER_FIELD(
+      red_secondary_task_tcp_orientation_preservation_tolerance_radps);
   MCL_SOLVER_FIELD(
       red_secondary_task_yellow_posture_coupling_preservation_tolerance);
   MCL_SOLVER_FIELD(red_secondary_task_link4_position_weight);
@@ -887,6 +900,18 @@ void printHierarchicalUsage(const char *program) {
       << "  --joint-position-margin-rad <value>      Joint limit margin\n"
       << "  --red-primary-task-tcp-cartesian-progress-weight <value> Primary "
          "per-arm Cartesian progress weight\n"
+      << "  --red-secondary-task-tcp-orientation-weight <value> Soft "
+         "orientation weight (default: "
+      << defaults.solver.red_secondary_task_tcp_orientation_weight << ")\n"
+      << "  --red-secondary-task-tcp-orientation-servo-gain-per-s <value> "
+         "Orientation gain (default: "
+      << defaults.solver.red_secondary_task_tcp_orientation_servo_gain_per_s
+      << ")\n"
+      << "  --red-secondary-task-tcp-orientation-residual-normalization-radps "
+         "<value> Angular velocity residual scale (default: "
+      << defaults.solver
+             .red_secondary_task_tcp_orientation_residual_normalization_radps
+      << ")\n"
       << "  --red-secondary-task-link4-position-weight <value> Secondary "
          "link4 weight "
          "(default: "
@@ -901,7 +926,8 @@ void printHierarchicalUsage(const char *program) {
       << defaults.solver
              .red_secondary_task_link4_position_preservation_tolerance_mps
       << ")\n"
-      << "  --red-proxqp-maximum-iterations <count>  Red ProxQP iteration budget\n"
+      << "  --red-proxqp-maximum-iterations <count>  Red ProxQP iteration "
+         "budget\n"
       << "  --red-proxqp-absolute-tolerance <value>  Red absolute tolerance\n"
       << "  --red-proxqp-relative-tolerance <value>  Red relative tolerance\n"
       << "  --red-proxqp-primal-infeasibility-tolerance <value> Red "
@@ -914,9 +940,12 @@ void printHierarchicalUsage(const char *program) {
          "Primary MAX_ITER result\n"
       << "  --red-reject-primary-max-iterations Reject every Primary MAX_ITER "
          "result (alias)\n"
-      << "  --yellow-proxqp-maximum-iterations <count> Yellow ProxQP iteration budget\n"
-      << "  --yellow-proxqp-absolute-tolerance <value> Yellow absolute tolerance\n"
-      << "  --yellow-proxqp-relative-tolerance <value> Yellow relative tolerance\n"
+      << "  --yellow-proxqp-maximum-iterations <count> Yellow ProxQP iteration "
+         "budget\n"
+      << "  --yellow-proxqp-absolute-tolerance <value> Yellow absolute "
+         "tolerance\n"
+      << "  --yellow-proxqp-relative-tolerance <value> Yellow relative "
+         "tolerance\n"
       << "  --yellow-proxqp-primal-infeasibility-tolerance <value> Yellow "
          "certificate tolerance\n"
       << "  --yellow-proxqp-warm-start/--no-yellow-proxqp-warm-start\n"
@@ -1254,45 +1283,50 @@ HierarchicalOptions parseHierarchicalOptions(int argc, char **argv,
       options.solver.yellow_proxqp_maximum_iterations = value;
     } else if (
         optionIn(
-                   argument,
+            argument,
             {"--red-qp-regularization",
              "--yellow-qp-regularization",
              "--maximum-hard-violation",
-                    "--joint-position-margin-rad",
-                    "--legacy-cartesian-progress-weight",
-                    "--legacy-cartesian-preservation-tolerance",
-                    "--legacy-scale-preservation-tolerance",
-                    "--legacy-posture-preservation-tolerance",
-                    "--legacy-yellow-posture-weight",
-                    "--legacy-yellow-to-red-coupling-weight",
-                    "--legacy-minimum-collision-distance-m",
-                    "--legacy-collision-influence-distance-m",
-                    "--legacy-collision-damping-gain-per-s",
-                    "--legacy-collision-weight",
+             "--joint-position-margin-rad",
+             "--legacy-cartesian-progress-weight",
+             "--legacy-cartesian-preservation-tolerance",
+             "--legacy-scale-preservation-tolerance",
+             "--legacy-posture-preservation-tolerance",
+             "--legacy-yellow-posture-weight",
+             "--legacy-yellow-to-red-coupling-weight",
+             "--legacy-minimum-collision-distance-m",
+             "--legacy-collision-influence-distance-m",
+             "--legacy-collision-damping-gain-per-s",
+             "--legacy-collision-weight",
              "--red-primary-task-tcp-cartesian-progress-weight",
              "--red-primary-task-tcp-cartesian-progress-preservation-tolerance",
-                    "--red-primary-task-tcp-position-preservation-tolerance-mps",
-             "--red-primary-task-tcp-orientation-preservation-tolerance-radps",
+             "--red-primary-task-tcp-position-preservation-tolerance-mps",
+             "--red-secondary-task-tcp-orientation-weight",
+             "--red-secondary-task-tcp-orientation-servo-gain-per-s",
+             "--red-secondary-task-tcp-orientation-residual-normalization-"
+             "radps",
+             "--red-secondary-task-tcp-orientation-preservation-tolerance-"
+             "radps",
              "--red-secondary-task-yellow-posture-coupling-preservation-"
              "tolerance",
              "--red-secondary-task-link4-position-weight",
              "--red-secondary-task-link4-position-servo-gain-per-s",
-                    "--red-secondary-task-link4-position-preservation-tolerance-mps",
-                    "--red-proxqp-absolute-tolerance",
-                    "--red-proxqp-relative-tolerance",
-                    "--red-proxqp-primal-infeasibility-tolerance",
-                    "--yellow-proxqp-absolute-tolerance",
-                    "--yellow-proxqp-relative-tolerance",
-                    "--yellow-proxqp-primal-infeasibility-tolerance",
-                    "--yellow-task-posture-preference-weight",
-                    "--yellow-task-posture-preference-servo-gain-per-s",
+             "--red-secondary-task-link4-position-preservation-tolerance-mps",
+             "--red-proxqp-absolute-tolerance",
+             "--red-proxqp-relative-tolerance",
+             "--red-proxqp-primal-infeasibility-tolerance",
+             "--yellow-proxqp-absolute-tolerance",
+             "--yellow-proxqp-relative-tolerance",
+             "--yellow-proxqp-primal-infeasibility-tolerance",
+             "--yellow-task-posture-preference-weight",
+             "--yellow-task-posture-preference-servo-gain-per-s",
              "--red-secondary-task-yellow-posture-coupling-weight",
              "--red-secondary-task-yellow-posture-coupling-servo-gain-per-s",
-                    "--yellow-constraints-self-collision-avoidance-minimum-distance-m",
+             "--yellow-constraints-self-collision-avoidance-minimum-distance-m",
              "--yellow-constraints-self-collision-avoidance-influence-distance-"
              "m",
-                    "--yellow-constraints-self-collision-avoidance-damping-gain-per-s",
-                    "--yellow-constraints-self-collision-avoidance-weight"})) {
+             "--yellow-constraints-self-collision-avoidance-damping-gain-per-s",
+             "--yellow-constraints-self-collision-avoidance-weight"})) {
       parseSolverOption(argument, requireValue(index, argc, argv, argument),
                         options.solver);
     } else if (argument == "--mcap") {
@@ -1363,11 +1397,10 @@ Options parseOptions(int argc, char **argv) {
     nullspace_option_seen =
         nullspace_option_seen ||
         optionIn(
-        argument,
+            argument,
             {"--red-primary-task-tcp-cartesian-progress-weight",
              "--red-primary-task-tcp-cartesian-progress-preservation-tolerance",
-         "--red-primary-task-tcp-position-preservation-tolerance-mps",
-             "--red-primary-task-tcp-orientation-preservation-tolerance-radps",
+             "--red-primary-task-tcp-position-preservation-tolerance-mps",
              "--red-secondary-task-yellow-posture-coupling-preservation-"
              "tolerance",
              "--red-secondary-task-link4-position-weight",
@@ -1575,7 +1608,10 @@ Options parseOptions(int argc, char **argv) {
            "--red-primary-task-tcp-cartesian-progress-weight",
            "--red-primary-task-tcp-cartesian-progress-preservation-tolerance",
            "--red-primary-task-tcp-position-preservation-tolerance-mps",
-           "--red-primary-task-tcp-orientation-preservation-tolerance-radps",
+           "--red-secondary-task-tcp-orientation-weight",
+           "--red-secondary-task-tcp-orientation-servo-gain-per-s",
+           "--red-secondary-task-tcp-orientation-residual-normalization-radps",
+           "--red-secondary-task-tcp-orientation-preservation-tolerance-radps",
            "--red-secondary-task-yellow-posture-coupling-preservation-"
            "tolerance",
            "--red-secondary-task-link4-position-weight",

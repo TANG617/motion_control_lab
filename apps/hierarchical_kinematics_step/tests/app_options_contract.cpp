@@ -41,6 +41,39 @@ int main() {
       return EXIT_FAILURE;
     }
   }
+  for (const char *source : {"teleop", "replay"}) {
+    std::vector<std::string> args{
+        "app",
+        "--profile",
+        "planned",
+        source,
+        "--urdf",
+        "/tmp/r1.urdf",
+        "--red-secondary-task-tcp-orientation-weight",
+        "75",
+        "--red-secondary-task-tcp-orientation-servo-gain-per-s",
+        "12",
+        "--red-secondary-task-tcp-orientation-residual-normalization-radps",
+        "0.5"};
+    if (std::string{source} == "replay") {
+      args.insert(args.end(),
+                  {"--input", "/tmp/input.mcap", "--left-stream", "/left",
+                   "--right-stream", "/right", "--target-period-ms", "10"});
+    }
+    std::vector<char *> argv;
+    for (auto &arg : args)
+      argv.push_back(arg.data());
+    const auto parsed = app::parseOptions(argv.size(), argv.data());
+    const auto &solver = parsed.interactive.solver;
+    if (solver.red_secondary_task_tcp_orientation_weight != 75.0 ||
+        solver.red_secondary_task_tcp_orientation_servo_gain_per_s != 12.0 ||
+        solver.red_secondary_task_tcp_orientation_residual_normalization_radps !=
+            0.5 ||
+        app::resolvedOptionsJson(parsed).find(
+            "red_secondary_task_tcp_orientation_weight") == std::string::npos) {
+      return EXIT_FAILURE;
+    }
+  }
   constexpr const char *kDefaultUrdf =
       "/workspace/models/Psi_R1_visual_collision.urdf";
   const auto hierarchical = app::profileDefaults(app::Profile::Hierarchical);

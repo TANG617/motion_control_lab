@@ -6,9 +6,26 @@
 - `hierarchical`：直接 target -> legacy HKS；
 - `planned`：CartesianPlanner -> legacy HKS；
 - `planned-otg`：CartesianPlanner -> legacy HKS -> JointPlanner；
-- `planned-otg-nullspace`：双臂 Cartesian Primary > posture/link4 Secondary HKS + JointPlanner；
+- `planned-otg-nullspace`：双臂 position Primary > soft orientation/posture/link4 Secondary HKS + JointPlanner；
 - `planned-otg-nullspace-admittance-kinematic-sim`：再增加导纳、MuJoCo 运动学投影、viewer
   与完整 replay telemetry gate。
+
+所有 profile 的 Red 均保持两级：Primary 只有双臂位置任务，每臂独立的 position scale；
+Secondary 在保持 Primary 位置结果的条件下，优化软姿态、Yellow posture 和启用的 link4。
+姿态与 Secondary 内其余任务通过权重折中，不再要求满足 scaled orientation 等式。
+关节位置、速度、加速度与制动硬约束保持各 profile 原配置。
+
+软姿态配置由以下参数控制（五个 profile 均适用）：
+
+- `--red-secondary-task-tcp-orientation-weight`：默认 `100`；
+- `--red-secondary-task-tcp-orientation-servo-gain-per-s`：默认 `10`；
+- `--red-secondary-task-tcp-orientation-residual-normalization-radps`：默认 `1`。
+
+姿态代价为 `0.5 * weight * ||(J_angular * qdot - desired_angular_velocity) / normalization||²`。
+position 的历史 `*-cartesian-progress-*` 配置名继续保留，现仅控制 position scale。
+原 `--red-primary-task-tcp-orientation-preservation-tolerance-radps` 已更名为
+`--red-secondary-task-tcp-orientation-preservation-tolerance-radps`；它是 Core 注册任务所需的
+后续层保持容差，两级配置中没有后续层，不作为姿态跟踪误差上限。
 
 `options.hpp` 是 app 的唯一 typed 配置入口，也完整持有 R1 robot 配置。可用
 `--dump-resolved-options` 在加载模型前输出 profile、能力、robot、solver、planning、replay、
@@ -110,3 +127,26 @@ pause/start-paused 会冻结 Cartesian planner、导纳、HKS 和 JointPlanner �
 整条链共同推进。导纳推进后的 HKS、JointPlanner 或 executed FK 失败为 fatal；导纳之前的
 teleop Cartesian replan infeasible 保持原 app 的 recoverable 行为。拖拽释放和普通 retarget
 不会隐式 reset filter 或 compliance state。
+
+### Scaled 速度修正合同
+
+五个 profile 均使用 MCC 默认的“速度修正完成比例”，无需开关。每拍先用当前 profile 的
+request velocity 与位置、制动、速度、加速度硬边界最终交集构造共同基准
+`qdot_b = clip(qdot_request, lower, upper)`，再求解
+`J qdot = J qdot_b + s (v_ff + Kp error - J qdot_b)`。
+两臂位置保留独立 scale，Secondary 的 soft orientation/posture/link4 不变。
+`s=0` 表示基准运动，可能仍在运动；`s=1` 表示实现本拍目标速度，并不表示位置或姿态误差归零。
+有限权重仍会与原有正则化折中，不承诺 scale 为数学可行区间的最大值。
+
+`manifest.task_scale` 输出按 Red active joint 顺序排列的共同关节基准、最大投影改变量
+与两臂位置基准速度；Null-space 页显示投影改变量、TCP 基准速度和修正比例语义。
+任务等式残差/层级保持偏差与 TCP 真实跟踪误差分别显示。故障日志中的基准属于失败当拍。
+Red raw IK request 与 OTG 执行状态沿用各 profile 现有来源，不增加上一拍命令缓存。
+逐关节投影只对当前关节 box 与 scaled 任务提供共同可行起点；其他耦合硬约束不在此保证内。
+
+`manifest.red_timing` 记录整段运行的 QP 求解、worker 执行与 release-to-finish 的 P95/P99
+及最大值，并分别给出 Red deadline miss 和 skipped release。分位数是 1 us 直方图桶的上界；
+最大值为实际测量值。worker 执行时间遵循 scheduler 的定义，不包含结束后的 observer。
+`manifest.tracking` 分别记录实际跟踪误差、scaled 等式残差与已接受关节约束的违背量，
+并记录最后的关节速度/加速度；scaled 残差为 L2 norm，验收仍逐分量使用原有容差。
+回放结束与等待静止沿用各 profile 的现有行为。

@@ -256,6 +256,7 @@ int main(int argc, char **argv) {
     std::size_t enabled_primary = 0U;
     std::size_t enabled_primary_scaled = 0U;
     std::size_t enabled_secondary = 0U;
+    std::size_t soft_secondary_orientation = 0U;
     std::size_t enabled_tertiary = 0U;
     bool left_link4_enabled = false;
     bool right_link4_disabled = false;
@@ -272,27 +273,39 @@ int main(int argc, char **argv) {
       if (task.enabled &&
           task.priority == motion_control::core::PriorityLevel::Secondary) {
         ++enabled_secondary;
+        if (task.kind ==
+                motion_control::core::HierarchicalTaskKind::Orientation &&
+            task.enforcement ==
+                motion_control::core::HierarchicalTaskEnforcement::Soft) {
+          ++soft_secondary_orientation;
+        }
       }
       if (task.enabled &&
           task.priority == motion_control::core::PriorityLevel::Tertiary) {
         ++enabled_tertiary;
       }
-      if (task.handle_value == handles.red_left_link4.value) {
+      if (task.kind == motion_control::core::HierarchicalTaskKind::Position &&
+          task.handle_value == handles.red_left_link4.value) {
         left_link4_enabled = task.enabled;
       }
-      if (task.handle_value == handles.red_right_link4.value) {
+      if (task.kind == motion_control::core::HierarchicalTaskKind::Position &&
+          task.handle_value == handles.red_right_link4.value) {
         right_link4_disabled = !task.enabled;
       }
-      if (task.handle_value == handles.red_yellow_posture.value) {
+      if (task.kind == motion_control::core::HierarchicalTaskKind::Posture &&
+          task.handle_value == handles.red_yellow_posture.value) {
         yellow_posture_enabled = task.enabled;
       }
     }
-    require(enabled_primary == 4U,
-            "Primary must contain both TCP position and orientation tasks");
-    require(enabled_primary_scaled == 4U,
-            "all Primary Cartesian tasks must use scaled enforcement");
-    require(enabled_secondary == 2U,
-            "Secondary must contain one link4 and the Yellow posture target");
+    require(enabled_primary == 2U,
+            "Primary must contain only the two TCP position tasks");
+    require(enabled_primary_scaled == 2U,
+            "both Primary position tasks must use scaled enforcement");
+    require(enabled_secondary == 4U,
+            "Secondary must contain soft TCP orientation, one link4 and Yellow "
+            "posture");
+    require(soft_secondary_orientation == 2U,
+            "both orientation tasks must be soft and owned by Secondary");
     require(enabled_tertiary == 0U,
             "Tertiary must not contain an enabled task");
     require(left_link4_enabled && right_link4_disabled &&
@@ -305,9 +318,41 @@ int main(int argc, char **argv) {
                 motion_control::core::PriorityLevel::Primary &&
             scales[1].priority ==
                 motion_control::core::PriorityLevel::Primary &&
-            scales[0].name == "red-primary/task/left-tcp-cartesian-progress" &&
-            scales[1].name == "red-primary/task/right-tcp-cartesian-progress",
-        "Primary must expose exactly one active Cartesian scale per arm");
+            scales[0].name == "red-primary/task/left-tcp-position-progress" &&
+            scales[1].name == "red-primary/task/right-tcp-position-progress",
+        "Primary must expose exactly one active position scale per arm");
+
+    auto conflicting = red;
+    for (auto &target : conflicting.orientation_targets) {
+      target.feed_forward_angular_velocity = 100.0 * Eigen::Vector3d::UnitX();
+    }
+    app::requireOk(runtime.solveRed(conflicting, red_solution, red_diagnostics),
+                   "infeasible angular velocity must remain a soft objective");
+    require(red_diagnostics.hierarchy.passes[0].succeeded &&
+                red_diagnostics.hierarchy.passes[1].succeeded &&
+                !red_diagnostics.hierarchy.passes[2].attempted &&
+                !red_diagnostics.hierarchy.passes[3].attempted,
+            "conflicting orientation must complete exactly two passes");
+    bool orientation_left_residual = false;
+    for (const auto &task : red_diagnostics.hierarchy.tasks) {
+      if (task.kind ==
+          motion_control::core::HierarchicalTaskKind::Orientation) {
+        orientation_left_residual |= task.residual_norm > 1.0;
+      }
+      if (task.enabled &&
+          task.priority == motion_control::core::PriorityLevel::Primary) {
+        require(
+            task.actual_preservation_drift.maxCoeff() <=
+                app_options.interactive.solver
+                    .red_primary_task_tcp_position_preservation_tolerance_mps,
+            "soft orientation changed the Primary position optimum");
+      }
+    }
+    require(orientation_left_residual,
+            "unachievable orientation must leave a residual");
+    require(red_diagnostics.maximum_hard_violation <=
+                app_options.interactive.solver.maximum_accepted_hard_violation,
+            "soft orientation must not relax shared joint bounds");
 
     // The app must submit a complete request even before Yellow has a value.
     runtime.beginRun(2);
@@ -350,7 +395,6 @@ int main(int argc, char **argv) {
       const auto joint_limits = app::makeJointTargetLimits(
           robot, app_options.interactive.robot.joint_stream);
       double maximum_primary_position_drift = 0.0;
-      double maximum_primary_orientation_drift = 0.0;
 
       for (std::uint64_t tick = 1; tick <= 400; ++tick) {
         motion_control::core::RobotState yellow_state;
@@ -382,13 +426,8 @@ int main(int argc, char **argv) {
               maximum_primary_position_drift =
                   std::max(maximum_primary_position_drift,
                          task.actual_preservation_drift.maxCoeff());
-            } else if (task.kind == motion_control::core::HierarchicalTaskKind::
-                                        Orientation) {
-              maximum_primary_orientation_drift =
-                  std::max(maximum_primary_orientation_drift,
-                         task.actual_preservation_drift.maxCoeff());
+            }
           }
-        }
         }
 
         const auto raw_target = app::mapActiveIkToFull(
@@ -466,23 +505,16 @@ int main(int argc, char **argv) {
               "executed link4 target error did not decrease");
       require((eigen(otg_positions) - state.joint_positions).norm() > 1.0e-4,
               "null-space objective did not change the executed joints");
-      require(
-          maximum_tcp_position_error <=
-                      app_options.interactive.solver
-                          .red_primary_task_tcp_position_preservation_tolerance_mps &&
-                  maximum_tcp_orientation_error <=
-                      app_options.interactive.solver
-                      .red_primary_task_tcp_orientation_preservation_tolerance_radps,
-              "executed TCP drift exceeded its hierarchy preservation tolerance");
+      require(maximum_tcp_position_error <=
+                  app_options.interactive.solver
+                      .red_primary_task_tcp_position_preservation_tolerance_mps,
+              "executed TCP position drift exceeded its hierarchy tolerance");
+      require(std::isfinite(maximum_tcp_orientation_error),
+              "soft orientation tracking produced a non-finite error");
       require(maximum_primary_position_drift <=
               app_options.interactive.solver
                   .red_primary_task_tcp_position_preservation_tolerance_mps,
               "Secondary changed a Primary position residual beyond tolerance");
-      require(
-          maximum_primary_orientation_drift <=
-              app_options.interactive.solver
-                  .red_primary_task_tcp_orientation_preservation_tolerance_radps,
-          "Secondary changed a Primary orientation residual beyond tolerance");
     }
     return EXIT_SUCCESS;
   } catch (const std::exception &error) {

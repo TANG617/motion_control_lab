@@ -60,6 +60,7 @@ struct TaskScaleDebug
   std::string pass;
   std::string evidence;
   bool evaluated{false};
+  std::string state_label; // Optional app-owned meaning of the scale value.
 };
 
 struct TaskDebug

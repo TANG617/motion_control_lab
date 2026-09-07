@@ -34,7 +34,7 @@ _RECIPE = Recipe(
         'deadline-policy': 'monitor',
         'ui': 'tui',
         'terminal-input': True,
-        'replay-trace': True,
+        'replay-trace': False,
         'viz': 'foxglove',
         'host': '127.0.0.1',
         'port': 8765,

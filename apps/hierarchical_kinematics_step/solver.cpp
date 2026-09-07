@@ -97,13 +97,13 @@ addCartesianTasks(mcc::HierarchicalKinematicsSolverBuilder &builder,
   if (!strict_priority_topology) {
     mcc::TaskScaleGroupConfig scale;
     scale.progress_weight = options.legacy_cartesian_progress_weight;
-    scale.name = "red-left-cartesian-progress";
+    scale.name = "red-left-position-progress";
     requireOk(builder.addTaskScaleGroup(
             mcc::PriorityLevel::Primary,
             {scale, options.legacy_scale_preservation_tolerance},
                   handles.left_cartesian_scale),
         "register " + scale.name);
-    scale.name = "red-right-cartesian-progress";
+    scale.name = "red-right-position-progress";
     requireOk(builder.addTaskScaleGroup(
             mcc::PriorityLevel::Primary,
             {scale, options.legacy_scale_preservation_tolerance},
@@ -132,97 +132,81 @@ addCartesianTasks(mcc::HierarchicalKinematicsSolverBuilder &builder,
                   handles.right_position),
               "register " + position.name);
 
-    mcc::OrientationTaskConfig orientation;
-    orientation.name = "red-left-orientation";
-    orientation.enforcement = mcc::ScaledEnforcement{
+  } else {
+    mcc::TaskScaleGroupConfig scale;
+    scale.progress_weight =
+        options.red_primary_task_tcp_cartesian_progress_weight;
+    scale.name = "red-primary/task/left-tcp-position-progress";
+    requireOk(
+        builder.addTaskScaleGroup(
+            mcc::PriorityLevel::Primary,
+            {scale,
+             options
+                 .red_primary_task_tcp_cartesian_progress_preservation_tolerance},
+            handles.left_cartesian_scale),
+        "register " + scale.name);
+    scale.name = "red-primary/task/right-tcp-position-progress";
+    requireOk(
+        builder.addTaskScaleGroup(
+            mcc::PriorityLevel::Primary,
+            {scale,
+             options
+                 .red_primary_task_tcp_cartesian_progress_preservation_tolerance},
+            handles.right_cartesian_scale),
+        "register " + scale.name);
+
+    mcc::PositionTaskConfig position;
+    position.name = "red-primary/task/left-tcp-position";
+    position.enforcement = mcc::ScaledEnforcement{
         handles.left_cartesian_scale, options.maximum_accepted_hard_violation};
-    requireOk(builder.addOrientationTask(
-                  mcc::PriorityLevel::Primary, robot.left_end_effector_frame,
-                  orientation,
-                  Eigen::Vector3d::Constant(
-                      options.legacy_cartesian_preservation_tolerance),
-                  handles.left_orientation),
-              "register " + orientation.name);
-    orientation.name = "red-right-orientation";
-    orientation.enforcement = mcc::ScaledEnforcement{
+    requireOk(
+        builder.addPositionTask(
+            mcc::PriorityLevel::Primary, robot.left_end_effector_frame,
+            position,
+            Eigen::Vector3d::Constant(
+                options
+                    .red_primary_task_tcp_position_preservation_tolerance_mps),
+            handles.left_position),
+        "register " + position.name);
+    position.name = "red-primary/task/right-tcp-position";
+    position.enforcement = mcc::ScaledEnforcement{
         handles.right_cartesian_scale, options.maximum_accepted_hard_violation};
-    requireOk(builder.addOrientationTask(
-                  mcc::PriorityLevel::Primary, robot.right_end_effector_frame,
-                  orientation,
-                  Eigen::Vector3d::Constant(
-                      options.legacy_cartesian_preservation_tolerance),
-                  handles.right_orientation),
-              "register " + orientation.name);
-    return handles;
+    requireOk(
+        builder.addPositionTask(
+            mcc::PriorityLevel::Primary, robot.right_end_effector_frame,
+            position,
+            Eigen::Vector3d::Constant(
+                options
+                    .red_primary_task_tcp_position_preservation_tolerance_mps),
+            handles.right_position),
+        "register " + position.name);
   }
-
-  mcc::TaskScaleGroupConfig scale;
-  scale.progress_weight =
-      options.red_primary_task_tcp_cartesian_progress_weight;
-  scale.name = "red-primary/task/left-tcp-cartesian-progress";
-  requireOk(
-      builder.addTaskScaleGroup(
-          mcc::PriorityLevel::Primary,
-          {scale,
-           options
-               .red_primary_task_tcp_cartesian_progress_preservation_tolerance},
-          handles.left_cartesian_scale),
-      "register " + scale.name);
-  scale.name = "red-primary/task/right-tcp-cartesian-progress";
-  requireOk(
-      builder.addTaskScaleGroup(
-          mcc::PriorityLevel::Primary,
-          {scale,
-           options
-               .red_primary_task_tcp_cartesian_progress_preservation_tolerance},
-          handles.right_cartesian_scale),
-      "register " + scale.name);
-
-  mcc::PositionTaskConfig position;
-  position.name = "red-primary/task/left-tcp-position";
-  position.enforcement = mcc::ScaledEnforcement{
-      handles.left_cartesian_scale, options.maximum_accepted_hard_violation};
-  requireOk(
-      builder.addPositionTask(
-          mcc::PriorityLevel::Primary, robot.left_end_effector_frame, position,
-          Eigen::Vector3d::Constant(
-              options.red_primary_task_tcp_position_preservation_tolerance_mps),
-          handles.left_position),
-      "register " + position.name);
-  position.name = "red-primary/task/right-tcp-position";
-  position.enforcement = mcc::ScaledEnforcement{
-      handles.right_cartesian_scale, options.maximum_accepted_hard_violation};
-  requireOk(
-      builder.addPositionTask(
-          mcc::PriorityLevel::Primary, robot.right_end_effector_frame, position,
-          Eigen::Vector3d::Constant(
-              options.red_primary_task_tcp_position_preservation_tolerance_mps),
-          handles.right_position),
-      "register " + position.name);
-
   mcc::OrientationTaskConfig orientation;
-  orientation.name = "red-primary/task/left-tcp-orientation";
-  orientation.enforcement = mcc::ScaledEnforcement{
-      handles.left_cartesian_scale, options.maximum_accepted_hard_violation};
+  orientation.enforcement = mcc::SoftEnforcement{mcc::QuadraticPenalty{
+      options.red_secondary_task_tcp_orientation_weight,
+      Eigen::Vector3d::Constant(
+          options
+              .red_secondary_task_tcp_orientation_residual_normalization_radps)}};
+  orientation.servo_gain_per_s =
+      options.red_secondary_task_tcp_orientation_servo_gain_per_s;
+  orientation.name = "red-secondary/task/left-tcp-orientation";
   requireOk(
       builder.addOrientationTask(
-          mcc::PriorityLevel::Primary, robot.left_end_effector_frame,
+          mcc::PriorityLevel::Secondary, robot.left_end_effector_frame,
           orientation,
           Eigen::Vector3d::Constant(
               options
-                  .red_primary_task_tcp_orientation_preservation_tolerance_radps),
+                  .red_secondary_task_tcp_orientation_preservation_tolerance_radps),
           handles.left_orientation),
       "register " + orientation.name);
-  orientation.name = "red-primary/task/right-tcp-orientation";
-  orientation.enforcement = mcc::ScaledEnforcement{
-      handles.right_cartesian_scale, options.maximum_accepted_hard_violation};
+  orientation.name = "red-secondary/task/right-tcp-orientation";
   requireOk(
       builder.addOrientationTask(
-          mcc::PriorityLevel::Primary, robot.right_end_effector_frame,
+          mcc::PriorityLevel::Secondary, robot.right_end_effector_frame,
           orientation,
           Eigen::Vector3d::Constant(
               options
-                  .red_primary_task_tcp_orientation_preservation_tolerance_radps),
+                  .red_secondary_task_tcp_orientation_preservation_tolerance_radps),
           handles.right_orientation),
       "register " + orientation.name);
   return handles;

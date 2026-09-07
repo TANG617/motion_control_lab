@@ -365,6 +365,9 @@ void appendHierarchicalEvidence(
     task_scale.cost = source.objective_cost;
     task_scale.degraded = source.degraded;
     task_scale.stuck = source.stuck;
+    task_scale.state_label = source.stuck      ? "baseline"
+                             : source.degraded ? "partial correction"
+                                               : "target velocity";
     task_scale.pass = priorityName(source.priority);
     task_scale.evidence = evidence;
     task_scale.evaluated = source.evaluated;
@@ -598,6 +601,9 @@ void updateSolverDebug(mcl::SolverDebug &output,
       task_scale.cost = source.cost;
       task_scale.degraded = source.degraded;
       task_scale.stuck = source.stuck;
+      task_scale.state_label = source.stuck      ? "baseline"
+                               : source.degraded ? "partial correction"
+                                                 : "target velocity";
       task_scale.pass = "Solve";
       task_scale.evidence = rejected ? "failed-current" : "last-accepted";
       task_scale.evaluated = source.active;
@@ -700,6 +706,39 @@ struct StateSnapshot {
   Eigen::VectorXd jerks;
 };
 
+// Fixed storage, no allocation in the worker. Quantiles are upper bucket edges
+// at 1 us resolution; the final bucket reports the exact observed maximum.
+struct RunTimingHistogram {
+  std::array<std::uint64_t, 10001> bins{};
+  std::uint64_t count{0};
+  double maximum_ms{0.0};
+  void record(double ms) {
+    ++count;
+    maximum_ms = std::max(maximum_ms, ms);
+    ++bins[static_cast<std::size_t>(
+        std::min(10000.0, std::max(0.0, std::ceil(ms * 1000.0))))];
+  }
+  double percentile(double fraction) const {
+    const auto rank = static_cast<std::uint64_t>(std::ceil(fraction * count));
+    std::uint64_t total = 0;
+    for (std::size_t index = 0; index < bins.size(); ++index) {
+      total += bins[index];
+      if (total >= rank)
+        return index == bins.size() - 1 ? maximum_ms : index * 0.001;
+    }
+    return maximum_ms;
+  }
+  Json::Value json() const {
+    Json::Value result;
+    result["samples"] = Json::UInt64(count);
+    result["p95_ms_upper_bound"] = percentile(0.95);
+    result["p99_ms_upper_bound"] = percentile(0.99);
+    result["maximum_ms"] = maximum_ms;
+    result["histogram_resolution_ms"] = 0.001;
+    return result;
+  }
+};
+
 struct TaskScaleSnapshot {
   bool active{false};
   double scale{1.0};
@@ -723,6 +762,10 @@ struct RedOutputSnapshot {
   StateSnapshot state;
   Eigen::VectorXd raw_ik_positions;
   Eigen::VectorXd raw_ik_velocities;
+  Eigen::VectorXd scale_reference;
+  double scale_reference_projection_max_change{0.0};
+  Eigen::Vector3d left_baseline_velocity{Eigen::Vector3d::Zero()};
+  Eigen::Vector3d right_baseline_velocity{Eigen::Vector3d::Zero()};
   mcl::hierarchical_kinematics_step::JointTarget raw_joint_target;
   mcl::hierarchical_kinematics_step::JointTarget projected_joint_target;
   mcl::hierarchical_kinematics_step::ProjectionDiagnostics projection;
@@ -1167,7 +1210,7 @@ double hierarchicalTaskTolerance(const mcc::HierarchicalTaskDiagnostics &task,
   }
   if (task.kind == mcc::HierarchicalTaskKind::Orientation) {
     return options
-        .red_primary_task_tcp_orientation_preservation_tolerance_radps;
+        .red_secondary_task_tcp_orientation_preservation_tolerance_radps;
   }
   return options.red_primary_task_tcp_position_preservation_tolerance_mps;
 }
@@ -1888,6 +1931,10 @@ std::string rejectedAttemptDetail(const mcc::Status &status,
     }
     output << statusDetail(status) << std::scientific << std::setprecision(9)
            << " maximum_hard_violation=" << diagnostics.maximum_hard_violation
+           << " scale_semantics=velocity-correction" << " scale_reference=["
+           << diagnostics.hierarchy.task_scale_reference.transpose() << "]"
+           << " scale_reference_projection_max_change="
+           << diagnostics.hierarchy.task_scale_reference_projection_max_change
            << " task_scales_provenance=" << scale_provenance
            << " task_scales=[";
     for (std::size_t index = 0; index < scale_diagnostics->size(); ++index) {
@@ -1899,8 +1946,8 @@ std::string rejectedAttemptDetail(const mcc::Status &status,
              << scale.active << ",evaluated=" << scale.evaluated
              << ",weighted_progress_scale=" << scale.weighted_progress_scale
              << ",cost=" << scale.objective_cost
-             << ",degraded=" << scale.degraded << ",stuck=" << scale.stuck
-             << '}';
+             << ",partial_correction=" << scale.degraded
+             << ",no_correction=" << scale.stuck << '}';
     }
     output << "] failed_pass_evidence=[";
     bool first_failed_pass = true;
@@ -1966,7 +2013,8 @@ std::string rejectedAttemptDetail(const mcc::Status &status,
     const auto &scale = optimization.task_scales[index];
     output << "{name=\"" << scale.name << "\",active=" << std::boolalpha
            << scale.active << ",scale=" << scale.scale
-           << ",degraded=" << scale.degraded << ",stuck=" << scale.stuck << '}';
+           << ",partial_correction=" << scale.degraded
+           << ",no_correction=" << scale.stuck << '}';
   }
   output << "] position_errors=[";
   for (std::size_t index = 0; index < kinematics.position_errors.size();
@@ -2010,6 +2058,9 @@ taskScaleSnapshot(const mcc::HierarchicalTaskScaleDiagnostics &diagnostic) {
 void fillRedDiagnostics(const SolverHandles &handles,
                         const SolverDiagnostics &diagnostics,
                         RedOutputSnapshot &output) {
+  output.scale_reference = diagnostics.hierarchy.task_scale_reference;
+  output.scale_reference_projection_max_change =
+      diagnostics.hierarchy.task_scale_reference_projection_max_change;
   output.primary_maximum_position_preservation_drift_mps = 0.0;
   output.primary_maximum_orientation_preservation_drift_radps = 0.0;
   output.link4_task_error_m = 0.0;
@@ -2024,8 +2075,10 @@ void fillRedDiagnostics(const SolverHandles &handles,
     }
       if (task.handle_value == handles.red.left_position.value) {
         output.left_position_error_m = task.target_error_norm;
+        output.left_baseline_velocity = task.baseline_velocity;
       } else if (task.handle_value == handles.red.right_position.value) {
         output.right_position_error_m = task.target_error_norm;
+        output.right_baseline_velocity = task.baseline_velocity;
       } else if (task.enabled &&
                  (task.handle_value == handles.red_left_link4.value ||
                   task.handle_value == handles.red_right_link4.value)) {
@@ -2070,18 +2123,18 @@ const char *taskScaleClassification(const TaskScaleSnapshot &scale) {
     return "inactive";
   }
   if (scale.stuck) {
-    return "stuck";
+    return "baseline";
   }
   if (scale.degraded) {
-    return "degraded";
+    return "partial-correction";
   }
-  return "full";
+  return "target-velocity";
 }
 
 std::string taskScaleStatus(const RedOutputSnapshot &output) {
   std::ostringstream status;
   status << std::fixed << std::setprecision(3)
-         << "scale L=" << output.left_scale.scale << '('
+         << "correction scale L=" << output.left_scale.scale << '('
          << taskScaleClassification(output.left_scale)
          << ") R=" << output.right_scale.scale << '('
          << taskScaleClassification(output.right_scale) << ')';
@@ -2510,6 +2563,11 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
   mcl::GroupedFaultState fault;
   mcl::PeriodicWorkerDiagnostics red_worker_diagnostics;
   mcl::PeriodicWorkerDiagnostics yellow_worker_diagnostics;
+  std::array<double, 4> maximum_reference_tracking_errors{};
+  double maximum_accepted_joint_violation = 0.0;
+  double maximum_accepted_task_equation_residual = 0.0;
+  RunTimingHistogram red_run_solver_timing, red_run_execution_timing,
+      red_run_release_timing;
   mcl::RollingPercentiles red_solve_time_percentiles;
   mcl::RollingPercentiles yellow_solve_time_percentiles;
   QpPassTimePercentiles red_qp_pass_time_percentiles;
@@ -2715,32 +2773,30 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
     proto::SampleContext telemetry_context;
     mcl::PeriodicIterationObserver telemetry_observer;
     bool deadline_miss_active = false;
-    if (telemetry_enabled) {
-      telemetry_observer =
-          [&](const mcl::WorkerIterationResult &result,
-              const mcl::PeriodicIterationTiming &timing,
-              const mcl::PeriodicWorkerStatistics &statistics) {
-            auto context = telemetry_context;
-            context.set_outcome(attemptOutcome(result.outcome));
-            context.set_committed(result.outcome ==
-                                  mcl::WorkerIterationOutcome::Accepted);
-            red_telemetry->tryPush(telemetryRecord(
-                telemetry_stamp,
-                contracts::mcl_telemetry_v1::kControlWorkerTopic,
-                makeWorkerTelemetry(context, "control", options.red_rate_hz,
-                                    timing, statistics)));
-            const bool deadline_missed = timing.overrun_ms > 0.0;
-            if (deadline_missed && !deadline_miss_active) {
-              red_telemetry->tryPush(TelemetryRecord::log(
-                  telemetry_stamp, contracts::mcl_telemetry_v1::kEventsTopic,
-                  motion_control::viz::LogLevel::Warning,
-                  "control-deadline-miss",
-                  "control worker overrun_ms=" +
-                      std::to_string(timing.overrun_ms)));
-            }
-            deadline_miss_active = deadline_missed;
-          };
-    }
+    telemetry_observer = [&](const mcl::WorkerIterationResult &result,
+                             const mcl::PeriodicIterationTiming &timing,
+                             const mcl::PeriodicWorkerStatistics &statistics) {
+      red_run_execution_timing.record(timing.execution_ms);
+      red_run_release_timing.record(timing.release_to_finish_ms);
+      if (!telemetry_enabled)
+        return;
+      auto context = telemetry_context;
+      context.set_outcome(attemptOutcome(result.outcome));
+      context.set_committed(result.outcome ==
+                            mcl::WorkerIterationOutcome::Accepted);
+      red_telemetry->tryPush(telemetryRecord(
+          telemetry_stamp, contracts::mcl_telemetry_v1::kControlWorkerTopic,
+          makeWorkerTelemetry(context, "control", options.red_rate_hz, timing,
+                              statistics)));
+      const bool deadline_missed = timing.overrun_ms > 0.0;
+      if (deadline_missed && !deadline_miss_active) {
+        red_telemetry->tryPush(TelemetryRecord::log(
+            telemetry_stamp, contracts::mcl_telemetry_v1::kEventsTopic,
+            motion_control::viz::LogLevel::Warning, "control-deadline-miss",
+            "control worker overrun_ms=" + std::to_string(timing.overrun_ms)));
+      }
+      deadline_miss_active = deadline_missed;
+    };
 
     const auto makeReplayRow = [&](std::uint64_t attempt_revision) {
       std::vector<std::string> row(66U);
@@ -3017,6 +3073,7 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
           }
           const auto ik_status =
               solver.solveRed(request, solution, diagnostics);
+          red_run_solver_timing.record(diagnostics.solve_time_ms);
           red_solve_time_percentiles.record(diagnostics.solve_time_ms);
           recordQpPassTimes(red_qp_pass_time_percentiles, diagnostics);
           const bool ik_accepted = ik_status.ok();
@@ -3387,6 +3444,24 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
           std::tie(output.right_position_error_m,
                    output.right_orientation_error_rad) =
               poseError(reference.right, executed_right_pose);
+          const std::array<double, 4> tracking_errors{
+              output.left_position_error_m, output.right_position_error_m,
+              output.left_orientation_error_rad,
+              output.right_orientation_error_rad};
+          for (std::size_t index = 0; index < tracking_errors.size(); ++index)
+            maximum_reference_tracking_errors[index] =
+                std::max(maximum_reference_tracking_errors[index],
+                         tracking_errors[index]);
+          for (const auto &constraint : diagnostics.hierarchy.constraints)
+            if (constraint.kind == mcc::HierarchicalConstraintKind::JointBound)
+              maximum_accepted_joint_violation =
+                  std::max(maximum_accepted_joint_violation,
+                           constraint.maximum_violation);
+          for (const auto &task : diagnostics.hierarchy.tasks)
+            if (task.enabled &&
+                task.enforcement == mcc::HierarchicalTaskEnforcement::Scaled)
+              maximum_accepted_task_equation_residual = std::max(
+                  maximum_accepted_task_equation_residual, task.residual_norm);
           updateSolverDebug(output.solver_debug, diagnostics,
                             solution.kinematics_solution.disposition);
           if (telemetry_enabled) {
@@ -4341,10 +4416,24 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
                   options.solver
                       .red_primary_task_tcp_position_preservation_tolerance_mps));
           add_option(
-              "red_primary_task_tcp_orientation_preservation_tolerance_radps",
+              "red_secondary_task_tcp_orientation_preservation_tolerance_radps",
               std::to_string(
                   options.solver
-                      .red_primary_task_tcp_orientation_preservation_tolerance_radps));
+                      .red_secondary_task_tcp_orientation_preservation_tolerance_radps));
+          add_option(
+              "red_secondary_task_tcp_orientation_weight",
+              std::to_string(
+                  options.solver.red_secondary_task_tcp_orientation_weight));
+          add_option(
+              "red_secondary_task_tcp_orientation_servo_gain_per_s",
+              std::to_string(
+                  options.solver
+                      .red_secondary_task_tcp_orientation_servo_gain_per_s));
+          add_option(
+              "red_secondary_task_tcp_orientation_residual_normalization_radps",
+              std::to_string(
+                  options.solver
+                      .red_secondary_task_tcp_orientation_residual_normalization_radps));
           add_option(
               "red_secondary_task_link4_position_weight",
               std::to_string(
@@ -4652,16 +4741,23 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
       nullspace_debug.primary_position_preservation_tolerance_mps =
           options.solver
               .red_primary_task_tcp_position_preservation_tolerance_mps;
-      nullspace_debug.primary_orientation_preservation_tolerance_radps =
-          options.solver
-              .red_primary_task_tcp_orientation_preservation_tolerance_radps;
+      nullspace_debug.primary_orientation_preservation_tolerance_radps = 0.0;
       nullspace_debug.link4_task_error_m = latest_output.link4_task_error_m;
       nullspace_debug.yellow_posture_error_rad =
           latest_output.yellow_posture_error_rad;
+      nullspace_debug.orientation_weight =
+          options.solver.red_secondary_task_tcp_orientation_weight;
       nullspace_debug.link4_weight =
           options.solver.red_secondary_task_link4_position_weight;
       nullspace_debug.yellow_weight =
           options.solver.red_secondary_task_yellow_posture_coupling_weight;
+      nullspace_debug.scale_reference = latest_output.scale_reference;
+      nullspace_debug.scale_reference_projection_max_change =
+          latest_output.scale_reference_projection_max_change;
+      nullspace_debug.left_baseline_velocity =
+          latest_output.left_baseline_velocity;
+      nullspace_debug.right_baseline_velocity =
+          latest_output.right_baseline_velocity;
       nullspace_debug.left_task_scale = latest_output.left_scale.scale;
       nullspace_debug.right_task_scale = latest_output.right_scale.scale;
       nullspace_debug.solution_quality =
@@ -4800,10 +4896,21 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
          std::to_string(
              options.solver
                  .red_primary_task_tcp_position_preservation_tolerance_mps)},
-        {"red_primary_task_tcp_orientation_preservation_tolerance_radps",
+        {"red_secondary_task_tcp_orientation_preservation_tolerance_radps",
          std::to_string(
              options.solver
-                 .red_primary_task_tcp_orientation_preservation_tolerance_radps)},
+                 .red_secondary_task_tcp_orientation_preservation_tolerance_radps)},
+        {"red_secondary_task_tcp_orientation_weight",
+         std::to_string(
+             options.solver.red_secondary_task_tcp_orientation_weight)},
+        {"red_secondary_task_tcp_orientation_servo_gain_per_s",
+         std::to_string(
+             options.solver
+                 .red_secondary_task_tcp_orientation_servo_gain_per_s)},
+        {"red_secondary_task_tcp_orientation_residual_normalization_radps",
+         std::to_string(
+             options.solver
+                 .red_secondary_task_tcp_orientation_residual_normalization_radps)},
         {"red_secondary_task_link4_position_weight",
          std::to_string(
              options.solver.red_secondary_task_link4_position_weight)},
@@ -4905,8 +5012,8 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
         {"replay_elbow_teleop",
          planned_options.replay_elbow_teleop_enabled ? "on" : "off"},
         {"evidence_class", planned_options.replay_elbow_teleop_enabled
-             ? "interactive-noncanonical"
-             : "canonical-replay"},
+                               ? "interactive-noncanonical"
+                               : "canonical-replay"},
         {"replay_trace", planned_options.replay_trace_enabled ? "on" : "off"},
     };
     auto manifest = replay::makeReplayManifest(
@@ -4921,6 +5028,53 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
                                json_errors);
     }
     manifest["profile"] = profileName(planned_options.profile);
+    auto &tracking_summary = manifest["tracking"];
+    tracking_summary["maximum_reference_error_order"] =
+        "left position m, right position m, left orientation rad, right "
+        "orientation rad";
+    for (double value : maximum_reference_tracking_errors)
+      tracking_summary["maximum_reference_error"].append(value);
+    tracking_summary["maximum_accepted_joint_violation"] =
+        maximum_accepted_joint_violation;
+    tracking_summary["maximum_accepted_scaled_residual_l2"] =
+        maximum_accepted_task_equation_residual;
+    tracking_summary["final_reference_position_error_left_m"] =
+        latest_output.left_position_error_m;
+    tracking_summary["final_reference_position_error_right_m"] =
+        latest_output.right_position_error_m;
+    tracking_summary["final_reference_orientation_error_left_rad"] =
+        latest_output.left_orientation_error_rad;
+    tracking_summary["final_reference_orientation_error_right_rad"] =
+        latest_output.right_orientation_error_rad;
+    tracking_summary["final_max_joint_velocity"] =
+        maximumAbsolute(latest_output.state.velocities);
+    tracking_summary["final_max_joint_acceleration"] =
+        maximumAbsolute(latest_output.state.accelerations);
+
+    manifest["red_timing"]["scope"] =
+        "entire run; worker execution excludes post-iteration observer";
+    manifest["red_timing"]["solver"] = red_run_solver_timing.json();
+    manifest["red_timing"]["execution"] = red_run_execution_timing.json();
+    manifest["red_timing"]["release_to_finish"] = red_run_release_timing.json();
+    manifest["red_timing"]["deadline_miss_count"] =
+        Json::UInt64(red_stats.deadline_miss_count);
+    manifest["red_timing"]["skipped_release_count"] =
+        Json::UInt64(red_stats.skipped_release_count);
+
+    auto &scale_contract = manifest["task_scale"];
+    scale_contract["semantics"] = "velocity-correction-completion";
+    scale_contract["zero"] = "baseline velocity";
+    scale_contract["one"] = "target velocity, not zero pose error";
+    scale_contract["reference_order"] = "Red active joint order";
+    scale_contract["reference_projection_max_change"] =
+        latest_output.scale_reference_projection_max_change;
+    for (double value : latest_output.scale_reference)
+      scale_contract["final_joint_reference"].append(value);
+    for (double value : latest_output.left_baseline_velocity)
+      scale_contract["final_left_baseline_velocity_mps"].append(value);
+    for (double value : latest_output.right_baseline_velocity)
+      scale_contract["final_right_baseline_velocity_mps"].append(value);
+
     manifest["resolved_options"] = std::move(complete_resolved_options);
     manifest["python_launcher_argv_json"] = planned_options.launcher_argv_json;
     manifest["execution"]["interactive_overlay"] =
