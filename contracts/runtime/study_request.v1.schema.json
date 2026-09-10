@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "identity",
+    "phase",
+    "smoke",
+    "config",
+    "input",
+    "input_descriptor",
+    "output_dir"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "study_request.v1"
+    }
+  }
+}

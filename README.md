@@ -6,6 +6,16 @@ Motion Control Lab 是面向机器人遥操作 whole-body IK 的可复现实验�
 teleop、replay 的现行职责边界见
 [docs/app_component_architecture.md](docs/app_component_architecture.md)。
 
+MCC 框架英文投稿研究的约束与后续实现入口见
+[研究协议索引](docs/mcc_placo_study/README.md)。E06–E12 已实现真实实验 app、完整声明、输入与证据设施并完成
+[开发验收](docs/mcc_placo_study/DEVELOPMENT_ACCEPTANCE.md)；正式实验尚未执行。A01–A03 与
+[论文框架](paper/README.md) 的执行工具和正文保持 deferred。
+论文定位为 **MCC: A Practical Framework for Hierarchical Whole-Body Kinematic Control**，
+通过 PlaCo 受控对比和 MCC 消融验证框架设计。本次交付仅覆盖 E06–E12 及必要证据设施；
+A01–A03、统计图表、论文工具和撰写均在实验 campaign 结束后进行。
+研究将分别验证任务优先级、困难状态、计算成本、多频率耦合和完整链路效果；正式计时及
+未暴露保留集验证等待当前工作站重启并确认实时内核，开发 smoke 不作为正式性能证据。
+
 当前仓库提供第一条端到端纵向切片：
 
 - 仓库内可直接修改的固定版本 placo C++ 源码；
@@ -42,7 +52,8 @@ E01 和 E04 都固定使用 `/workspace/models/r1.cos.urdf` 及同一左臂可�
 
 ## 环境要求
 
-当前开发环境以 Apple Silicon macOS 为基线，不需要 ROS2 或容器。
+原生算法 app 支持 macOS/Linux，不需要 ROS2 或容器。下方保留 macOS 依赖示例；
+MCC 框架研究的正式平台单独固定为当前工作站的已核验 RT Linux 环境。
 
 可选的 [psibot_teleop](apps/psibot_teleop/README.md) 是 Linux SDK 客户端，通过 Psi 后端
 连接 `psi_cortex`，提供关节、单臂笛卡尔和双臂 WBC 键盘控制及 TUI。以 `MCL_BUILD_PSIBOT_TELEOP=ON` 启用；
@@ -472,14 +483,17 @@ Yellow、Red 启动前会顺序预热一次；正式 run 中两者完全异步�
 
 `mcl_hierarchical_kinematics_step` 用必选 `--profile` 保留五条历史数据流：
 `hierarchical`、`planned`、`planned-otg`、`planned-otg-nullspace`、
-`planned-otg-nullspace-admittance-kinematic-sim`。前三个 profile 保留原 shared Cartesian
-scale/legacy Red-Yellow topology；后两个使用双臂 Cartesian Primary > posture/link4 Secondary
-两级 hierarchy。planner、JointPlanner、nullspace、admittance、MuJoCo 与 telemetry 都只由
+`planned-otg-nullspace-admittance-kinematic-sim`。所有 profile 的 Red 均采用两级 hierarchy：
+双臂 position Primary（每臂独立 position scale），以及 soft orientation、Yellow posture
+和启用的 link4 Secondary。Secondary 内部按权重折中；前三个 profile 保留 legacy 的
+position/posture tuning，不能据此解释为旧 shared scale 或 orientation Primary。
+planner、JointPlanner、nullspace、admittance、MuJoCo 与 telemetry 都只由
 profile 能力推导，不能通过独立阶段开关组成非法数据流。
 
-Yellow 当前使用 4 对 app-local R1 link pair 的 Soft self-collision velocity damping：minimum
-distance `0.30 m`、influence distance `0.35 m`、gain `2 s^-1`、weight `100`；posture task 当前未
-注册。Yellow accepted proposal 通过 weight `10` 的内部 coupling 进入 Red。self-collision 是
+Yellow 当前注册 posture preference 与 app-local R1 link pairs 的 Soft self-collision
+velocity damping；具体 pair、距离、gain、weight 与 coupling 由 app-local `options.hpp`
+及 resolved options 持有，不能沿用历史 app 的常量。Yellow proposal 作为 Secondary posture
+参考进入 Red；self-collision 是
 运动优化目标，不是硬安全屏障；
 margin shortfall 不会自动拒绝 accepted solution，硬件 command authorization 仍由集成层负责。
 

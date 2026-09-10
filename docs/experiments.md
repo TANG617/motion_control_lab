@@ -21,7 +21,22 @@ Motion Control Lab 的核心目的是：
 > `motion_control_core` 重构或替换 placo 提供可信的 A/B 依据。
 
 长期北极星是建设能够持续积累数据、复用实验输入和支撑算法准入的 Benchmark。
-近期则首先用它解释并优化当前 placo 链路。
+早期工作首先解释和优化 placo 链路；当前新增研究以 MCC 为主线，审视层级任务表达、
+多频率耦合与完整运动学链路的实际效果，并保留公平的 placo 对照与负面证据。
+
+## MCC 框架与 PlaCo 对照研究（开发验收完成）
+
+[研究协议索引](mcc_placo_study/README.md) 将近期工作组织为 E06–E12 七项实验与
+A01–A03 三项 Analysis，论文为 [MCC: A Practical Framework for Hierarchical Whole-Body Kinematic Control](../paper/README.md)。
+E06–E12 已完成真实 app、完整声明/输入/证据设施及[开发验收](mcc_placo_study/DEVELOPMENT_ACCEPTANCE.md)，正式 campaign 尚未运行。论文以 MCC 框架的
+层级建模、多频率参考执行架构及运动学链路集成为主线，受控 PlaCo 对比与 MCC 消融
+支持设计评价；HQP、多频率调度的存在本身不作为新颖性主张，OpenSoT 仅作背景参考。
+本次实现范围为七项实验及必要证据设施；A01–A03、统计图表、论文工具和正文均等
+实验 campaign 结束后再实现和执行，评价规则和采集字段仍在实验前登记。
+
+独立数值核验、生产基线/受控对照、采集会话分组与曝光记录、完整失败覆盖以及
+claim–metric–figure–source 追溯共同约束后续实现。正式实时性与保留集运行等待工作站
+重启并核验实时内核；当前环境只能承担开发验证，不能据此写入正式性能结论。
 
 ## 研究目标与成功图景
 
@@ -56,8 +71,9 @@ whole-body IK 指由多个运动学 task 和约束共同决定关节解，不包
 闭环阶段后，真机数据仍以 MCAP 形式落盘并回流到本项目；涉及真机效果的结论必须
 由相应的闭环验证支撑。
 
-IK 输出与下层关节空间规划之间的影响关系暂时作为开放研究方向保留。其具体研究
-对象、系统边界和变量将在建立对应实验时单独定义。
+IK 输出与下层关节空间规划的影响关系在
+[E11](../experiments/E11_planning_ik_otg_error_propagation/README.md) 中明确为逐阶段误差、
+时滞与连续性比较；实验 app 和开发 smoke 已完成，正式科学验证尚未执行。Lab 的其他动力学 app 不属于这次运动学研究的证据范围。
 
 ## 核心资产：遥操作动作 Benchmark
 

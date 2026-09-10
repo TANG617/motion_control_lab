@@ -131,6 +131,7 @@ list(PREPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
 include(cmake/Dependencies.cmake)
 include(cmake/MclApp.cmake)
+option(MCL_BUILD_STUDY_EXPERIMENTS "Build E06-E12 research experiment apps" ON)
 
 install(
   PROGRAMS "${CMAKE_CURRENT_SOURCE_DIR}/scripts/launch_app.sh"
@@ -237,7 +238,7 @@ if(MCL_BUILD_E04_OPENSOT_SMOKE)
 endif()
 
 if(MCL_BUILD_ANY_INTERACTIVE_IK OR MCL_BUILD_MCC_PLOTS OR MCL_BUILD_CARTESIAN_PLANNING OR
-   MCL_BUILD_E03_BATCH_REPLAY_IK)
+   MCL_BUILD_E03_BATCH_REPLAY_IK OR MCL_BUILD_STUDY_EXPERIMENTS)
   find_package(motion_control_core 0.4 CONFIG REQUIRED)
 endif()
 
@@ -1344,4 +1345,54 @@ if(BUILD_TESTING)
         TIMEOUT 120
     )
   endif()
+endif()
+
+# Study executables remain independent app-owned algorithms.
+if(MCL_BUILD_STUDY_EXPERIMENTS)
+  foreach(number RANGE 6 12)
+    if(number LESS 10)
+      set(study_app study_e0${number})
+    else()
+      set(study_app study_e${number})
+    endif()
+    add_subdirectory(apps/${study_app})
+  endforeach()
+  if(BUILD_TESTING)
+    add_test(NAME study.public_contracts
+      COMMAND "${Python3_EXECUTABLE}" -m unittest discover
+        -s "${PROJECT_SOURCE_DIR}/tools/mcc_placo_study/tests" -v)
+    set_tests_properties(study.public_contracts PROPERTIES TIMEOUT 60)
+  endif()
+endif()
+
+if(BUILD_TESTING AND MCL_BUILD_STUDY_EXPERIMENTS)
+  add_test(NAME study.e09_measurements COMMAND "${Python3_EXECUTABLE}"
+    "${PROJECT_SOURCE_DIR}/experiments/E09_solver_cost_and_scalability/test_measurements.py")
+  add_test(NAME study.e10_schedule COMMAND "${Python3_EXECUTABLE}"
+    "${PROJECT_SOURCE_DIR}/experiments/E10_multirate_scheduling_and_coupling/test_schedule.py")
+endif()
+
+if(BUILD_TESTING AND MCL_BUILD_STUDY_EXPERIMENTS)
+  foreach(number RANGE 6 12)
+    if(number LESS 10)
+      set(experiment_prefix E0${number})
+    else()
+      set(experiment_prefix E${number})
+    endif()
+    file(GLOB study_experiment_dirs "${PROJECT_SOURCE_DIR}/experiments/${experiment_prefix}_*")
+    foreach(experiment_dir IN LISTS study_experiment_dirs)
+      if(EXISTS "${experiment_dir}/tests")
+        if(number LESS 9)
+          add_test(NAME study.${experiment_prefix}_independent
+            COMMAND "${Python3_EXECUTABLE}" -m pytest "${experiment_dir}/tests" -q)
+        else()
+          add_test(NAME study.${experiment_prefix}_independent
+            COMMAND "${Python3_EXECUTABLE}" -m unittest discover -s "${experiment_dir}/tests" -v)
+        endif()
+      endif()
+      add_test(NAME study.${experiment_prefix}_definition
+        COMMAND "${Python3_EXECUTABLE}" "${PROJECT_SOURCE_DIR}/tests/validate_contracts.py"
+          definition "${experiment_dir}/definition.json")
+    endforeach()
+  endforeach()
 endif()

@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "input_id",
+    "canonical",
+    "fixture",
+    "session_id",
+    "split_id"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "input_descriptor.v1"
+    }
+  }
+}

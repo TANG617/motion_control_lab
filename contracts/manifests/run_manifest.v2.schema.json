@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "run_id",
+    "run_kind",
+    "experiment_id",
+    "status",
+    "units",
+    "source_inventory",
+    "metric_version"
+  ],
+  "properties": {
+    "run_kind": {
+      "const": "experiment"
+    },
+    "experiment_id": {
+      "pattern": "^E[0-9]{2}$"
+    },
+    "status": {
+      "enum": [
+        "running",
+        "completed",
+        "failed",
+        "interrupted"
+      ]
+    },
+    "schema_version": {
+      "const": "run_manifest.v2"
+    }
+  }
+}

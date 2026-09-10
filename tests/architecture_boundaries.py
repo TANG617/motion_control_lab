@@ -46,6 +46,14 @@ APP_SOURCE_FILES = {
     "single_arm_step": {"main.cpp", "options.cpp", "options.hpp", "solver.cpp", "solver.hpp", "loop.cpp", "loop.hpp"},
     "target": {"main.cpp", "options.cpp", "options.hpp", "solver.cpp", "solver.hpp", "loop.cpp", "loop.hpp"},
 }
+# Explicit registry entries for independent study apps; no shared solver facade.
+for number in range(6, 13):
+    name = f"study_e{number:02}"
+    APP_SOURCE_FILES[name] = {"main.cpp", "options.cpp", "options.hpp", "solver.cpp", "solver.hpp", "loop.cpp", "loop.hpp"}
+    if number == 9:
+        APP_SOURCE_FILES[name] |= {"allocation.cpp", "allocation.hpp"}
+    if number in (11, 12):
+        APP_SOURCE_FILES[name] |= {"planning.cpp", "planning.hpp"}
 APP_MAIN_REQUIREMENTS = {
     "psibot_teleop": ("parseOptions", "runLoop"),
     "baseline": ("parseTeleopOptions", "parseReplayOptions", "BaselineSolver", "runLoop", "runReplayLoop"),
@@ -58,6 +66,11 @@ APP_MAIN_REQUIREMENTS = {
     "single_arm_step": ("parseOptions", "KinematicsSolverBuilder", "KinematicsSolver", "configureSolver", "builder.finalize", "runLoop"),
     "target": ("parseOptions", "MccTargetSolver", "PlacoTargetSolver", "runLoop"),
 }
+
+for number in range(6, 13):
+    APP_MAIN_REQUIREMENTS[f"study_e{number:02}"] = ("parse", "Solver", "loop")
+    if number in (11, 12):
+        APP_MAIN_REQUIREMENTS[f"study_e{number:02}"] += ("Planning",)
 
 
 def fail(message: str) -> None:

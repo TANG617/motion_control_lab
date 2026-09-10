@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "run_id",
+    "experiment_id",
+    "case_id",
+    "method_id",
+    "arm_id",
+    "repeat_id",
+    "session_id",
+    "split_id",
+    "window_id",
+    "component_id",
+    "input_hash",
+    "model_hash",
+    "config_hash",
+    "metric_id",
+    "value",
+    "unit",
+    "role",
+    "status"
+  ],
+  "properties": {
+    "value": {
+      "type": [
+        "number",
+        "null"
+      ]
+    },
+    "status": {
+      "enum": [
+        "ok",
+        "unavailable",
+        "not-applicable",
+        "failed"
+      ]
+    },
+    "schema_version": {
+      "const": "metric_row.v2"
+    },
+    "role": {
+      "enum": [
+        "primary",
+        "secondary",
+        "guardrail",
+        "diagnostic"
+      ]
+    }
+  }
+}

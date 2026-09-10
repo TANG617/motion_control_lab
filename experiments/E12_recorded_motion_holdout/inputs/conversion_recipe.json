@@ -1,0 +1,18 @@
+{
+  "clipping": "none",
+  "fixed_period_s": 0.01,
+  "frame": "base_link",
+  "initialization": "latest causal full recorded joints; explicit zero velocity",
+  "interpolation": "none",
+  "missing_policy": "input-invalid",
+  "pairing_tolerance_ns": 5000000,
+  "schema_version": "conversion_recipe.v1",
+  "timeline": "fixed-period-one-to-one",
+  "timestamp_source": "header_time_ns",
+  "topics": {
+    "joints": "/mc/ik/joint_states",
+    "left": "/hal/tracker/htc/left/calib_target_pose",
+    "right": "/hal/tracker/htc/right/calib_target_pose"
+  },
+  "units": "m,rad,s"
+}

@@ -5,11 +5,15 @@
 中的抽象角色映射到当前仓库。这里只记录已经存在的实现；尚未落地的能力明确标记为
 planned。
 
+MCC 框架及 PlaCo 对照研究的 E06–E12 app、输入准备和执行能力已实现并完成开发验收；入口见
+[研究协议](mcc_placo_study/README.md)。E06–E12、A01–A03 与 paper 不代表已有正式结果。
+当前实现 prompt 仅覆盖实验与证据设施；A01–A03、统计图表和论文工具/撰写延期到实验结束后。
+
 | 抽象角色 | 当前实现 |
 |---|---|
-| Raw data | `data/raw/`；当前无业务 MCAP |
+| Raw data | `data/raw/`；E05 可引用外部只读 `/mnt/mcap_dataset`，不将外部挂载视为永久资产 |
 | Canonical data | `data/canonical/`；MCAP/CSV 现在经相同 typed contracts 与 timeline 消费，正式 dataset promotion 仍 planned |
-| Definition format | `contracts/definitions/experiment.v1.schema.json` + 每个实验的 `definition.json` |
+| Definition format | E01–E05 使用 `experiment.v1`；E06–E12 使用 `contracts/definitions/experiment.v2.schema.json`，各实验持有 `definition.json` |
 | Definition validator | `tests/validate_contracts.py definition` |
 | Experiment executor | `e01_placo_smoke` 与可选 `e04_opensot_smoke` 执行同一 R1 左臂位置任务；E02 由 `mcl_step replay` 执行 PSI R1 双臂 canonical replay |
 | Execution adapter | `adapters/execution/` 中的 append-only artifact store、manifest writer 与通用 dependency provenance |
@@ -30,17 +34,19 @@ planned。
 | Runtime scaffolding | header-only `motion_control_lab::app_scaffold` 提供 typed `RuntimeServices` 和 RAII 生命周期；不解析 CLI、不构造 solver、不拥有主循环 |
 | Build scaffolding | `cmake/MclApp.cmake` 的 `mcl_add_app(...)` 统一 executable output/install/help smoke/app script install |
 | IK visualization contract | `contracts/visualization/*.json` 是唯一来源；build-tree generator 与 `motion_control_lab::visualization_contracts` 暴露 topic/ChannelSpec，并由 C++ conformance 检查 collection 对齐 |
-| Solver A/B runner | planned；需要时由正式 Experiment 的 canonical timeline 单独设计，不预留交互 backend 接口 |
+| Solver A/B runner | `tools/mcc_placo_study/study.py` 编排 E06–E12 独立 app 进程；`campaign.py` 支持串行非实时开发批次，不共享 solver/task 业务实现 |
 | Interactive preview | 独立 app topology + 窄 component targets；E02 的 TUI/Foxglove 只是 canonical replay 的可选输出，不替换 ReplaySource/ReplayClock |
 | Solver source | `third_party/placo/` 直接参与主工程构建；`third_party/OpenSoT/` 只在 E04 开启时通过隔离的 external project 构建 |
-| Metric evaluator | E01/E04 执行器内的最小 metric evaluator；领域公共 evaluator planned |
-| Manifest contract | `contracts/manifests/run_manifest.v1.schema.json` |
-| Metric row contract | `contracts/metrics/metric_row.v1.schema.json` |
-| Artifact root | `experiments/<experiment>/runs/<run-id>/` |
+| Metric evaluator | E01/E04 执行器内的最小 evaluator；E06–E12 使用 `tools/mcc_placo_study/metrics.py` 和独立逐单元核验，跨 run Analysis deferred |
+| Manifest contract | `contracts/manifests/run_manifest.v1.schema.json`；E06–E12 使用 `run_manifest.v2.schema.json` |
+| Metric row contract | `contracts/metrics/metric_row.v1.schema.json`；E06–E12 使用 `metric_row.v2.schema.json` |
+| Artifact root | `experiments/<experiment>/runs/<run-id>/`；研究批次默认 `runs/mcc_placo_study/`，均为本地生成证据 |
 | Result promotion | 人工复核后写入 `experiments/<experiment>/results/`；promotion command planned |
 | Analysis collector | planned |
 | Static renderer | 正式 artifact-only renderer planned；`mcl_cartesian_planning` 只渲染本次开发预览结果，现有 `motion_control_lab_plot_core_planning` 仍为可选 API smoke app |
 | Publisher / Release index | planned |
+| MCC framework study protocol | `docs/mcc_placo_study/`、E06–E12 README、机器声明及执行器已实现；正式运行就绪与正式结果仍待验收 |
+| Study Analysis / paper | A01–A03 与 `paper/` 文档已建立；Analysis 合同/执行器、统计、图表、论文构建和撰写均延期到实验 campaign 结束后 |
 
 ## 当前数据流
 
@@ -96,18 +102,19 @@ Starting/Running/Fault 属于 Lab 外层，不进入 MCC。Lab 的 deadline poli
 `strict` 和用于非实时主机交互调试的 `monitor`；后者保留统计并跳过过期 release，但不会放宽
 rejected attempt 或 worker exception。
 
-当前两个 hierarchical app 的 Red 使用双手 scaled Hard position/orientation task。Yellow 使用 4 对
-app-local R1 link pair 的 Soft self-collision requirement（minimum/influence distance
-0.30/0.35 m，gain 2 s^-1，weight 100），当前不注册 posture task。Yellow→Red coupling weight
-为 10。raw hierarchical 的 Red 是 Hard position/velocity、Yellow 仅 Hard position；planned hierarchical
-额外为 Red 注册 PSI R1 acceleration limits，Yellow 仍仅 position。collision margin 是诊断，
-不构成硬安全授权。
+当前统一的 `hierarchical_kinematics_step` 在所有 profile 中采用 position Primary（每臂
+独立 position scale）与 soft orientation/posture/link4 Secondary 两级 Red。Yellow 注册
+posture preference 与 Soft self-collision requirement，其 proposal 作为 Secondary posture
+参考进入 Red。具体任务、pair、限位、weight 和 gain 以 app-local `options.hpp`、实际注册
+及 resolved options 为准；历史 app 的常量不能当作现配置。collision margin 是诊断，
+不构成硬安全授权。完整说明见 [当前 app README](../apps/hierarchical_kinematics_step/README.md)。
 
 每个 app 显式拥有自己的 task topology、solver config、typed handles、状态更新和诊断投影；
 相同配置也不跨 app 合并。它们只共享固定 R1 参数、terminal/key router、renderer、wall-clock
-调度、机械 frame 映射和 transport 创建。正式实验的 `dt`
-必须来自 canonical 时间轴，不能复用交互 scheduler；未来若实现 PlaCo/MCC A/B，应从
-正式 Experiment 的真实需求重新设计，而不是让交互入口提前承担 backend-neutral 合同。
+调度、机械 frame 映射和 transport 创建。正式实验分别声明 canonical target 时间轴、
+feedback、solver period 和 runtime schedule；数值步长不由 UI 刷新或偶然的 wall-clock
+抖动决定。确定性虚拟 schedule 用于语义核验，真实线程 schedule 用于计时；两者证据不能混用。
+后续 A/B 依照研究协议编排明确的 app 输入输出，不让通用 runner 隐藏 solver/task 差异。
 
 ## Canonical replay 数据流
 

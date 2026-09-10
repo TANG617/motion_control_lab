@@ -77,6 +77,21 @@ def _safe_child(root: pathlib.Path, relative: str) -> pathlib.Path:
 
 def validate_definition(path: pathlib.Path) -> dict[str, Any]:
     definition = _load_json(path)
+    if definition.get('schema_version') == 'experiment.v2':
+        sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / 'tools/mcc_placo_study'))
+        from evidence import validate_definition as validate_v2
+        from study import resolve_input
+        validate_v2(definition)
+        for unit in definition['units']:
+            descriptor_path = pathlib.Path(unit['input'])
+            if not descriptor_path.is_absolute(): descriptor_path = path.parent / descriptor_path
+            descriptor = _load_json(descriptor_path)
+            if descriptor.get('canonical') is None:
+                _require(descriptor.get('schema_version') == 'input_descriptor.v1' and bool(descriptor.get('reason')), 'unavailable descriptor needs version and reason')
+                _require(unit.get('available') is False, 'missing canonical cannot be declared executable')
+            else:
+                resolve_input(unit['input'], path.parent)
+        return definition
     missing = EXPERIMENT_REQUIRED - definition.keys()
     _require(not missing, f"{path}: missing fields: {sorted(missing)}")
     _require(
@@ -155,6 +170,15 @@ def validate_definition(path: pathlib.Path) -> dict[str, Any]:
 
 def validate_manifest(path: pathlib.Path) -> dict[str, Any]:
     manifest = _load_json(path)
+    if manifest.get('schema_version') == 'run_manifest.v2':
+        sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / 'tools/mcc_placo_study'))
+        from evidence import load_manifest, verify_artifact
+        manifest = load_manifest(path)
+        _require(verify_artifact(manifest['source_inventory']), 'source inventory hash mismatch')
+        for unit in manifest['units']:
+            for item in unit.get('artifacts', []):
+                _require(verify_artifact(item), 'artifact hash mismatch: ' + item['locator'])
+        return manifest
     missing = MANIFEST_REQUIRED - manifest.keys()
     _require(not missing, f"{path}: missing fields: {sorted(missing)}")
     _require(
