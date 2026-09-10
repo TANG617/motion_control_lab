@@ -1,4 +1,5 @@
 #include "components/tui/tui_renderer.hpp"
+#include "components/terminal_frontend/terminal_frontend.hpp"
 
 #if MCL_WITH_FTXUI
 #include <ftxui/dom/elements.hpp>
@@ -55,10 +56,10 @@ ftxui::Element failureEmphasis(ftxui::Element element, const std::string & value
                                 std::move(element);
 }
 
-std::pair<int, int> terminalSize()
+std::pair<int, int> terminalSize(int output_fd)
 {
   winsize size{};
-  if (::ioctl(STDOUT_FILENO, TIOCGWINSZ, &size) == 0 && size.ws_col > 0 && size.ws_row > 0) {
+  if (::ioctl(output_fd, TIOCGWINSZ, &size) == 0 && size.ws_col > 0 && size.ws_row > 0) {
     return {static_cast<int>(size.ws_col), static_cast<int>(size.ws_row)};
   }
   return {120, 40};
@@ -219,7 +220,7 @@ ftxui::Element renderPage(const TuiPage & page, int terminal_width)
 
 } // namespace
 
-TuiRenderer::TuiRenderer(bool enabled) : enabled_(enabled) {}
+TuiRenderer::TuiRenderer(bool enabled, int output_fd) : enabled_(enabled), output_fd_(output_fd) {}
 
 bool TuiRenderer::enabled() const noexcept { return enabled_; }
 
@@ -284,7 +285,14 @@ void TuiRenderer::render(const TuiDocument & document)
   }
 #if MCL_WITH_FTXUI
   using namespace ftxui;
-  const auto [width, height] = terminalSize();
+  const auto [width, height] = terminalSize(output_fd_);
+  if (width < document.minimum_width || height < document.minimum_height) {
+    auto screen = Screen::Create(Dimension::Fixed(width), Dimension::Fixed(height));
+    Render(screen, paragraph("Terminal too small: need " + std::to_string(document.minimum_width) +
+                            "x" + std::to_string(document.minimum_height)));
+    writeTerminalOutput(output_fd_, "\x1b[H" + screen.ToString());
+    return;
+  }
   page_count_ = std::max<std::size_t>(document.pages.size(), 1U);
   page_index_ %= page_count_;
 
@@ -293,14 +301,16 @@ void TuiRenderer::render(const TuiDocument & document)
     auto tab = text(" " + std::to_string(index + 1U) + " " + document.pages[index].title + " ");
     if (index == page_index_) {
       tab = tab | bold | color(Color::Black) | bgcolor(Color::Cyan);
-    } else {
+    } else if (document.dim_secondary_text) {
       tab = tab | dim;
     }
     tab_elements.push_back(std::move(tab));
   }
 
   Elements sections;
-  if (show_help_) {
+  if (!document.modal_sections.empty()) {
+    for (const auto & section : document.modal_sections) sections.push_back(renderSection(section));
+  } else if (show_help_) {
     sections.push_back(text("Keyboard help") | bold | color(Color::Cyan));
     for (const auto & line : document.help_lines) {
       sections.push_back(paragraph(line));
@@ -313,18 +323,19 @@ void TuiRenderer::render(const TuiDocument & document)
     sections.push_back(text("No presentation data"));
   }
 
-  const int requested_scroll = static_cast<int>(std::min<std::size_t>(
-      scroll_offset_, static_cast<std::size_t>(std::numeric_limits<int>::max())));
+  const int requested_scroll = document.modal_sections.empty() ? static_cast<int>(std::min<std::size_t>(
+      scroll_offset_, static_cast<std::size_t>(std::numeric_limits<int>::max()))) : 0;
   auto body = vbox(std::move(sections)) | focusPosition(0, requested_scroll) | yframe |
               vscroll_indicator | flex;
   Element footer = failureEmphasis(paragraph(document.status), document.status);
   if (!document.footer_hints.empty()) {
     footer = hbox({failureEmphasis(text(document.status), document.status) | flex,
                    filler(),
-                   text(document.footer_hints) | dim});
+                   document.dim_secondary_text ? text(document.footer_hints) | dim : text(document.footer_hints)});
   }
   Elements header{
-      hbox({text(document.title) | bold, filler(), text(document.subtitle) | dim})};
+      hbox({text(document.title) | bold, filler(),
+            document.dim_secondary_text ? text(document.subtitle) | dim : text(document.subtitle)})};
   if (!document.header_left.empty() || !document.header_right.empty()) {
     std::string context = document.header_left;
     if (!document.header_left.empty() && !document.header_right.empty()) {
@@ -339,7 +350,7 @@ void TuiRenderer::render(const TuiDocument & document)
               });
   auto screen = Screen::Create(Dimension::Fixed(width), Dimension::Fixed(height));
   Render(screen, root);
-  std::cout << "\x1b[H" << screen.ToString() << std::flush;
+  writeTerminalOutput(output_fd_, "\x1b[H" + screen.ToString());
 #else
   static_cast<void>(document);
   throw std::runtime_error("TUI rendering was not built; use --ui none");

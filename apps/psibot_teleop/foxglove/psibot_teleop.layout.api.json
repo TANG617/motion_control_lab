@@ -1,0 +1,2619 @@
+{
+  "version": 1,
+  "content": {
+    "type": "tabs",
+    "selectedTabIndex": 0,
+    "tabs": [
+      {
+        "title": "01 概览",
+        "content": {
+          "type": "split",
+          "direction": "row",
+          "items": [
+            {
+              "proportion": 3,
+              "content": {
+                "type": "panel",
+                "panelType": "ThreeDee",
+                "config": {
+                  "scene": {
+                    "transforms": {
+                      "showLabel": false,
+                      "axisSize": 0.12
+                    }
+                  },
+                  "layers": {
+                    "actual": {
+                      "visible": true,
+                      "instanceId": "actual",
+                      "layerId": "foxglove.Urdf",
+                      "label": "Actual · solid",
+                      "sourceType": "url",
+                      "url": "http://127.0.0.1:8766/Psi_R1_visual_collision.urdf",
+                      "controlMode": "jointStates",
+                      "jointStatesTopic": "/psi_cortex/joints/actual",
+                      "displayMode": "visual",
+                      "showOutlines": false,
+                      "opacity": 1.0
+                    },
+                    "command": {
+                      "visible": true,
+                      "instanceId": "command",
+                      "layerId": "foxglove.Urdf",
+                      "label": "Command · transparent",
+                      "sourceType": "url",
+                      "url": "http://127.0.0.1:8766/Psi_R1_visual_collision.urdf",
+                      "controlMode": "jointStates",
+                      "jointStatesTopic": "/psi_cortex/joints/command",
+                      "displayMode": "visual",
+                      "showOutlines": true,
+                      "opacity": 0.3
+                    },
+                    "grid": {
+                      "visible": true,
+                      "instanceId": "grid",
+                      "layerId": "foxglove.Grid",
+                      "label": "Base plane",
+                      "size": 4,
+                      "divisions": 20
+                    }
+                  },
+                  "topics": {
+                    "/psi_cortex/cartesian/trajectories": {
+                      "visible": true
+                    },
+                    "/psi_cortex/cartesian/goal/left": {
+                      "visible": true,
+                      "axisScale": 0.08
+                    },
+                    "/psi_cortex/cartesian/goal/right": {
+                      "visible": true,
+                      "axisScale": 0.08
+                    },
+                    "/psi_cortex/cartesian/reference/left": {
+                      "visible": true,
+                      "axisScale": 0.055
+                    },
+                    "/psi_cortex/cartesian/reference/right": {
+                      "visible": true,
+                      "axisScale": 0.055
+                    },
+                    "/psi_cortex/cartesian/fk/command/left": {
+                      "visible": true,
+                      "axisScale": 0.055
+                    },
+                    "/psi_cortex/cartesian/fk/command/right": {
+                      "visible": true,
+                      "axisScale": 0.055
+                    },
+                    "/psi_cortex/cartesian/fk/actual/left": {
+                      "visible": true,
+                      "axisScale": 0.055
+                    },
+                    "/psi_cortex/cartesian/fk/actual/right": {
+                      "visible": true,
+                      "axisScale": 0.055
+                    }
+                  },
+                  "cameraState": {
+                    "distance": 3.4,
+                    "perspective": true,
+                    "phi": 75,
+                    "targetOffset": [
+                      0.2,
+                      0,
+                      0.9
+                    ],
+                    "thetaOffset": -45,
+                    "near": 0.01,
+                    "far": 100
+                  },
+                  "followTf": "base_link",
+                  "fixedFrame": "base_link"
+                },
+                "title": "R1 | actual 实体 / command 半透明",
+                "version": 1
+              }
+            },
+            {
+              "proportion": 2,
+              "content": {
+                "type": "split",
+                "direction": "column",
+                "items": [
+                  {
+                    "proportion": 3,
+                    "content": {
+                      "type": "panel",
+                      "panelType": "Plot",
+                      "config": {
+                        "paths": [
+                          {
+                            "enabled": true,
+                            "color": "#56B4E9",
+                            "label": "L command → actual",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "solid",
+                            "value": "/psi_cortex/telemetry/tracking.arms[0]{command_fk_valid==true}{actual_fk_valid==true}.command_actual_position_error_m.@mul(1000)",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#56B4E9",
+                            "label": "L reference → actual (WBC)",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "dashed",
+                            "value": "/psi_cortex/telemetry/tracking.arms[0]{reference_valid==true}{actual_fk_valid==true}.reference_actual_position_error_m.@mul(1000)",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#E69F00",
+                            "label": "R command → actual",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "solid",
+                            "value": "/psi_cortex/telemetry/tracking.arms[1]{command_fk_valid==true}{actual_fk_valid==true}.command_actual_position_error_m.@mul(1000)",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#E69F00",
+                            "label": "R reference → actual (WBC)",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "dashed",
+                            "value": "/psi_cortex/telemetry/tracking.arms[1]{reference_valid==true}{actual_fk_valid==true}.reference_actual_position_error_m.@mul(1000)",
+                            "timestampMethod": "receiveTime"
+                          }
+                        ],
+                        "showLegend": true,
+                        "legendDisplay": "floating",
+                        "showPlotValuesInLegend": false,
+                        "isSynced": true,
+                        "xAxisVal": "timestamp",
+                        "timeWindowMode": "sliding",
+                        "yAxisLabel": "mm",
+                        "followingViewWidth": 15
+                      },
+                      "title": "末端位置误差 | command/reference → actual",
+                      "version": 1
+                    }
+                  },
+                  {
+                    "proportion": 2,
+                    "content": {
+                      "type": "panel",
+                      "panelType": "StateTransitions",
+                      "config": {
+                        "paths": [
+                          {
+                            "value": "/psi_cortex/telemetry/control.session",
+                            "label": "session",
+                            "enabled": true,
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "value": "/psi_cortex/telemetry/control.outcome",
+                            "label": "outcome",
+                            "enabled": true,
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "value": "/psi_cortex/telemetry/control.estop",
+                            "label": "estop",
+                            "enabled": true,
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "value": "/psi_cortex/telemetry/control.actual_read_ok",
+                            "label": "actual read OK",
+                            "enabled": true,
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "value": "/psi_cortex/telemetry/control.write_attempted",
+                            "label": "write attempted",
+                            "enabled": true,
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "value": "/psi_cortex/telemetry/control.all_writes_ok",
+                            "label": "all writes OK",
+                            "enabled": true,
+                            "timestampMethod": "receiveTime"
+                          }
+                        ],
+                        "isSynced": true,
+                        "xAxisRange": 15,
+                        "timeWindowMode": "sliding"
+                      },
+                      "title": "服务端会话与执行状态",
+                      "version": 1
+                    }
+                  },
+                  {
+                    "proportion": 2,
+                    "content": {
+                      "type": "panel",
+                      "panelType": "Markdown",
+                      "config": {
+                        "fontSize": 13,
+                        "renderMode": "static",
+                        "markdown": "**连接：** `ws://127.0.0.1:8765`。键盘控制仍在 teleop TUI。\n\n单臂首次运行：`c → 左/右臂 → CartesianPosition`，再 `c → Enable`，最后 `Space`。\nSpace 只开始/暂停提交；暂停不代表制动。\n\n**Part：** command/actual 和关节曲线有效。现有服务端不发布单臂 SDK 目标；goal/reference 仅用于 WBC。\n\n**Mock：** actual 是理想位置回显，不代表硬件、动力学或力矩跟踪。\n\nWBC 页只在服务端 WBC 会话中产生数据；空白/旧数据不表示求解成功。曲线采用采样时间。"
+                      },
+                      "title": "操作与数据边界",
+                      "version": 1
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      },
+      {
+        "title": "02 末端跟踪",
+        "content": {
+          "type": "split",
+          "direction": "column",
+          "items": [
+            {
+              "proportion": 4,
+              "content": {
+                "type": "split",
+                "direction": "row",
+                "items": [
+                  {
+                    "proportion": 1,
+                    "content": {
+                      "type": "split",
+                      "direction": "column",
+                      "items": [
+                        {
+                          "proportion": 1,
+                          "content": {
+                            "type": "panel",
+                            "panelType": "Plot",
+                            "config": {
+                              "paths": [
+                                {
+                                  "enabled": true,
+                                  "color": "#009E73",
+                                  "label": "goal (WBC)",
+                                  "lineSize": 1.5,
+                                  "showLine": true,
+                                  "lineStyle": "solid",
+                                  "value": "/psi_cortex/telemetry/wbc.arms[0]{goal_valid==true}.goal[0]",
+                                  "timestampMethod": "receiveTime"
+                                },
+                                {
+                                  "enabled": true,
+                                  "color": "#E69F00",
+                                  "label": "reference (WBC)",
+                                  "lineSize": 1.5,
+                                  "showLine": true,
+                                  "lineStyle": "solid",
+                                  "value": "/psi_cortex/telemetry/wbc.arms[0]{reference_valid==true}.reference[0]",
+                                  "timestampMethod": "receiveTime"
+                                },
+                                {
+                                  "enabled": true,
+                                  "color": "#CC79A7",
+                                  "label": "command",
+                                  "lineSize": 1.5,
+                                  "showLine": true,
+                                  "lineStyle": "solid",
+                                  "value": "/psi_cortex/telemetry/tracking.arms[0]{command_fk_valid==true}.command_fk[0]",
+                                  "timestampMethod": "receiveTime"
+                                },
+                                {
+                                  "enabled": true,
+                                  "color": "#56B4E9",
+                                  "label": "actual",
+                                  "lineSize": 1.5,
+                                  "showLine": true,
+                                  "lineStyle": "solid",
+                                  "value": "/psi_cortex/telemetry/tracking.arms[0]{actual_fk_valid==true}.actual_fk[0]",
+                                  "timestampMethod": "receiveTime"
+                                }
+                              ],
+                              "showLegend": true,
+                              "legendDisplay": "floating",
+                              "showPlotValuesInLegend": false,
+                              "isSynced": true,
+                              "xAxisVal": "timestamp",
+                              "timeWindowMode": "sliding",
+                              "yAxisLabel": "m",
+                              "followingViewWidth": 15
+                            },
+                            "title": "Left TCP · X",
+                            "version": 1
+                          }
+                        },
+                        {
+                          "proportion": 1,
+                          "content": {
+                            "type": "panel",
+                            "panelType": "Plot",
+                            "config": {
+                              "paths": [
+                                {
+                                  "enabled": true,
+                                  "color": "#009E73",
+                                  "label": "goal (WBC)",
+                                  "lineSize": 1.5,
+                                  "showLine": true,
+                                  "lineStyle": "solid",
+                                  "value": "/psi_cortex/telemetry/wbc.arms[0]{goal_valid==true}.goal[1]",
+                                  "timestampMethod": "receiveTime"
+                                },
+                                {
+                                  "enabled": true,
+                                  "color": "#E69F00",
+                                  "label": "reference (WBC)",
+                                  "lineSize": 1.5,
+                                  "showLine": true,
+                                  "lineStyle": "solid",
+                                  "value": "/psi_cortex/telemetry/wbc.arms[0]{reference_valid==true}.reference[1]",
+                                  "timestampMethod": "receiveTime"
+                                },
+                                {
+                                  "enabled": true,
+                                  "color": "#CC79A7",
+                                  "label": "command",
+                                  "lineSize": 1.5,
+                                  "showLine": true,
+                                  "lineStyle": "solid",
+                                  "value": "/psi_cortex/telemetry/tracking.arms[0]{command_fk_valid==true}.command_fk[1]",
+                                  "timestampMethod": "receiveTime"
+                                },
+                                {
+                                  "enabled": true,
+                                  "color": "#56B4E9",
+                                  "label": "actual",
+                                  "lineSize": 1.5,
+                                  "showLine": true,
+                                  "lineStyle": "solid",
+                                  "value": "/psi_cortex/telemetry/tracking.arms[0]{actual_fk_valid==true}.actual_fk[1]",
+                                  "timestampMethod": "receiveTime"
+                                }
+                              ],
+                              "showLegend": true,
+                              "legendDisplay": "floating",
+                              "showPlotValuesInLegend": false,
+                              "isSynced": true,
+                              "xAxisVal": "timestamp",
+                              "timeWindowMode": "sliding",
+                              "yAxisLabel": "m",
+                              "followingViewWidth": 15
+                            },
+                            "title": "Left TCP · Y",
+                            "version": 1
+                          }
+                        },
+                        {
+                          "proportion": 1,
+                          "content": {
+                            "type": "panel",
+                            "panelType": "Plot",
+                            "config": {
+                              "paths": [
+                                {
+                                  "enabled": true,
+                                  "color": "#009E73",
+                                  "label": "goal (WBC)",
+                                  "lineSize": 1.5,
+                                  "showLine": true,
+                                  "lineStyle": "solid",
+                                  "value": "/psi_cortex/telemetry/wbc.arms[0]{goal_valid==true}.goal[2]",
+                                  "timestampMethod": "receiveTime"
+                                },
+                                {
+                                  "enabled": true,
+                                  "color": "#E69F00",
+                                  "label": "reference (WBC)",
+                                  "lineSize": 1.5,
+                                  "showLine": true,
+                                  "lineStyle": "solid",
+                                  "value": "/psi_cortex/telemetry/wbc.arms[0]{reference_valid==true}.reference[2]",
+                                  "timestampMethod": "receiveTime"
+                                },
+                                {
+                                  "enabled": true,
+                                  "color": "#CC79A7",
+                                  "label": "command",
+                                  "lineSize": 1.5,
+                                  "showLine": true,
+                                  "lineStyle": "solid",
+                                  "value": "/psi_cortex/telemetry/tracking.arms[0]{command_fk_valid==true}.command_fk[2]",
+                                  "timestampMethod": "receiveTime"
+                                },
+                                {
+                                  "enabled": true,
+                                  "color": "#56B4E9",
+                                  "label": "actual",
+                                  "lineSize": 1.5,
+                                  "showLine": true,
+                                  "lineStyle": "solid",
+                                  "value": "/psi_cortex/telemetry/tracking.arms[0]{actual_fk_valid==true}.actual_fk[2]",
+                                  "timestampMethod": "receiveTime"
+                                }
+                              ],
+                              "showLegend": true,
+                              "legendDisplay": "floating",
+                              "showPlotValuesInLegend": false,
+                              "isSynced": true,
+                              "xAxisVal": "timestamp",
+                              "timeWindowMode": "sliding",
+                              "yAxisLabel": "m",
+                              "followingViewWidth": 15
+                            },
+                            "title": "Left TCP · Z",
+                            "version": 1
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "proportion": 1,
+                    "content": {
+                      "type": "split",
+                      "direction": "column",
+                      "items": [
+                        {
+                          "proportion": 1,
+                          "content": {
+                            "type": "panel",
+                            "panelType": "Plot",
+                            "config": {
+                              "paths": [
+                                {
+                                  "enabled": true,
+                                  "color": "#009E73",
+                                  "label": "goal (WBC)",
+                                  "lineSize": 1.5,
+                                  "showLine": true,
+                                  "lineStyle": "solid",
+                                  "value": "/psi_cortex/telemetry/wbc.arms[1]{goal_valid==true}.goal[0]",
+                                  "timestampMethod": "receiveTime"
+                                },
+                                {
+                                  "enabled": true,
+                                  "color": "#E69F00",
+                                  "label": "reference (WBC)",
+                                  "lineSize": 1.5,
+                                  "showLine": true,
+                                  "lineStyle": "solid",
+                                  "value": "/psi_cortex/telemetry/wbc.arms[1]{reference_valid==true}.reference[0]",
+                                  "timestampMethod": "receiveTime"
+                                },
+                                {
+                                  "enabled": true,
+                                  "color": "#CC79A7",
+                                  "label": "command",
+                                  "lineSize": 1.5,
+                                  "showLine": true,
+                                  "lineStyle": "solid",
+                                  "value": "/psi_cortex/telemetry/tracking.arms[1]{command_fk_valid==true}.command_fk[0]",
+                                  "timestampMethod": "receiveTime"
+                                },
+                                {
+                                  "enabled": true,
+                                  "color": "#56B4E9",
+                                  "label": "actual",
+                                  "lineSize": 1.5,
+                                  "showLine": true,
+                                  "lineStyle": "solid",
+                                  "value": "/psi_cortex/telemetry/tracking.arms[1]{actual_fk_valid==true}.actual_fk[0]",
+                                  "timestampMethod": "receiveTime"
+                                }
+                              ],
+                              "showLegend": true,
+                              "legendDisplay": "floating",
+                              "showPlotValuesInLegend": false,
+                              "isSynced": true,
+                              "xAxisVal": "timestamp",
+                              "timeWindowMode": "sliding",
+                              "yAxisLabel": "m",
+                              "followingViewWidth": 15
+                            },
+                            "title": "Right TCP · X",
+                            "version": 1
+                          }
+                        },
+                        {
+                          "proportion": 1,
+                          "content": {
+                            "type": "panel",
+                            "panelType": "Plot",
+                            "config": {
+                              "paths": [
+                                {
+                                  "enabled": true,
+                                  "color": "#009E73",
+                                  "label": "goal (WBC)",
+                                  "lineSize": 1.5,
+                                  "showLine": true,
+                                  "lineStyle": "solid",
+                                  "value": "/psi_cortex/telemetry/wbc.arms[1]{goal_valid==true}.goal[1]",
+                                  "timestampMethod": "receiveTime"
+                                },
+                                {
+                                  "enabled": true,
+                                  "color": "#E69F00",
+                                  "label": "reference (WBC)",
+                                  "lineSize": 1.5,
+                                  "showLine": true,
+                                  "lineStyle": "solid",
+                                  "value": "/psi_cortex/telemetry/wbc.arms[1]{reference_valid==true}.reference[1]",
+                                  "timestampMethod": "receiveTime"
+                                },
+                                {
+                                  "enabled": true,
+                                  "color": "#CC79A7",
+                                  "label": "command",
+                                  "lineSize": 1.5,
+                                  "showLine": true,
+                                  "lineStyle": "solid",
+                                  "value": "/psi_cortex/telemetry/tracking.arms[1]{command_fk_valid==true}.command_fk[1]",
+                                  "timestampMethod": "receiveTime"
+                                },
+                                {
+                                  "enabled": true,
+                                  "color": "#56B4E9",
+                                  "label": "actual",
+                                  "lineSize": 1.5,
+                                  "showLine": true,
+                                  "lineStyle": "solid",
+                                  "value": "/psi_cortex/telemetry/tracking.arms[1]{actual_fk_valid==true}.actual_fk[1]",
+                                  "timestampMethod": "receiveTime"
+                                }
+                              ],
+                              "showLegend": true,
+                              "legendDisplay": "floating",
+                              "showPlotValuesInLegend": false,
+                              "isSynced": true,
+                              "xAxisVal": "timestamp",
+                              "timeWindowMode": "sliding",
+                              "yAxisLabel": "m",
+                              "followingViewWidth": 15
+                            },
+                            "title": "Right TCP · Y",
+                            "version": 1
+                          }
+                        },
+                        {
+                          "proportion": 1,
+                          "content": {
+                            "type": "panel",
+                            "panelType": "Plot",
+                            "config": {
+                              "paths": [
+                                {
+                                  "enabled": true,
+                                  "color": "#009E73",
+                                  "label": "goal (WBC)",
+                                  "lineSize": 1.5,
+                                  "showLine": true,
+                                  "lineStyle": "solid",
+                                  "value": "/psi_cortex/telemetry/wbc.arms[1]{goal_valid==true}.goal[2]",
+                                  "timestampMethod": "receiveTime"
+                                },
+                                {
+                                  "enabled": true,
+                                  "color": "#E69F00",
+                                  "label": "reference (WBC)",
+                                  "lineSize": 1.5,
+                                  "showLine": true,
+                                  "lineStyle": "solid",
+                                  "value": "/psi_cortex/telemetry/wbc.arms[1]{reference_valid==true}.reference[2]",
+                                  "timestampMethod": "receiveTime"
+                                },
+                                {
+                                  "enabled": true,
+                                  "color": "#CC79A7",
+                                  "label": "command",
+                                  "lineSize": 1.5,
+                                  "showLine": true,
+                                  "lineStyle": "solid",
+                                  "value": "/psi_cortex/telemetry/tracking.arms[1]{command_fk_valid==true}.command_fk[2]",
+                                  "timestampMethod": "receiveTime"
+                                },
+                                {
+                                  "enabled": true,
+                                  "color": "#56B4E9",
+                                  "label": "actual",
+                                  "lineSize": 1.5,
+                                  "showLine": true,
+                                  "lineStyle": "solid",
+                                  "value": "/psi_cortex/telemetry/tracking.arms[1]{actual_fk_valid==true}.actual_fk[2]",
+                                  "timestampMethod": "receiveTime"
+                                }
+                              ],
+                              "showLegend": true,
+                              "legendDisplay": "floating",
+                              "showPlotValuesInLegend": false,
+                              "isSynced": true,
+                              "xAxisVal": "timestamp",
+                              "timeWindowMode": "sliding",
+                              "yAxisLabel": "m",
+                              "followingViewWidth": 15
+                            },
+                            "title": "Right TCP · Z",
+                            "version": 1
+                          }
+                        }
+                      ]
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "proportion": 1,
+              "content": {
+                "type": "panel",
+                "panelType": "StateTransitions",
+                "config": {
+                  "paths": [
+                    {
+                      "value": "/psi_cortex/telemetry/tracking.arms[0].reference_valid",
+                      "label": "L reference valid",
+                      "enabled": true,
+                      "timestampMethod": "receiveTime"
+                    },
+                    {
+                      "value": "/psi_cortex/telemetry/tracking.arms[1].reference_valid",
+                      "label": "R reference valid",
+                      "enabled": true,
+                      "timestampMethod": "receiveTime"
+                    }
+                  ],
+                  "isSynced": true,
+                  "xAxisRange": 15,
+                  "timeWindowMode": "sliding"
+                },
+                "title": "参考有效性 | Part 会话没有 WBC reference",
+                "version": 1
+              }
+            }
+          ]
+        }
+      },
+      {
+        "title": "03 关节 PVA",
+        "content": {
+          "type": "tabs",
+          "selectedTabIndex": 0,
+          "tabs": [
+            {
+              "title": "Left arm",
+              "content": {
+                "type": "split",
+                "direction": "column",
+                "items": [
+                  {
+                    "proportion": 1,
+                    "content": {
+                      "type": "panel",
+                      "panelType": "Plot",
+                      "config": {
+                        "paths": [
+                          {
+                            "enabled": true,
+                            "color": "#56B4E9",
+                            "label": "L1 actual",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "solid",
+                            "value": "/psi_cortex/telemetry/control{actual.position_valid==true}.actual.position[6]",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#56B4E9",
+                            "label": "L1 command",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "dashed",
+                            "value": "/psi_cortex/telemetry/control{command.position_valid==true}.command.position[6]",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#E69F00",
+                            "label": "L2 actual",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "solid",
+                            "value": "/psi_cortex/telemetry/control{actual.position_valid==true}.actual.position[7]",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#E69F00",
+                            "label": "L2 command",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "dashed",
+                            "value": "/psi_cortex/telemetry/control{command.position_valid==true}.command.position[7]",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#009E73",
+                            "label": "L3 actual",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "solid",
+                            "value": "/psi_cortex/telemetry/control{actual.position_valid==true}.actual.position[8]",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#009E73",
+                            "label": "L3 command",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "dashed",
+                            "value": "/psi_cortex/telemetry/control{command.position_valid==true}.command.position[8]",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#CC79A7",
+                            "label": "L4 actual",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "solid",
+                            "value": "/psi_cortex/telemetry/control{actual.position_valid==true}.actual.position[9]",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#CC79A7",
+                            "label": "L4 command",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "dashed",
+                            "value": "/psi_cortex/telemetry/control{command.position_valid==true}.command.position[9]",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#F0E442",
+                            "label": "L5 actual",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "solid",
+                            "value": "/psi_cortex/telemetry/control{actual.position_valid==true}.actual.position[10]",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#F0E442",
+                            "label": "L5 command",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "dashed",
+                            "value": "/psi_cortex/telemetry/control{command.position_valid==true}.command.position[10]",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#D55E00",
+                            "label": "L6 actual",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "solid",
+                            "value": "/psi_cortex/telemetry/control{actual.position_valid==true}.actual.position[11]",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#D55E00",
+                            "label": "L6 command",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "dashed",
+                            "value": "/psi_cortex/telemetry/control{command.position_valid==true}.command.position[11]",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#AAAAFF",
+                            "label": "L7 actual",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "solid",
+                            "value": "/psi_cortex/telemetry/control{actual.position_valid==true}.actual.position[12]",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#AAAAFF",
+                            "label": "L7 command",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "dashed",
+                            "value": "/psi_cortex/telemetry/control{command.position_valid==true}.command.position[12]",
+                            "timestampMethod": "receiveTime"
+                          }
+                        ],
+                        "showLegend": true,
+                        "legendDisplay": "floating",
+                        "showPlotValuesInLegend": false,
+                        "isSynced": true,
+                        "xAxisVal": "timestamp",
+                        "timeWindowMode": "sliding",
+                        "yAxisLabel": "rad",
+                        "followingViewWidth": 15
+                      },
+                      "title": "Left · position | actual 实线 / command 虚线",
+                      "version": 1
+                    }
+                  },
+                  {
+                    "proportion": 1,
+                    "content": {
+                      "type": "panel",
+                      "panelType": "Plot",
+                      "config": {
+                        "paths": [
+                          {
+                            "enabled": true,
+                            "color": "#56B4E9",
+                            "label": "L1 actual",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "solid",
+                            "value": "/psi_cortex/telemetry/control{actual.velocity_valid==true}.actual.velocity[6]",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#56B4E9",
+                            "label": "L1 command",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "dashed",
+                            "value": "/psi_cortex/telemetry/control{command.velocity_valid==true}.command.velocity[6]",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#E69F00",
+                            "label": "L2 actual",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "solid",
+                            "value": "/psi_cortex/telemetry/control{actual.velocity_valid==true}.actual.velocity[7]",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#E69F00",
+                            "label": "L2 command",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "dashed",
+                            "value": "/psi_cortex/telemetry/control{command.velocity_valid==true}.command.velocity[7]",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#009E73",
+                            "label": "L3 actual",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "solid",
+                            "value": "/psi_cortex/telemetry/control{actual.velocity_valid==true}.actual.velocity[8]",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#009E73",
+                            "label": "L3 command",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "dashed",
+                            "value": "/psi_cortex/telemetry/control{command.velocity_valid==true}.command.velocity[8]",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#CC79A7",
+                            "label": "L4 actual",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "solid",
+                            "value": "/psi_cortex/telemetry/control{actual.velocity_valid==true}.actual.velocity[9]",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#CC79A7",
+                            "label": "L4 command",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "dashed",
+                            "value": "/psi_cortex/telemetry/control{command.velocity_valid==true}.command.velocity[9]",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#F0E442",
+                            "label": "L5 actual",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "solid",
+                            "value": "/psi_cortex/telemetry/control{actual.velocity_valid==true}.actual.velocity[10]",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#F0E442",
+                            "label": "L5 command",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "dashed",
+                            "value": "/psi_cortex/telemetry/control{command.velocity_valid==true}.command.velocity[10]",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#D55E00",
+                            "label": "L6 actual",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "solid",
+                            "value": "/psi_cortex/telemetry/control{actual.velocity_valid==true}.actual.velocity[11]",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#D55E00",
+                            "label": "L6 command",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "dashed",
+                            "value": "/psi_cortex/telemetry/control{command.velocity_valid==true}.command.velocity[11]",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#AAAAFF",
+                            "label": "L7 actual",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "solid",
+                            "value": "/psi_cortex/telemetry/control{actual.velocity_valid==true}.actual.velocity[12]",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#AAAAFF",
+                            "label": "L7 command",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "dashed",
+                            "value": "/psi_cortex/telemetry/control{command.velocity_valid==true}.command.velocity[12]",
+                            "timestampMethod": "receiveTime"
+                          }
+                        ],
+                        "showLegend": true,
+                        "legendDisplay": "floating",
+                        "showPlotValuesInLegend": false,
+                        "isSynced": true,
+                        "xAxisVal": "timestamp",
+                        "timeWindowMode": "sliding",
+                        "yAxisLabel": "rad/s",
+                        "followingViewWidth": 15
+                      },
+                      "title": "Left · velocity | actual 实线 / command 虚线",
+                      "version": 1
+                    }
+                  },
+                  {
+                    "proportion": 1,
+                    "content": {
+                      "type": "panel",
+                      "panelType": "Plot",
+                      "config": {
+                        "paths": [
+                          {
+                            "enabled": true,
+                            "color": "#56B4E9",
+                            "label": "L1 actual",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "solid",
+                            "value": "/psi_cortex/telemetry/control{actual.acceleration_valid==true}.actual.acceleration[6]",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#56B4E9",
+                            "label": "L1 command",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "dashed",
+                            "value": "/psi_cortex/telemetry/control{command.acceleration_valid==true}.command.acceleration[6]",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#E69F00",
+                            "label": "L2 actual",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "solid",
+                            "value": "/psi_cortex/telemetry/control{actual.acceleration_valid==true}.actual.acceleration[7]",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#E69F00",
+                            "label": "L2 command",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "dashed",
+                            "value": "/psi_cortex/telemetry/control{command.acceleration_valid==true}.command.acceleration[7]",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#009E73",
+                            "label": "L3 actual",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "solid",
+                            "value": "/psi_cortex/telemetry/control{actual.acceleration_valid==true}.actual.acceleration[8]",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#009E73",
+                            "label": "L3 command",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "dashed",
+                            "value": "/psi_cortex/telemetry/control{command.acceleration_valid==true}.command.acceleration[8]",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#CC79A7",
+                            "label": "L4 actual",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "solid",
+                            "value": "/psi_cortex/telemetry/control{actual.acceleration_valid==true}.actual.acceleration[9]",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#CC79A7",
+                            "label": "L4 command",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "dashed",
+                            "value": "/psi_cortex/telemetry/control{command.acceleration_valid==true}.command.acceleration[9]",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#F0E442",
+                            "label": "L5 actual",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "solid",
+                            "value": "/psi_cortex/telemetry/control{actual.acceleration_valid==true}.actual.acceleration[10]",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#F0E442",
+                            "label": "L5 command",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "dashed",
+                            "value": "/psi_cortex/telemetry/control{command.acceleration_valid==true}.command.acceleration[10]",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#D55E00",
+                            "label": "L6 actual",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "solid",
+                            "value": "/psi_cortex/telemetry/control{actual.acceleration_valid==true}.actual.acceleration[11]",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#D55E00",
+                            "label": "L6 command",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "dashed",
+                            "value": "/psi_cortex/telemetry/control{command.acceleration_valid==true}.command.acceleration[11]",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#AAAAFF",
+                            "label": "L7 actual",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "solid",
+                            "value": "/psi_cortex/telemetry/control{actual.acceleration_valid==true}.actual.acceleration[12]",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#AAAAFF",
+                            "label": "L7 command",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "dashed",
+                            "value": "/psi_cortex/telemetry/control{command.acceleration_valid==true}.command.acceleration[12]",
+                            "timestampMethod": "receiveTime"
+                          }
+                        ],
+                        "showLegend": true,
+                        "legendDisplay": "floating",
+                        "showPlotValuesInLegend": false,
+                        "isSynced": true,
+                        "xAxisVal": "timestamp",
+                        "timeWindowMode": "sliding",
+                        "yAxisLabel": "rad/s²",
+                        "followingViewWidth": 15
+                      },
+                      "title": "Left · acceleration | actual 实线 / command 虚线",
+                      "version": 1
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "title": "Right arm",
+              "content": {
+                "type": "split",
+                "direction": "column",
+                "items": [
+                  {
+                    "proportion": 1,
+                    "content": {
+                      "type": "panel",
+                      "panelType": "Plot",
+                      "config": {
+                        "paths": [
+                          {
+                            "enabled": true,
+                            "color": "#56B4E9",
+                            "label": "R1 actual",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "solid",
+                            "value": "/psi_cortex/telemetry/control{actual.position_valid==true}.actual.position[13]",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#56B4E9",
+                            "label": "R1 command",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "dashed",
+                            "value": "/psi_cortex/telemetry/control{command.position_valid==true}.command.position[13]",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#E69F00",
+                            "label": "R2 actual",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "solid",
+                            "value": "/psi_cortex/telemetry/control{actual.position_valid==true}.actual.position[14]",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#E69F00",
+                            "label": "R2 command",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "dashed",
+                            "value": "/psi_cortex/telemetry/control{command.position_valid==true}.command.position[14]",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#009E73",
+                            "label": "R3 actual",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "solid",
+                            "value": "/psi_cortex/telemetry/control{actual.position_valid==true}.actual.position[15]",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#009E73",
+                            "label": "R3 command",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "dashed",
+                            "value": "/psi_cortex/telemetry/control{command.position_valid==true}.command.position[15]",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#CC79A7",
+                            "label": "R4 actual",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "solid",
+                            "value": "/psi_cortex/telemetry/control{actual.position_valid==true}.actual.position[16]",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#CC79A7",
+                            "label": "R4 command",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "dashed",
+                            "value": "/psi_cortex/telemetry/control{command.position_valid==true}.command.position[16]",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#F0E442",
+                            "label": "R5 actual",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "solid",
+                            "value": "/psi_cortex/telemetry/control{actual.position_valid==true}.actual.position[17]",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#F0E442",
+                            "label": "R5 command",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "dashed",
+                            "value": "/psi_cortex/telemetry/control{command.position_valid==true}.command.position[17]",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#D55E00",
+                            "label": "R6 actual",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "solid",
+                            "value": "/psi_cortex/telemetry/control{actual.position_valid==true}.actual.position[18]",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#D55E00",
+                            "label": "R6 command",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "dashed",
+                            "value": "/psi_cortex/telemetry/control{command.position_valid==true}.command.position[18]",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#AAAAFF",
+                            "label": "R7 actual",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "solid",
+                            "value": "/psi_cortex/telemetry/control{actual.position_valid==true}.actual.position[19]",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#AAAAFF",
+                            "label": "R7 command",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "dashed",
+                            "value": "/psi_cortex/telemetry/control{command.position_valid==true}.command.position[19]",
+                            "timestampMethod": "receiveTime"
+                          }
+                        ],
+                        "showLegend": true,
+                        "legendDisplay": "floating",
+                        "showPlotValuesInLegend": false,
+                        "isSynced": true,
+                        "xAxisVal": "timestamp",
+                        "timeWindowMode": "sliding",
+                        "yAxisLabel": "rad",
+                        "followingViewWidth": 15
+                      },
+                      "title": "Right · position | actual 实线 / command 虚线",
+                      "version": 1
+                    }
+                  },
+                  {
+                    "proportion": 1,
+                    "content": {
+                      "type": "panel",
+                      "panelType": "Plot",
+                      "config": {
+                        "paths": [
+                          {
+                            "enabled": true,
+                            "color": "#56B4E9",
+                            "label": "R1 actual",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "solid",
+                            "value": "/psi_cortex/telemetry/control{actual.velocity_valid==true}.actual.velocity[13]",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#56B4E9",
+                            "label": "R1 command",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "dashed",
+                            "value": "/psi_cortex/telemetry/control{command.velocity_valid==true}.command.velocity[13]",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#E69F00",
+                            "label": "R2 actual",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "solid",
+                            "value": "/psi_cortex/telemetry/control{actual.velocity_valid==true}.actual.velocity[14]",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#E69F00",
+                            "label": "R2 command",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "dashed",
+                            "value": "/psi_cortex/telemetry/control{command.velocity_valid==true}.command.velocity[14]",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#009E73",
+                            "label": "R3 actual",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "solid",
+                            "value": "/psi_cortex/telemetry/control{actual.velocity_valid==true}.actual.velocity[15]",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#009E73",
+                            "label": "R3 command",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "dashed",
+                            "value": "/psi_cortex/telemetry/control{command.velocity_valid==true}.command.velocity[15]",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#CC79A7",
+                            "label": "R4 actual",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "solid",
+                            "value": "/psi_cortex/telemetry/control{actual.velocity_valid==true}.actual.velocity[16]",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#CC79A7",
+                            "label": "R4 command",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "dashed",
+                            "value": "/psi_cortex/telemetry/control{command.velocity_valid==true}.command.velocity[16]",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#F0E442",
+                            "label": "R5 actual",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "solid",
+                            "value": "/psi_cortex/telemetry/control{actual.velocity_valid==true}.actual.velocity[17]",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#F0E442",
+                            "label": "R5 command",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "dashed",
+                            "value": "/psi_cortex/telemetry/control{command.velocity_valid==true}.command.velocity[17]",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#D55E00",
+                            "label": "R6 actual",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "solid",
+                            "value": "/psi_cortex/telemetry/control{actual.velocity_valid==true}.actual.velocity[18]",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#D55E00",
+                            "label": "R6 command",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "dashed",
+                            "value": "/psi_cortex/telemetry/control{command.velocity_valid==true}.command.velocity[18]",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#AAAAFF",
+                            "label": "R7 actual",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "solid",
+                            "value": "/psi_cortex/telemetry/control{actual.velocity_valid==true}.actual.velocity[19]",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#AAAAFF",
+                            "label": "R7 command",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "dashed",
+                            "value": "/psi_cortex/telemetry/control{command.velocity_valid==true}.command.velocity[19]",
+                            "timestampMethod": "receiveTime"
+                          }
+                        ],
+                        "showLegend": true,
+                        "legendDisplay": "floating",
+                        "showPlotValuesInLegend": false,
+                        "isSynced": true,
+                        "xAxisVal": "timestamp",
+                        "timeWindowMode": "sliding",
+                        "yAxisLabel": "rad/s",
+                        "followingViewWidth": 15
+                      },
+                      "title": "Right · velocity | actual 实线 / command 虚线",
+                      "version": 1
+                    }
+                  },
+                  {
+                    "proportion": 1,
+                    "content": {
+                      "type": "panel",
+                      "panelType": "Plot",
+                      "config": {
+                        "paths": [
+                          {
+                            "enabled": true,
+                            "color": "#56B4E9",
+                            "label": "R1 actual",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "solid",
+                            "value": "/psi_cortex/telemetry/control{actual.acceleration_valid==true}.actual.acceleration[13]",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#56B4E9",
+                            "label": "R1 command",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "dashed",
+                            "value": "/psi_cortex/telemetry/control{command.acceleration_valid==true}.command.acceleration[13]",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#E69F00",
+                            "label": "R2 actual",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "solid",
+                            "value": "/psi_cortex/telemetry/control{actual.acceleration_valid==true}.actual.acceleration[14]",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#E69F00",
+                            "label": "R2 command",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "dashed",
+                            "value": "/psi_cortex/telemetry/control{command.acceleration_valid==true}.command.acceleration[14]",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#009E73",
+                            "label": "R3 actual",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "solid",
+                            "value": "/psi_cortex/telemetry/control{actual.acceleration_valid==true}.actual.acceleration[15]",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#009E73",
+                            "label": "R3 command",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "dashed",
+                            "value": "/psi_cortex/telemetry/control{command.acceleration_valid==true}.command.acceleration[15]",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#CC79A7",
+                            "label": "R4 actual",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "solid",
+                            "value": "/psi_cortex/telemetry/control{actual.acceleration_valid==true}.actual.acceleration[16]",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#CC79A7",
+                            "label": "R4 command",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "dashed",
+                            "value": "/psi_cortex/telemetry/control{command.acceleration_valid==true}.command.acceleration[16]",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#F0E442",
+                            "label": "R5 actual",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "solid",
+                            "value": "/psi_cortex/telemetry/control{actual.acceleration_valid==true}.actual.acceleration[17]",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#F0E442",
+                            "label": "R5 command",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "dashed",
+                            "value": "/psi_cortex/telemetry/control{command.acceleration_valid==true}.command.acceleration[17]",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#D55E00",
+                            "label": "R6 actual",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "solid",
+                            "value": "/psi_cortex/telemetry/control{actual.acceleration_valid==true}.actual.acceleration[18]",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#D55E00",
+                            "label": "R6 command",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "dashed",
+                            "value": "/psi_cortex/telemetry/control{command.acceleration_valid==true}.command.acceleration[18]",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#AAAAFF",
+                            "label": "R7 actual",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "solid",
+                            "value": "/psi_cortex/telemetry/control{actual.acceleration_valid==true}.actual.acceleration[19]",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#AAAAFF",
+                            "label": "R7 command",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "dashed",
+                            "value": "/psi_cortex/telemetry/control{command.acceleration_valid==true}.command.acceleration[19]",
+                            "timestampMethod": "receiveTime"
+                          }
+                        ],
+                        "showLegend": true,
+                        "legendDisplay": "floating",
+                        "showPlotValuesInLegend": false,
+                        "isSynced": true,
+                        "xAxisVal": "timestamp",
+                        "timeWindowMode": "sliding",
+                        "yAxisLabel": "rad/s²",
+                        "followingViewWidth": 15
+                      },
+                      "title": "Right · acceleration | actual 实线 / command 虚线",
+                      "version": 1
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "title": "Waist",
+              "content": {
+                "type": "split",
+                "direction": "column",
+                "items": [
+                  {
+                    "proportion": 1,
+                    "content": {
+                      "type": "panel",
+                      "panelType": "Plot",
+                      "config": {
+                        "paths": [
+                          {
+                            "enabled": true,
+                            "color": "#56B4E9",
+                            "label": "torso yaw actual",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "solid",
+                            "value": "/psi_cortex/telemetry/control{actual.position_valid==true}.actual.position[2]",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#56B4E9",
+                            "label": "torso yaw command",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "dashed",
+                            "value": "/psi_cortex/telemetry/control{command.position_valid==true}.command.position[2]",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#E69F00",
+                            "label": "torso pitch actual",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "solid",
+                            "value": "/psi_cortex/telemetry/control{actual.position_valid==true}.actual.position[3]",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#E69F00",
+                            "label": "torso pitch command",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "dashed",
+                            "value": "/psi_cortex/telemetry/control{command.position_valid==true}.command.position[3]",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#009E73",
+                            "label": "knee actual",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "solid",
+                            "value": "/psi_cortex/telemetry/control{actual.position_valid==true}.actual.position[4]",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#009E73",
+                            "label": "knee command",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "dashed",
+                            "value": "/psi_cortex/telemetry/control{command.position_valid==true}.command.position[4]",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#CC79A7",
+                            "label": "ankle actual",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "solid",
+                            "value": "/psi_cortex/telemetry/control{actual.position_valid==true}.actual.position[5]",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#CC79A7",
+                            "label": "ankle command",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "dashed",
+                            "value": "/psi_cortex/telemetry/control{command.position_valid==true}.command.position[5]",
+                            "timestampMethod": "receiveTime"
+                          }
+                        ],
+                        "showLegend": true,
+                        "legendDisplay": "floating",
+                        "showPlotValuesInLegend": false,
+                        "isSynced": true,
+                        "xAxisVal": "timestamp",
+                        "timeWindowMode": "sliding",
+                        "yAxisLabel": "rad",
+                        "followingViewWidth": 15
+                      },
+                      "title": "Waist · position | actual 实线 / command 虚线",
+                      "version": 1
+                    }
+                  },
+                  {
+                    "proportion": 1,
+                    "content": {
+                      "type": "panel",
+                      "panelType": "Plot",
+                      "config": {
+                        "paths": [
+                          {
+                            "enabled": true,
+                            "color": "#56B4E9",
+                            "label": "torso yaw actual",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "solid",
+                            "value": "/psi_cortex/telemetry/control{actual.velocity_valid==true}.actual.velocity[2]",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#56B4E9",
+                            "label": "torso yaw command",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "dashed",
+                            "value": "/psi_cortex/telemetry/control{command.velocity_valid==true}.command.velocity[2]",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#E69F00",
+                            "label": "torso pitch actual",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "solid",
+                            "value": "/psi_cortex/telemetry/control{actual.velocity_valid==true}.actual.velocity[3]",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#E69F00",
+                            "label": "torso pitch command",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "dashed",
+                            "value": "/psi_cortex/telemetry/control{command.velocity_valid==true}.command.velocity[3]",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#009E73",
+                            "label": "knee actual",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "solid",
+                            "value": "/psi_cortex/telemetry/control{actual.velocity_valid==true}.actual.velocity[4]",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#009E73",
+                            "label": "knee command",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "dashed",
+                            "value": "/psi_cortex/telemetry/control{command.velocity_valid==true}.command.velocity[4]",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#CC79A7",
+                            "label": "ankle actual",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "solid",
+                            "value": "/psi_cortex/telemetry/control{actual.velocity_valid==true}.actual.velocity[5]",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#CC79A7",
+                            "label": "ankle command",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "dashed",
+                            "value": "/psi_cortex/telemetry/control{command.velocity_valid==true}.command.velocity[5]",
+                            "timestampMethod": "receiveTime"
+                          }
+                        ],
+                        "showLegend": true,
+                        "legendDisplay": "floating",
+                        "showPlotValuesInLegend": false,
+                        "isSynced": true,
+                        "xAxisVal": "timestamp",
+                        "timeWindowMode": "sliding",
+                        "yAxisLabel": "rad/s",
+                        "followingViewWidth": 15
+                      },
+                      "title": "Waist · velocity | actual 实线 / command 虚线",
+                      "version": 1
+                    }
+                  },
+                  {
+                    "proportion": 1,
+                    "content": {
+                      "type": "panel",
+                      "panelType": "Plot",
+                      "config": {
+                        "paths": [
+                          {
+                            "enabled": true,
+                            "color": "#56B4E9",
+                            "label": "torso yaw actual",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "solid",
+                            "value": "/psi_cortex/telemetry/control{actual.acceleration_valid==true}.actual.acceleration[2]",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#56B4E9",
+                            "label": "torso yaw command",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "dashed",
+                            "value": "/psi_cortex/telemetry/control{command.acceleration_valid==true}.command.acceleration[2]",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#E69F00",
+                            "label": "torso pitch actual",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "solid",
+                            "value": "/psi_cortex/telemetry/control{actual.acceleration_valid==true}.actual.acceleration[3]",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#E69F00",
+                            "label": "torso pitch command",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "dashed",
+                            "value": "/psi_cortex/telemetry/control{command.acceleration_valid==true}.command.acceleration[3]",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#009E73",
+                            "label": "knee actual",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "solid",
+                            "value": "/psi_cortex/telemetry/control{actual.acceleration_valid==true}.actual.acceleration[4]",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#009E73",
+                            "label": "knee command",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "dashed",
+                            "value": "/psi_cortex/telemetry/control{command.acceleration_valid==true}.command.acceleration[4]",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#CC79A7",
+                            "label": "ankle actual",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "solid",
+                            "value": "/psi_cortex/telemetry/control{actual.acceleration_valid==true}.actual.acceleration[5]",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#CC79A7",
+                            "label": "ankle command",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "dashed",
+                            "value": "/psi_cortex/telemetry/control{command.acceleration_valid==true}.command.acceleration[5]",
+                            "timestampMethod": "receiveTime"
+                          }
+                        ],
+                        "showLegend": true,
+                        "legendDisplay": "floating",
+                        "showPlotValuesInLegend": false,
+                        "isSynced": true,
+                        "xAxisVal": "timestamp",
+                        "timeWindowMode": "sliding",
+                        "yAxisLabel": "rad/s²",
+                        "followingViewWidth": 15
+                      },
+                      "title": "Waist · acceleration | actual 实线 / command 虚线",
+                      "version": 1
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "title": "Head",
+              "content": {
+                "type": "split",
+                "direction": "column",
+                "items": [
+                  {
+                    "proportion": 1,
+                    "content": {
+                      "type": "panel",
+                      "panelType": "Plot",
+                      "config": {
+                        "paths": [
+                          {
+                            "enabled": true,
+                            "color": "#56B4E9",
+                            "label": "head yaw actual",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "solid",
+                            "value": "/psi_cortex/telemetry/control{actual.position_valid==true}.actual.position[0]",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#56B4E9",
+                            "label": "head yaw command",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "dashed",
+                            "value": "/psi_cortex/telemetry/control{command.position_valid==true}.command.position[0]",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#E69F00",
+                            "label": "head pitch actual",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "solid",
+                            "value": "/psi_cortex/telemetry/control{actual.position_valid==true}.actual.position[1]",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#E69F00",
+                            "label": "head pitch command",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "dashed",
+                            "value": "/psi_cortex/telemetry/control{command.position_valid==true}.command.position[1]",
+                            "timestampMethod": "receiveTime"
+                          }
+                        ],
+                        "showLegend": true,
+                        "legendDisplay": "floating",
+                        "showPlotValuesInLegend": false,
+                        "isSynced": true,
+                        "xAxisVal": "timestamp",
+                        "timeWindowMode": "sliding",
+                        "yAxisLabel": "rad",
+                        "followingViewWidth": 15
+                      },
+                      "title": "Head · position | actual 实线 / command 虚线",
+                      "version": 1
+                    }
+                  },
+                  {
+                    "proportion": 1,
+                    "content": {
+                      "type": "panel",
+                      "panelType": "Plot",
+                      "config": {
+                        "paths": [
+                          {
+                            "enabled": true,
+                            "color": "#56B4E9",
+                            "label": "head yaw actual",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "solid",
+                            "value": "/psi_cortex/telemetry/control{actual.velocity_valid==true}.actual.velocity[0]",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#56B4E9",
+                            "label": "head yaw command",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "dashed",
+                            "value": "/psi_cortex/telemetry/control{command.velocity_valid==true}.command.velocity[0]",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#E69F00",
+                            "label": "head pitch actual",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "solid",
+                            "value": "/psi_cortex/telemetry/control{actual.velocity_valid==true}.actual.velocity[1]",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#E69F00",
+                            "label": "head pitch command",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "dashed",
+                            "value": "/psi_cortex/telemetry/control{command.velocity_valid==true}.command.velocity[1]",
+                            "timestampMethod": "receiveTime"
+                          }
+                        ],
+                        "showLegend": true,
+                        "legendDisplay": "floating",
+                        "showPlotValuesInLegend": false,
+                        "isSynced": true,
+                        "xAxisVal": "timestamp",
+                        "timeWindowMode": "sliding",
+                        "yAxisLabel": "rad/s",
+                        "followingViewWidth": 15
+                      },
+                      "title": "Head · velocity | actual 实线 / command 虚线",
+                      "version": 1
+                    }
+                  },
+                  {
+                    "proportion": 1,
+                    "content": {
+                      "type": "panel",
+                      "panelType": "Plot",
+                      "config": {
+                        "paths": [
+                          {
+                            "enabled": true,
+                            "color": "#56B4E9",
+                            "label": "head yaw actual",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "solid",
+                            "value": "/psi_cortex/telemetry/control{actual.acceleration_valid==true}.actual.acceleration[0]",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#56B4E9",
+                            "label": "head yaw command",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "dashed",
+                            "value": "/psi_cortex/telemetry/control{command.acceleration_valid==true}.command.acceleration[0]",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#E69F00",
+                            "label": "head pitch actual",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "solid",
+                            "value": "/psi_cortex/telemetry/control{actual.acceleration_valid==true}.actual.acceleration[1]",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#E69F00",
+                            "label": "head pitch command",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "dashed",
+                            "value": "/psi_cortex/telemetry/control{command.acceleration_valid==true}.command.acceleration[1]",
+                            "timestampMethod": "receiveTime"
+                          }
+                        ],
+                        "showLegend": true,
+                        "legendDisplay": "floating",
+                        "showPlotValuesInLegend": false,
+                        "isSynced": true,
+                        "xAxisVal": "timestamp",
+                        "timeWindowMode": "sliding",
+                        "yAxisLabel": "rad/s²",
+                        "followingViewWidth": 15
+                      },
+                      "title": "Head · acceleration | actual 实线 / command 虚线",
+                      "version": 1
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      },
+      {
+        "title": "04 WBC / Yellow",
+        "content": {
+          "type": "split",
+          "direction": "row",
+          "items": [
+            {
+              "proportion": 1,
+              "content": {
+                "type": "split",
+                "direction": "column",
+                "items": [
+                  {
+                    "proportion": 2,
+                    "content": {
+                      "type": "panel",
+                      "panelType": "StateTransitions",
+                      "config": {
+                        "paths": [
+                          {
+                            "value": "/psi_cortex/telemetry/wbc.attempted",
+                            "label": "attempted",
+                            "enabled": true,
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "value": "/psi_cortex/telemetry/wbc.accepted",
+                            "label": "accepted",
+                            "enabled": true,
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "value": "/psi_cortex/telemetry/wbc.coupling_active",
+                            "label": "coupling_active",
+                            "enabled": true,
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "value": "/psi_cortex/telemetry/wbc.latest_yellow_accepted",
+                            "label": "latest_yellow_accepted",
+                            "enabled": true,
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "value": "/psi_cortex/telemetry/yellow.accepted",
+                            "label": "Yellow accepted",
+                            "enabled": true,
+                            "timestampMethod": "receiveTime"
+                          }
+                        ],
+                        "isSynced": true,
+                        "xAxisRange": 15,
+                        "timeWindowMode": "sliding"
+                      },
+                      "title": "WBC / Yellow acceptance",
+                      "version": 1
+                    }
+                  },
+                  {
+                    "proportion": 2,
+                    "content": {
+                      "type": "panel",
+                      "panelType": "Plot",
+                      "config": {
+                        "paths": [
+                          {
+                            "enabled": true,
+                            "color": "#56B4E9",
+                            "label": "Red",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "solid",
+                            "value": "/psi_cortex/telemetry/wbc{attempted==true}.elapsed_ms",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#E69F00",
+                            "label": "Yellow",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "solid",
+                            "value": "/psi_cortex/telemetry/yellow.elapsed_ms",
+                            "timestampMethod": "receiveTime"
+                          }
+                        ],
+                        "showLegend": true,
+                        "legendDisplay": "floating",
+                        "showPlotValuesInLegend": false,
+                        "isSynced": true,
+                        "xAxisVal": "timestamp",
+                        "timeWindowMode": "sliding",
+                        "yAxisLabel": "ms",
+                        "followingViewWidth": 15
+                      },
+                      "title": "Red / Yellow 求解耗时",
+                      "version": 1
+                    }
+                  },
+                  {
+                    "proportion": 1,
+                    "content": {
+                      "type": "panel",
+                      "panelType": "Plot",
+                      "config": {
+                        "paths": [
+                          {
+                            "enabled": true,
+                            "color": "#D55E00",
+                            "label": "hard violation",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "solid",
+                            "value": "/psi_cortex/telemetry/wbc{attempted==true}.hard_violation",
+                            "timestampMethod": "receiveTime"
+                          }
+                        ],
+                        "showLegend": true,
+                        "legendDisplay": "floating",
+                        "showPlotValuesInLegend": false,
+                        "isSynced": true,
+                        "xAxisVal": "timestamp",
+                        "timeWindowMode": "sliding",
+                        "yAxisLabel": "solver native",
+                        "followingViewWidth": 15
+                      },
+                      "title": "Red hard violation",
+                      "version": 1
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "proportion": 1,
+              "content": {
+                "type": "split",
+                "direction": "column",
+                "items": [
+                  {
+                    "proportion": 1,
+                    "content": {
+                      "type": "panel",
+                      "panelType": "Plot",
+                      "config": {
+                        "paths": [
+                          {
+                            "enabled": true,
+                            "color": "#56B4E9",
+                            "label": "scale[0]",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "solid",
+                            "value": "/psi_cortex/telemetry/wbc{attempted==true}.scales[0]",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#E69F00",
+                            "label": "scale[1]",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "solid",
+                            "value": "/psi_cortex/telemetry/wbc{attempted==true}.scales[1]",
+                            "timestampMethod": "receiveTime"
+                          }
+                        ],
+                        "showLegend": true,
+                        "legendDisplay": "floating",
+                        "showPlotValuesInLegend": false,
+                        "isSynced": true,
+                        "xAxisVal": "timestamp",
+                        "timeWindowMode": "sliding",
+                        "yAxisLabel": "ratio",
+                        "followingViewWidth": 15
+                      },
+                      "title": "WBC task scales",
+                      "version": 1
+                    }
+                  },
+                  {
+                    "proportion": 2,
+                    "content": {
+                      "type": "tabs",
+                      "selectedTabIndex": 0,
+                      "tabs": [
+                        {
+                          "title": "Red / passes",
+                          "content": {
+                            "type": "panel",
+                            "panelType": "RawMessages",
+                            "config": {
+                              "topicPath": "/psi_cortex/telemetry/wbc"
+                            },
+                            "title": "WBC attempts / passes",
+                            "version": 1
+                          }
+                        },
+                        {
+                          "title": "Yellow",
+                          "content": {
+                            "type": "panel",
+                            "panelType": "RawMessages",
+                            "config": {
+                              "topicPath": "/psi_cortex/telemetry/yellow"
+                            },
+                            "title": "Yellow attempts",
+                            "version": 1
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "proportion": 1,
+                    "content": {
+                      "type": "panel",
+                      "panelType": "Markdown",
+                      "config": {
+                        "fontSize": 13,
+                        "renderMode": "static",
+                        "markdown": "Red 使用 `attempted=true` 过滤数值。accepted 是该次求解接受状态，不能视为目标运动完成。\n\n硬约束违反量、HQP pass 和 Yellow 原始字段来自 Cortex 可视化通道；它们不经过 Psi SDK。"
+                      },
+                      "title": "WBC 解释",
+                      "version": 1
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      },
+      {
+        "title": "05 运行与事件",
+        "content": {
+          "type": "split",
+          "direction": "row",
+          "items": [
+            {
+              "proportion": 1,
+              "content": {
+                "type": "split",
+                "direction": "column",
+                "items": [
+                  {
+                    "proportion": 1,
+                    "content": {
+                      "type": "panel",
+                      "panelType": "Plot",
+                      "config": {
+                        "paths": [
+                          {
+                            "enabled": true,
+                            "color": "#56B4E9",
+                            "label": "elapsed",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "solid",
+                            "value": "/psi_cortex/telemetry/control.elapsed_ns.@mul(0.000001)",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#D55E00",
+                            "label": "lateness",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "solid",
+                            "value": "/psi_cortex/telemetry/control.deadline_lateness_ns.@mul(0.000001)",
+                            "timestampMethod": "receiveTime"
+                          }
+                        ],
+                        "showLegend": true,
+                        "legendDisplay": "floating",
+                        "showPlotValuesInLegend": false,
+                        "isSynced": true,
+                        "xAxisVal": "timestamp",
+                        "timeWindowMode": "sliding",
+                        "yAxisLabel": "ms",
+                        "followingViewWidth": 15
+                      },
+                      "title": "控制周期 elapsed / deadline lateness",
+                      "version": 1
+                    }
+                  },
+                  {
+                    "proportion": 1,
+                    "content": {
+                      "type": "panel",
+                      "panelType": "Plot",
+                      "config": {
+                        "paths": [
+                          {
+                            "enabled": true,
+                            "color": "#56B4E9",
+                            "label": "Part queue",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "solid",
+                            "value": "/psi_cortex/telemetry/transport.queue_depth[0]",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#E69F00",
+                            "label": "WBC queue",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "solid",
+                            "value": "/psi_cortex/telemetry/transport.queue_depth[1]",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#009E73",
+                            "label": "Yellow queue",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "solid",
+                            "value": "/psi_cortex/telemetry/transport.queue_depth[2]",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#56B4E9",
+                            "label": "Part dropped",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "dashed",
+                            "value": "/psi_cortex/telemetry/transport.dropped[0]",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#E69F00",
+                            "label": "WBC dropped",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "dashed",
+                            "value": "/psi_cortex/telemetry/transport.dropped[1]",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#009E73",
+                            "label": "Yellow dropped",
+                            "lineSize": 1.5,
+                            "showLine": true,
+                            "lineStyle": "dashed",
+                            "value": "/psi_cortex/telemetry/transport.dropped[2]",
+                            "timestampMethod": "receiveTime"
+                          }
+                        ],
+                        "showLegend": true,
+                        "legendDisplay": "floating",
+                        "showPlotValuesInLegend": false,
+                        "isSynced": true,
+                        "xAxisVal": "timestamp",
+                        "timeWindowMode": "sliding",
+                        "yAxisLabel": "samples",
+                        "followingViewWidth": 15
+                      },
+                      "title": "Telemetry queues | depths / drops",
+                      "version": 1
+                    }
+                  },
+                  {
+                    "proportion": 1,
+                    "content": {
+                      "type": "panel",
+                      "panelType": "Log",
+                      "config": {
+                        "topicToRender": "/psi_cortex/events",
+                        "showLevel": true,
+                        "showTime": true,
+                        "showName": true
+                      },
+                      "title": "Cortex events",
+                      "version": 1
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "proportion": 1,
+              "content": {
+                "type": "tabs",
+                "selectedTabIndex": 0,
+                "tabs": [
+                  {
+                    "title": "Run / joint order",
+                    "content": {
+                      "type": "panel",
+                      "panelType": "RawMessages",
+                      "config": {
+                        "topicPath": "/psi_cortex/run/info"
+                      },
+                      "title": "配置与控制关节顺序",
+                      "version": 1
+                    }
+                  },
+                  {
+                    "title": "Control",
+                    "content": {
+                      "type": "panel",
+                      "panelType": "RawMessages",
+                      "config": {
+                        "topicPath": "/psi_cortex/telemetry/control"
+                      },
+                      "title": "Control snapshot",
+                      "version": 1
+                    }
+                  },
+                  {
+                    "title": "Transport",
+                    "content": {
+                      "type": "panel",
+                      "panelType": "RawMessages",
+                      "config": {
+                        "topicPath": "/psi_cortex/telemetry/transport"
+                      },
+                      "title": "队列与完整性",
+                      "version": 1
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

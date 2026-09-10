@@ -14,6 +14,8 @@ project(
 include(CTest)
 include(GNUInstallDirs)
 
+option(MCL_BUILD_PSIBOT_TELEOP "Build the Psi SDK keyboard teleoperation client" OFF)
+
 option(
   MCL_BUILD_SINGLE_ARM_STEP
   "Build the single-arm interactive IK application"
@@ -418,6 +420,7 @@ add_library(motion_control_lab::tui ALIAS mcl_tui)
 target_include_directories(mcl_tui PUBLIC "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>")
 target_link_libraries(
   mcl_tui PUBLIC motion_control_lab::input_contract motion_control_lab::presentation_contract
+  PRIVATE motion_control_lab::terminal_frontend
 )
 if(MCL_ENABLE_TUI)
   target_compile_definitions(mcl_tui PRIVATE MCL_WITH_FTXUI=1)
@@ -427,6 +430,9 @@ else()
 endif()
 
 add_library(mcl_app_scaffold INTERFACE)
+if(MCL_BUILD_PSIBOT_TELEOP)
+  add_subdirectory(apps/psibot_teleop)
+endif()
 add_library(motion_control_lab::app_scaffold ALIAS mcl_app_scaffold)
 target_include_directories(mcl_app_scaffold INTERFACE "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>")
 target_link_libraries(mcl_app_scaffold INTERFACE motion_control_lab::runtime_contract)

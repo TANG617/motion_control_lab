@@ -44,6 +44,11 @@ E01 和 E04 都固定使用 `/workspace/models/r1.cos.urdf` 及同一左臂可�
 
 当前开发环境以 Apple Silicon macOS 为基线，不需要 ROS2 或容器。
 
+可选的 [psibot_teleop](apps/psibot_teleop/README.md) 是 Linux SDK 客户端，通过 Psi 后端
+连接 `psi_cortex`，提供关节、单臂笛卡尔和双臂 WBC 键盘控制及 TUI。以 `MCL_BUILD_PSIBOT_TELEOP=ON` 启用；
+其 app-local SDK 发布快照当前依赖 ROS Jazzy 运行库。这是可选客户端的依赖，不改变
+其余原生算法 app 的运行边界。
+
 ```bash
 brew install cmake pinocchio
 ```
@@ -593,6 +598,7 @@ apps/step/          main/options/solver/loop；普通双臂 ServoStep teleop/rep
 apps/target/        main/options/solver/loop；普通双臂 TargetSolve
 apps/single_arm_step/ main/options/solver/loop；单臂 ServoStep
 apps/hierarchical_kinematics_step/ 五 profile Red/Yellow HKS、planning、OTG、nullspace、导纳与运动学仿真
+apps/psibot_teleop/             Psi SDK 关节/单臂笛卡尔/WBC 键盘客户端与 TUI
 apps/hierarchical_inverse_dynamics_torque_sim/ fixed-base R1 hierarchical ID + MuJoCo torque 闭环
 contracts/                definition、manifest、metric 与 visualization 合同
 data/raw/                 原始数据占位；不得静默改写

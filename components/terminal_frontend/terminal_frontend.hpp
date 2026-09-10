@@ -12,7 +12,10 @@ struct TerminalFrontendOptions
 {
   bool input_enabled{true};
   bool alternate_screen{false};
+  int output_fd{1};  // Borrowed descriptor; may differ from process stdout.
 };
+
+void writeTerminalOutput(int fd, const std::string & text);
 
 class TerminalFrontend
 {

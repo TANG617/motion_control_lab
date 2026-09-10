@@ -1,0 +1,24 @@
+{
+  "name": "psi_robot_sdk",
+  "version": "0.1.0",
+  "source_repository": "products/psibot-robot-sdk",
+  "source_commit": "4e70d7e8984df95ef89a6a2a0bd8b910510f5610",
+  "architecture": "x86_64",
+  "os": "Ubuntu 24.04",
+  "build_type": "Release",
+  "cxx_standard": 17,
+  "compiler": "c++ (Ubuntu 13.3.0-6ubuntu2~24.04) 13.3.0",
+  "build_options": {
+    "ROBOT_SDK_BUILD_ROS2": true,
+    "ROBOT_SDK_BUILD_PYTHON": false,
+    "ROBOT_SDK_BUILD_SAMPLES": false,
+    "CMAKE_BUILD_WITH_INSTALL_RPATH": true
+  },
+  "ros_distro": "jazzy",
+  "rpath": "$ORIGIN",
+  "compatibility_note": "Both public headers exactly match psi_cortex vendored headers. HEAD 68e8365 changes setHandAngles ABI; use preceding compatible revision.",
+  "sha256": {
+    "libinex_client.so": "a3337c8ea6a42ffaace3deceebaeb5352991439dfbc2ec00d14b8da8acc15a63",
+    "libpsi_sdk.so.0.1.0": "3dd25269ca19897c97b0bad9e9744e5ed8bf60ac0d943b0dfff163039ccb6e54"
+  }
+}

@@ -35,6 +35,7 @@ MCC_COMPONENT_PATTERNS = (
     re.compile(r"\bmotion_control_core(?:::[A-Za-z0-9_]+)?\b"),
 )
 APP_SOURCE_FILES = {
+    "psibot_teleop": {"main.cpp", "options.cpp", "options.hpp", "client.cpp", "client.hpp", "loop.cpp", "loop.hpp", "tui_projection.cpp", "tui_projection.hpp"},
     "baseline": {"main.cpp", "options.cpp", "options.hpp", "solver.cpp", "solver.hpp", "loop.cpp", "loop.hpp"},
     "cartesian_planning": {"main.cpp", "options.cpp", "options.hpp", "planning.cpp", "planning.hpp", "loop.cpp", "loop.hpp"},
     "hierarchical_inverse_dynamics_torque_sim": {"main.cpp", "options.cpp", "options.hpp", "solver.cpp", "solver.hpp", "loop.cpp", "loop.hpp"},
@@ -46,6 +47,7 @@ APP_SOURCE_FILES = {
     "target": {"main.cpp", "options.cpp", "options.hpp", "solver.cpp", "solver.hpp", "loop.cpp", "loop.hpp"},
 }
 APP_MAIN_REQUIREMENTS = {
+    "psibot_teleop": ("parseOptions", "runLoop"),
     "baseline": ("parseTeleopOptions", "parseReplayOptions", "BaselineSolver", "runLoop", "runReplayLoop"),
     "cartesian_planning": ("parseOptions", "CartesianPlanner", "planner.generate", "playTrajectory"),
     "hierarchical_inverse_dynamics_torque_sim": ("parseOptions", "configureSolver", "runLoop"),

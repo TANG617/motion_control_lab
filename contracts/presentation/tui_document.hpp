@@ -88,6 +88,10 @@ struct TuiDocument
   std::string footer_hints;
   std::string header_left;
   std::string header_right;
+  int minimum_width{0};
+  int minimum_height{0};
+  std::vector<TuiSection> modal_sections;
+  bool dim_secondary_text{true};
 };
 
 } // namespace motion_control_lab

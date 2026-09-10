@@ -11,6 +11,17 @@
 namespace motion_control_lab
 {
 
+void writeTerminalOutput(int fd, const std::string & text)
+{
+  std::size_t offset = 0;
+  while (offset < text.size()) {
+    const auto written = ::write(fd, text.data() + offset, text.size() - offset);
+    if (written < 0 && errno == EINTR) continue;
+    if (written <= 0) throw std::runtime_error(std::strerror(errno));
+    offset += static_cast<std::size_t>(written);
+  }
+}
+
 struct TerminalFrontend::TerminalState
 {
   termios attributes{};
@@ -31,7 +42,7 @@ TerminalFrontend::TerminalFrontend(TerminalFrontendOptions options) : options_(o
   if (!options_.input_enabled && !options_.alternate_screen) {
     return;
   }
-  if (!::isatty(STDIN_FILENO) || !::isatty(STDOUT_FILENO)) {
+  if (!::isatty(STDIN_FILENO) || !::isatty(options_.output_fd)) {
     throw std::runtime_error("terminal input/rendering requires an interactive TTY");
   }
 
@@ -55,7 +66,12 @@ TerminalFrontend::TerminalFrontend(TerminalFrontendOptions options) : options_(o
 
   configured_ = true;
   if (options_.alternate_screen) {
-    std::cout << "\x1b[?1049h\x1b[?25l" << std::flush;
+    try {
+      writeTerminalOutput(options_.output_fd, "\x1b[?1049h\x1b[?25l");
+    } catch (...) {
+      restore();
+      throw;
+    }
   }
 }
 
@@ -69,7 +85,10 @@ void TerminalFrontend::restore() noexcept
     return;
   }
   if (options_.alternate_screen) {
-    std::cout << "\x1b[?25h\x1b[?1049l" << std::flush;
+    // Destruction must also restore termios when the output terminal disappeared.
+    const char cleanup[] = "\x1b[?25h\x1b[?1049l";
+    const auto written = ::write(options_.output_fd, cleanup, sizeof(cleanup) - 1);
+    (void)written;
   }
   ::tcsetattr(STDIN_FILENO, TCSAFLUSH, &state_->attributes);
   configured_ = false;

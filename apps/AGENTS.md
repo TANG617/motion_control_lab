@@ -62,6 +62,8 @@
   目录看起来极简而把 solver/planning 搬到共享 component，也不要为了形式化分层继续拆分非重点代码。
 - 纯 planning、plot 或 replay inspection 工具不得为满足文件形状伪造空 solver；它们保留
   `main/options/planning/loop` 中实际存在的职责，且算法入口仍使用上述简洁名称。
+- `psibot_teleop` 是 SDK 客户端，保留 `main/options/client/loop/tui_projection`，不创建空
+  solver/planning；其 SDK 发布快照及导入配置保留在 app 内，不编译 SDK 源码。
 - 按实际 source 能力提供 app-local launcher。`hierarchical_kinematics_step` 使用
   `scripts/_launcher/` 和 `scripts/profiles/<profile>/` 下固定 profile/source 的 keyboard、MCAP
   interactive、MCAP headless、CSV batch Python recipes；每个可执行脚本直接持有私有 recipe，
