@@ -4,6 +4,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -64,6 +65,9 @@ struct SolverSolution {
 };
 
 struct SolverDiagnostics {
+  mcc::InverseKinematicsSolution native_candidate;
+  bool allocation_observation{false};
+  std::uint64_t cpp_new_count{0},cpp_new_bytes{0};
   WorkerGroup group{WorkerGroup::Red};
   SolverRejectionReason rejection_reason{SolverRejectionReason::None};
   std::uint64_t run_generation{0};
@@ -71,6 +75,8 @@ struct SolverDiagnostics {
   std::uint64_t value_revision{0};
   CouplingState coupling_state{CouplingState::Unavailable};
   std::uint64_t consumed_source_value_revision{0};
+  std::uint64_t consumed_source_state_sequence{0};
+  std::int64_t consumed_source_state_time_nanoseconds{0};
   std::uint64_t captured_state_sequence{0};
   std::int64_t captured_state_time_nanoseconds{0};
   bool hierarchical{false};
@@ -87,6 +93,10 @@ class SolverRuntime {
 public:
   void initialize(const SolverHandles &handles,
                   const Eigen::VectorXd &yellow_posture_positions);
+  using Observer = std::function<void(const SolverRequest &, const SolverDiagnostics &, const mcc::Status *)>;
+  void setAllocationObservation(bool value) { allocation_observation_=value; }
+  void setObserver(Observer observer) { observer_=std::move(observer); }
+  void setPrimaryOnly(bool value) { primary_only_ = value; }
   mcc::KinematicsSolver &yellowSolver() { return yellow_solver_; }
   mcc::HierarchicalKinematicsSolver &redSolver() { return red_solver_; }
   mcc::KinematicsSolver &fkSolver() { return fk_solver_; }
@@ -105,10 +115,15 @@ public:
                               mcc::SelfCollisionDiagnostics &diagnostics);
 
 private:
+  Observer observer_;
+  bool allocation_observation_{false};
+  bool primary_only_{false};
   struct YellowEnvelope {
     Eigen::VectorXd accepted_positions;
     std::uint64_t value_revision{0};
     bool attempt_accepted{false};
+    std::uint64_t source_sequence{0};
+    std::int64_t source_time_nanoseconds{0};
   };
   struct GroupState {
     std::uint64_t attempt_revision{0};

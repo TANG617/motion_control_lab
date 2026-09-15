@@ -76,9 +76,15 @@ int main()
           "baseline solver identity missing from TUI document");
   require(contains(document, "position(x2)=scaled/9"),
           "baseline task summary missing from TUI document");
-  require(contains(document, "frame_position"),
-          "baseline task scale missing from TUI document");
   require(contains(document, "Runs A/O/R"),
           "baseline counters missing from TUI document");
+  // Detailed requirement rows are an explicit presentation capability. The
+  // frozen baseline keeps its four-page default; verify the optional view too.
+  presentation.requirements_page_enabled = true;
+  const auto detailed = mcl::makeStandardIkTuiDocument(
+      snapshot, presentation, 7, "null", "Baseline", "running");
+  require(detailed.pages.size() == 5U, "requirements capability adds one page");
+  require(contains(detailed, "frame_position"),
+          "baseline task scale missing from enabled requirements view");
   return EXIT_SUCCESS;
 }

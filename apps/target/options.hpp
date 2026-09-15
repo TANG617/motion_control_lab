@@ -40,6 +40,7 @@ struct TeleopOptions {
 };
 
 struct AppOptions {
+  bool dump_resolved_options{false};
   SolverKind solver{SolverKind::Mcc};
   MccBackend backend{MccBackend::Proxqp};
   AlgorithmOptions algorithm;

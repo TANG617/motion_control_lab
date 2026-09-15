@@ -5,8 +5,18 @@
 
 ## App 独立性
 
+- 新 app 按执行结构命名。新增前必须说明既有程序无法表达的控制/规划拓扑、至少两个
+  可复用场景及独立公开入口。实验编号、输入文件、参数扫描、重复次数、计时窗口或证据
+  格式均不是新增 app 的理由；算法分支不得读取 Exx、case_id、method_id 等追踪身份。
+- 实验请求与正常入口必须调用同一 app-local solver 构造、任务注册和执行函数；不得在
+  request/batch 模式下保留第二套研究 solver。对原应用合同的改变必须使用新方法身份，
+  不自动继承旧实验的方程准入、接受策略结论或耗时优势。
+- 可配置 app 提供 `--describe-capabilities`、`--request FILE` 和
+  `--dump-resolved-options`。请求只允许额外的只读 dump 参数，拒绝算法 CLI 覆盖。
+  capabilities 不加载机器人或模型。production-static 继续走冻结公开 CLI。
+
 - 每个 app 的完整业务实现必须保留在自己的 `apps/<app_name>/` 目录中。
-- 所有 app 都以 R1 为既定机器人。cleanup 后的 `hierarchical_kinematics_step`
+- 所有 app 都以 R1 为既定机器人。`hierarchical_kinematics_step`
   由 app-local `RobotOptions` 完整持有 R1 joint、frame、默认姿态、TCP offset、limits、
   collision 与 provenance，作为该 app 唯一配置入口；其他 app 继续使用共享 R1 配置，
   不为假想机器人增加抽象层。
@@ -52,7 +62,7 @@
   `mcl_<app>_support` target。
 - 每个 app 保留 app-local `options.*`，共享组件只接收 typed config；禁止全局 CLI parser、全局
   option registry 或统一 `mcl` executable。
-- `hierarchical_kinematics_step` 是本轮明确允许的单 app 例外：它在自己的目录内用必选
+- `hierarchical_kinematics_step` 是明确允许的单 app 例外：它在自己的目录内用必选
   `--profile` 合并五条历史链，并提供 app-local Python argparse launcher。该例外不允许把
   parser、runner 或 profile pipeline 提取为跨 app 的全局设施。
 - 运动控制 app 按 `main.*`、`options.*`、`solver.*`、`loop.*` 组织；只有实际调用

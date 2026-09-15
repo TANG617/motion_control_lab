@@ -22,7 +22,7 @@ def test_semantic_counterexamples():
   other={**base,key:value};assert any(x['status']=='semantic_mismatch' and x['field']==key for x in v.semantic_audit(base,other))
 def test_declared_priority_matrix_and_source_events():
  import json
- root=pathlib.Path(__file__).parents[1];d=json.loads((root/'definition.json').read_text());units=d['units']
+ root=pathlib.Path(__file__).parents[1];d=json.loads((root/'declarations/study_legacy.v2.json').read_text());units=d['units']
  assert len([u for u in units if u['case_id'].startswith('r1_hold_tcp_')])==2*3*4*2*4*2
  for method in ['placo-controlled','mcc-weighted','mcc-hqp-2','mcc-hqp-3']:
   for family in ['analytic_redundant','analytic_conflict','analytic_rank_deficient','analytic_active_bound']:

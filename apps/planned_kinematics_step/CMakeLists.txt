@@ -1,0 +1,7 @@
+add_library(mcl_planned_kinematics_step_support options.cpp solver.cpp planning.cpp loop.cpp)
+target_include_directories(mcl_planned_kinematics_step_support PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}" "${PROJECT_SOURCE_DIR}/adapters/execution/include")
+target_link_libraries(mcl_planned_kinematics_step_support PUBLIC motion_control_core::motion_control_core libplaco jsoncpp_lib eiquadprog::eiquadprog motion_control_lab::replay motion_control_lab::run_artifacts)
+mcl_add_app(TARGET mcl_planned_kinematics_step SOURCES main.cpp LIBRARIES mcl_planned_kinematics_step_support)
+if(BUILD_TESTING)
+  add_test(NAME apps.planned_kinematics_step_contract COMMAND ${Python3_EXECUTABLE} "${CMAKE_CURRENT_SOURCE_DIR}/tests/contract.py" --binary $<TARGET_FILE:mcl_planned_kinematics_step>)
+endif()

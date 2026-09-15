@@ -6,6 +6,7 @@ import argparse
 
 
 BOOL_FLAGS = (
+    "mirror-tcp-input",
     "mujoco-viewer",
     "angular-admittance",
     "joint-position-braking-velocity-envelope",
@@ -16,6 +17,11 @@ BOOL_FLAGS = (
 )
 
 VALUE_FLAGS = (
+    "harp-model", "harp-device", "hqp-layout", "elbow-reference", "elbow-recorded", "elbow-record",
+    "elbow-sample-rate-hz", "elbow-maximum-age-ms",
+    "red-primary-task-tcp-orientation-servo-gain-per-s",
+    "red-primary-task-tcp-orientation-preservation-tolerance-radps",
+    "red-primary-task-tcp-orientation-feasibility-tolerance-radps",
     "side", "urdf", "mujoco-model", "host", "port", "red-rate",
     "yellow-rate", "ui-rate", "ui", "viz", "deadline-policy", "duration",
     "step-m", "min-step-m", "max-step-m", "rotation-step-deg",

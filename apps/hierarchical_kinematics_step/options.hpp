@@ -89,14 +89,28 @@ inline const char *jointPlanningAlgorithmName(JointPlanningAlgorithm value) {
   return "unknown";
 }
 
+struct ElbowReferenceOptions {
+  std::string source{"manual"};
+  std::string harp_model_directory;
+  std::string harp_device{"cuda"};
+  std::string recorded_path;
+  std::string record_path;
+  double sample_rate_hz{100.0};
+  double maximum_age_ms{100.0};
+};
+
 struct SolverOptions {
+  std::string hqp_layout{"position-first"};
+  double red_primary_task_tcp_orientation_servo_gain_per_s{10.0};
+  double red_primary_task_tcp_orientation_preservation_tolerance_radps{5.0e-4};
+  double red_primary_task_tcp_orientation_feasibility_tolerance_radps{1.0e-3};
   double maximum_accepted_hard_violation{1.0e-3};
   double joint_position_margin_rad{1.0e-2};
   bool joint_position_braking_velocity_envelope_enabled{false};
   bool red_joint_acceleration_limits_enabled{false};
 
-  // All profiles use per-arm Primary position scales. Secondary optimizes
-  // soft TCP orientation together with posture and optional link4 tasks.
+  // position-first retains per-arm Primary position scales and soft Secondary
+  // orientation. pose-primary shares each arm scale with Primary orientation.
   // The first three profiles retain their position/posture tuning.
   double legacy_cartesian_progress_weight{100.0};
   double legacy_cartesian_preservation_tolerance{5.0e-4};
@@ -194,6 +208,8 @@ struct RobotOptions {
   std::string base_frame{"base_link"};
   std::string left_end_effector_frame{"left_arm_ee_link"};
   std::string right_end_effector_frame{"right_arm_ee_link"};
+  std::string left_shoulder_frame{"left_arm_link2"};
+  std::string left_wrist_frame{"left_arm_link5"};
   std::string left_link4_frame{"left_arm_link4"};
   std::string right_link4_frame{"right_arm_link4"};
   Eigen::Isometry3d left_tcp_offset{[] {
@@ -262,9 +278,11 @@ struct HierarchicalOptions {
   double duration_s{0.0};
   PlannedGroupedTuiConfig presentation;
   CartesianTeleopOptions tui{"left", 0.005, 0.001, 0.5, 5.0};
+  bool mirror_tcp_input{false};
   PreviewSinkOptions visualization{true, "127.0.0.1", 8765, std::nullopt};
   RobotOptions robot;
   SolverOptions solver;
+  ElbowReferenceOptions elbow_reference;
   AdmittanceOptions admittance;
   SimulationOptions simulation;
 };
@@ -310,6 +328,11 @@ struct Options {
   bool replay_elbow_teleop_enabled{false};
   bool start_paused{false};
   bool dump_resolved_options{false};
+  std::string execution_output_dir;
+  std::string observation_mode{"full"};
+  std::string raw_journal_path;
+  std::string target_space{"frame"};
+  std::string initial_state_path;
   std::string launcher_argv_json;
   std::vector<std::string> binary_argv;
 };
@@ -326,6 +349,7 @@ HierarchicalOptions parseHierarchicalOptions(
     int argc, char **argv, HierarchicalOptions defaults = {},
     Profile profile = Profile::PlannedOtgNullspaceAdmittanceKinematicSim);
 
+ProfileCapabilities profileCapabilities(const Options &options);
 Options parseOptions(int argc, char **argv);
 
 } // namespace motion_control_lab::hierarchical_kinematics_step

@@ -2,6 +2,7 @@
 #include <iostream>
 
 #include "components/robot/r1/r1_robot_config.hpp"
+#include "execution.hpp"
 #include "loop.hpp"
 #include "options.hpp"
 #include "solver.hpp"
@@ -13,7 +14,13 @@ namespace app = motion_control_lab::target;
 constexpr const char *kProgramId = "mcl_target";
 
 int run(int argc, char **argv) {
+  if (app::publicExecution(argc, argv))
+    return app::executePublic(argc, argv);
   const auto options = app::parseOptions(argc, argv);
+  if (options.dump_resolved_options) {
+    std::cout << app::resolvedOptions(options) << '\n';
+    return EXIT_SUCCESS;
+  }
   const auto &robot = motion_control_lab::r1RobotConfig();
   if (options.solver == app::SolverKind::Mcc) {
     app::MccTargetSolver solver(options.interactive.urdf_path, robot,

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <functional>
+#include <json/json.h>
 #include <memory>
 #include <string>
 #include <vector>
@@ -35,6 +37,11 @@ public:
   const std::vector<double> &positions() const;
   const std::vector<double> &velocities() const;
   Pose currentPose(ArmSide side);
+  void setState(const std::vector<double> &positions,
+                const std::vector<double> &velocities);
+  void observe(std::function<void(const Json::Value &)> observer,
+               bool full = true, bool allocations = false);
+  Json::Value modelMapping() const;
   ServoSolveResult solve(const std::vector<ArmTarget> &targets);
 
 private:
@@ -54,6 +61,11 @@ public:
   const std::vector<double> &positions() const;
   const std::vector<double> &velocities() const;
   Pose currentPose(ArmSide side);
+  void setState(const std::vector<double> &positions,
+                const std::vector<double> &velocities);
+  void observe(std::function<void(const Json::Value &)> observer,
+               bool full = true, bool allocations = false);
+  Json::Value modelMapping() const;
   ServoSolveResult solve(const std::vector<ArmTarget> &targets);
 
 private:

@@ -39,28 +39,6 @@ def measure_trial(directory,trial,policy):
  if policy and all(k in policy for k in required):guardrails=validation['status']=='passed' and violation is not None and violation<=policy['maximum_position_violation_rad'] and source_coverage>=policy['minimum_source_coverage'] and holds<=policy['maximum_execution_holds'] and len(raw)==expected
  return dict(guardrails_passed=guardrails,measurement_status='measured' if guardrails is not None else 'measured-preregistered-guardrails-missing',selection_metrics=measured,full_quality_coverage=full,source_coverage=source_coverage,execution_holds=holds,maximum_position_violation_rad=violation,evidence=[artifact(x) for x in [raws[0],metrics_path,validation_path,checks_path]],reduction='per-trial source-full arithmetic mean over both arms; selection only, no scientific cross-run result')
 
-def execute(plan,output):
- if plan['plan_hash']!=stable_hash(plan['trials']):raise ValueError('registered search plan changed')
- output=pathlib.Path(output);output.mkdir(parents=True,exist_ok=False);statuses=[]
- try:
-  for trial in plan['trials']:
-   row=dict(trial);command=trial.get('command')
-   if command is None and trial['recording'].get('descriptor'):
-    directory=output/trial['trial_id'];directory.mkdir()
-    definition={'schema_version':'experiment.v2','experiment_id':'E12','question':'Explicit equal-budget development selection','units':[{'case_id':trial['trial_id'],'method_id':trial['method_id'],'arm_id':trial['candidate_id'],'input':trial['recording']['descriptor'],'config':trial['config'],'required':True,'binary':'mcl_study_e12','validation_command':['python3',str(pathlib.Path(__file__).with_name('verify.py')),'--request','{request}']}],'failure_policy':'continue','metrics':[],'evaluation_windows':['source-full'],'controlled_factors':['candidate','recording','repeat']}
-    write_json(directory/'definition.json',definition)
-    command=[sys.executable,str(ROOT/'tools/mcc_placo_study/study.py'),'--definition',str(directory/'definition.json'),'--phase','development','--repeat','0','--timeout','120','--output-root',str(directory/'runs')]
-   if not command:row.update(status='unavailable',reason='explicit frozen per-trial command required')
-   else:
-    directory=output/trial['trial_id'];directory.mkdir(exist_ok=True);write_json(directory/'command.json',command)
-    with (directory/'stdout.log').open('w') as out,(directory/'stderr.log').open('w') as err:
-     proc=subprocess.run(command,stdout=out,stderr=err);row.update(status='completed' if proc.returncode==0 else 'failed',exit_code=proc.returncode)
-   if command and trial['recording'].get('descriptor'):row.update(measure_trial(directory,trial,plan.get('preregistration')))
-   statuses.append(row);write_json(output/'search_status.json',statuses)
- except KeyboardInterrupt:
-  attempted={r['trial_id'] for r in statuses};statuses.extend(dict(t,status='interrupted' if t['trial_id']==trial['trial_id'] else 'not-run') for t in plan['trials'] if t['trial_id'] not in attempted);write_json(output/'search_status.json',statuses);raise
- return statuses
-
 def select(plan, results, policy):
  """Apply a predeclared scalar search objective, retaining all trial statuses."""
  if plan.get('preregistration') and plan['preregistration']!=policy:raise ValueError('selection policy changed after search registration')
@@ -100,11 +78,10 @@ def freeze(selected,plan_artifact,result_artifact,preregistration,out):
  if pathlib.Path(out).exists():raise FileExistsError('candidate freeze immutable')
  value=dict(schema_version='candidate_freeze.v1',selected=selected,search_plan=plan_artifact,search_status=result_artifact,preregistration=preregistration,holdout_access='not-authorized-by-candidate-freeze',candidate_hash=stable_hash(selected));write_json(out,value);return value
 if __name__=='__main__':
- p=argparse.ArgumentParser();s=p.add_subparsers(dest='operation',required=True);q=s.add_parser('plan');q.add_argument('--candidates',required=True);q.add_argument('--recordings',required=True);q.add_argument('--budget',type=int,required=True);q.add_argument('--repeats',type=int,default=1);q.add_argument('--policy',required=True);q.add_argument('--output',required=True);e=s.add_parser('execute');e.add_argument('--plan',required=True);e.add_argument('--output',required=True);sel=s.add_parser('select');sel.add_argument('--plan',required=True);sel.add_argument('--results',required=True);sel.add_argument('--policy',required=True);sel.add_argument('--output',required=True);f=s.add_parser('freeze');f.add_argument('--selected',required=True);f.add_argument('--plan',required=True);f.add_argument('--results',required=True);f.add_argument('--preregistration',required=True);f.add_argument('--output',required=True);a=p.parse_args();read=lambda p:json.loads(pathlib.Path(p).read_text())
+ p=argparse.ArgumentParser();s=p.add_subparsers(dest='operation',required=True);q=s.add_parser('plan');q.add_argument('--candidates',required=True);q.add_argument('--recordings',required=True);q.add_argument('--budget',type=int,required=True);q.add_argument('--repeats',type=int,default=1);q.add_argument('--policy',required=True);q.add_argument('--output',required=True);sel=s.add_parser('select');sel.add_argument('--plan',required=True);sel.add_argument('--results',required=True);sel.add_argument('--policy',required=True);sel.add_argument('--output',required=True);f=s.add_parser('freeze');f.add_argument('--selected',required=True);f.add_argument('--plan',required=True);f.add_argument('--results',required=True);f.add_argument('--preregistration',required=True);f.add_argument('--output',required=True);a=p.parse_args();read=lambda p:json.loads(pathlib.Path(p).read_text())
  if a.operation=='plan':
   if pathlib.Path(a.output).exists():raise FileExistsError(a.output)
   write_json(a.output,search_plan(read(a.candidates),read(a.recordings),a.budget,a.repeats,read(a.policy)))
- elif a.operation=='execute':sys.exit(0 if all(t['status']=='completed' for t in execute(read(a.plan),a.output)) else 1)
  elif a.operation=='select':
   if pathlib.Path(a.output).exists():raise FileExistsError(a.output)
   write_json(a.output,select(read(a.plan),read(a.results),read(a.policy)))

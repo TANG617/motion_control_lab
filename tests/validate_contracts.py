@@ -77,10 +77,18 @@ def _safe_child(root: pathlib.Path, relative: str) -> pathlib.Path:
 
 def validate_definition(path: pathlib.Path) -> dict[str, Any]:
     definition = _load_json(path)
+    if definition.get('execution_contract') == 'execution_request.v1':
+        sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / 'tools/app_execution'))
+        from contracts import validate_definition as validate_execution_definition
+        return validate_execution_definition(definition)
+    if definition.get('schema_version') in ('analysis.v1','analysis.v2'):
+        sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / 'tools/mcc_placo_study'))
+        from analysis.common import validate_definition as validate_analysis
+        return validate_analysis(definition)
     if definition.get('schema_version') == 'experiment.v2':
         sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / 'tools/mcc_placo_study'))
         from evidence import validate_definition as validate_v2
-        from study import resolve_input
+        from inputs import resolve_input
         validate_v2(definition)
         for unit in definition['units']:
             descriptor_path = pathlib.Path(unit['input'])
@@ -170,6 +178,16 @@ def validate_definition(path: pathlib.Path) -> dict[str, Any]:
 
 def validate_manifest(path: pathlib.Path) -> dict[str, Any]:
     manifest = _load_json(path)
+    if manifest.get('schema_version') == 'run_manifest.v3':
+        import jsonschema
+        schema = _load_json(pathlib.Path(__file__).resolve().parents[1] / 'contracts/manifests/run_manifest.v3.schema.json')
+        jsonschema.validate(manifest, schema)
+        for relative, record in manifest['outputs'].items():
+            output = _safe_child(path.parent, relative)
+            _require(output.is_file(), 'missing output: ' + relative)
+            _require(output.stat().st_size == record['size_bytes'], 'output size mismatch: ' + relative)
+            _require(_sha256(output) == record['sha256'], 'output hash mismatch: ' + relative)
+        return manifest
     if manifest.get('schema_version') == 'run_manifest.v2':
         sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / 'tools/mcc_placo_study'))
         from evidence import load_manifest, verify_artifact

@@ -4,8 +4,9 @@ import argparse,csv,json,pathlib,sys
 LAB=pathlib.Path(__file__).resolve().parents[2];sys.path.insert(0,str(LAB/'tools/mcc_placo_study'))
 from evidence import write_json
 from metrics import nearest_rank
+from progress import SampleProgress
 
-def check(rows,config):
+def check(rows,config,progress=None):
     failures=[];expected=1+config['warmup_calls']+config['measured_calls']
     if len(rows)!=expected:failures.append('incomplete-attempt-denominator')
     for i,r in enumerate(rows):
@@ -17,8 +18,9 @@ def check(rows,config):
         if config.get('observation')=='cpp-new':
             if r.get('allocation_count') is None or r.get('allocation_bytes') is None:failures.append('missing-cpp-allocation-observation')
         elif r.get('allocation_count') is not None:failures.append('unexpected-allocation-observation')
+        if progress is not None:progress.update(i+1)
     return dict(schema_version='e09.validation.v1',passed=not failures,failures=failures,expected_attempts=expected,observed_attempts=len(rows),
       rejected_attempts=sum(r['solution_quality']=='rejected' for r in rows),tail_estimation='unavailable' if failures else 'all raw attempt samples retained')
 if __name__=='__main__':
     ap=argparse.ArgumentParser();ap.add_argument('--request',required=True);a=ap.parse_args();req=json.load(open(a.request));out=pathlib.Path(req['output_dir'])
-    rows=[r for l in (out/'raw.jsonl').read_text().splitlines() if (r:=json.loads(l)).get('record_type')=='attempt'];result=check(rows,req['config']);write_json(out/'timing_validation.json',result);sys.exit(not result['passed'])
+    rows=[r for l in (out/'raw.jsonl').read_text().splitlines() if (r:=json.loads(l)).get('record_type')=='attempt'];result=check(rows,req['config'],SampleProgress(out,'app-validation',len(rows)));write_json(out/'timing_validation.json',result);sys.exit(not result['passed'])

@@ -1,8 +1,8 @@
 # 数据、统计与产物合同
 
-状态：`planned`。版本：`study-data.v1`。数学和指标定义引用 [PROTOCOL](PROTOCOL.md)，本文件拥有数据身份、时钟、统计和存储规则。
+状态：实验证据合同及 A01/A02 探索性分析已实现；正式统计与 A03 deferred。版本：`study-data.v1`。数学和指标定义引用 [PROTOCOL](PROTOCOL.md)，本文件拥有数据身份、时钟、统计和存储规则。
 
-实施顺序：先完成 E06–E12 的输入、执行、采集、单元级指标及独立核验；实验 campaign 结束并冻结状态/产物后，才实现和执行 A01–A03、跨 run 统计、可视化报告及论文工具。本文保留全过程合同以保证事前登记和采集完整性，不授权当前实验代码任务实现后半段。
+本文维护数据与统计规则；实际实现和阶段状态统一见 [研究索引](README.md)。分析必须消费已结束且来源固定的批次；旧 A01/A02 探索性结果不自动适用于新应用方法。正式统计及 A03 的协议要求保留。
 
 ## 1. 数据流与职责
 
@@ -10,19 +10,19 @@
 flowchart TD
     Raw[Immutable MCAP / synthetic specification] --> Canonical[Versioned decode and canonical input]
     Canonical --> Declare[Resolved experiment declaration]
-    Declare --> Execute[Independent C++ experiment app processes]
+    Declare --> Execute[Public app processes]
     Execute --> Evidence[Trace / telemetry / status / environment / hashes]
     Evidence --> Evaluate[Offline per-unit metrics and independent checks]
     Evaluate --> Closed[Frozen campaign inventory after experiments]
-    Closed --> Analyze[Deferred: pinned Analysis and paired statistics]
-    Analyze --> Render[PDF SVG PNG / HTML / paper fragments]
+    Closed --> Analyze[Pinned offline Analysis]
+    Analyze --> Render[PDF SVG PNG and source tables]
     Evidence --> Replay[Foxglove investigation]
     Render --> Review[Reviewed immutable evidence bundle]
 ```
 
 输入解码、配对、重采样不得隐藏在 solver 内。C++ 负责被测执行；Python 负责输入准备及独立离线核验，实验结束后再承担跨 run 配对统计和制图。通用 orchestrator 只选择并启动独立执行单元，不拥有任务或 solver 配置。现有 app 的 source/planning/solver/loop 归属不改变。
 
-复用 [typed replay](../project_mapping.md)、[telemetry](../foxglove_mcl_telemetry_contract.md)、[E05 外围隔离](../../experiments/E05_real_scene_planned_mcap_batch_replay/README.md) 的合同与机械能力；不得 import app-private launcher recipe 或根仓 benchmark 内部包。
+复用 [typed replay](../app_component_architecture.md)、[telemetry](../foxglove_mcl_telemetry_contract.md)、[E05 外围隔离](../../experiments/E05_real_scene_planned_mcap_batch_replay/README.md) 的合同与机械能力；不得 import app-private launcher recipe 或根仓 benchmark 内部包。
 
 ## 2. 来源、转换与冻结
 
@@ -50,17 +50,17 @@ evolving 模式：各方法从相同初始状态独立演化；默认实验 plan
 
 realtime 与 deterministic virtual schedule 是独立执行模式。虚拟多频率 schedule 固定事件顺序以检查语义；真实线程结果不要求 bitwise deterministic，用重复运行度量。暂停会改变调度和输入语义，含人工暂停的运行只能用于诊断，不能混入正式 uninterrupted timing。
 
-## 4. 身份与未来机器接口
+## 4. 身份与机器接口
 
-目前文档阶段不新增 schema 或 executable declaration。实验代码阶段实现实验所需合同并保留 v1 读取；Analysis 部分在实验结束后的阶段实现：
+当前 A01/A02 已消费关闭的开发批次。新增 `analysis.v1` 和 `run_manifest.v3`，保留 experiment manifest v1/v2 的读取行为，不迁移旧文件。具体来源和实际验收见 [分析验收](../archive/study/ANALYSIS_ACCEPTANCE.md)。以下保留协议身份要求：
 
 - experiment.v1 继续表达实验基本定义，若字段变化需明确新版本；每个执行声明必须引用实际存在的 inputs descriptor 和冻结内容。
-- 延期新增 analysis.v1 声明：analysis_id、精确 source run/result/manifest hashes、selection、配对键、统计方法、指标版本、允许 partial/dirty 来源的政策和输出要求。
-- run_manifest.v2 的最终目标按 run_kind 区分 experiment_id(E##) 与 analysis_id(A##)，不为 Analysis 伪造 E##。实验阶段完成 experiment 读写及版本化扩展设计，Analysis 声明、读写和执行在后续阶段补齐，不创建假 A run。旧 v1 不原地改写。
+- analysis.v1 声明：analysis_id、精确 source run/result/manifest hashes、selection、配对键、统计方法、指标版本、允许 partial/dirty 来源的政策和输出要求。
+- 新增 run_manifest.v3 按 run_kind 区分 experiment_id(E##) 与 analysis_id(A##)，不为 Analysis 伪造 E##。既有 experiment v1/v2 reader 及文件保留不变。Analysis manifest 记录输出哈希、代码和依赖身份、明确来源状态政策及探索性限制。
 - metric_row.v2 保留旧 value/unit/role/status 含义，增加可审计的 run_id、experiment_id、case_id、method_id、arm_id、repeat_id、session_id、split_id、window_id 与 component identity。字段缺失用明确状态，不推断为另一方法/会话。
 - 成对统计主键是同 experiment/case/input hash/model hash/window/repeat condition 的 baseline/candidate；session 用于聚类，不把不同 target windows 误配。
 
-上述版本是待实现接口，不表示目前 validate_contracts.py 支持它们。各阶段由主 agent 统一实现与拥有，子 agent 使用冻结版本。保留未来 E/A 类型的扩展设计不等于当前实现 Analysis 功能。
+validate_contracts.py 已支持现役公开执行声明、analysis.v1/v2 和相应 manifest。精确字段以 contracts 中的版本化 schema 及读取器为准；不改写旧文件或将旧方法自动准入为新方法。
 
 ## 5. Artifact 生命周期
 
@@ -122,7 +122,7 @@ runtime miss 分母是计划 release，包括 skipped。严格运行提前失败
 
 ## 8. 分阶段数据质量和生成验收
 
-实验实现阶段完成前三项，并交付包含精确 locators、hashes、字段、required 单元及实际状态的 evidence inventory。后两项属于实验结束后的 Analysis/论文阶段，不提前实现 renderer 或 paper-check。所有规则均在看到正式结果前固定。
+实验交付精确 locators、hashes、字段、required 单元及实际状态的 evidence inventory。已有 A01/A02 renderer 只处理固定非 RT 来源；正式统计和论文 evidence index 仍需独立验收。所有正式评价规则在看到正式结果前固定。
 
 - 独立校验模型/frame/joint mapping、时间单调、哈希、row count、单位与执行窗口。
 - 已知位移/旋转角、手工 deadline 序列、含缺失配对和零分母的 fixtures 核验 metric evaluator；已知错误不得被“修好”。

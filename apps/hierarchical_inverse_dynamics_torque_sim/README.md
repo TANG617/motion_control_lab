@@ -15,7 +15,7 @@ hardware commands.
 Run the installed binary through:
 
 ```bash
-run_headless.sh --duration 0.1 --retarget-x 0.01
+apps/hierarchical_inverse_dynamics_torque_sim/scripts/run_headless.sh --duration 0.1 --retarget-x 0.01
 ```
 
 See [the runbook](../../docs/hierarchical_inverse_dynamics_torque_sim.md) for model, metrics, and

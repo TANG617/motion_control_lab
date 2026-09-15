@@ -6,12 +6,15 @@ ROOT=pathlib.Path(__file__).resolve().parents[2];sys.path.insert(0,str(ROOT/'too
 from inputs import UrdfFk
 from metrics import position_error,orientation_error,hard_violation,correlation_lag,event_response_lag
 from evidence import write_json
+from progress import SampleProgress
 
 def verify(request):
  inp=request['input'];cfg=request['config'];out=pathlib.Path(request['output_dir']);fk=UrdfFk(inp['model']['locator']);rows=[];joints=[];events=[];count=0;holds=0;issues=[];trace=[];lagseries={s:{'goal':[],'execution':[]} for s in ('left','right')};times=[];checks=[]
- for line in (out/'raw.jsonl').read_text().splitlines():
+ raw_lines=(out/'raw.jsonl').read_text().splitlines();progress=SampleProgress(out,'app-validation',len(raw_lines))
+ for record_number,line in enumerate(raw_lines,1):
   row=json.loads(line)
-  if row.get('record_type')!='attempt':continue
+  if row.get('record_type')!='attempt':
+   progress.update(record_number);continue
   trace.append(row);count+=1;holds+=row['execution_state']=='HOLD';times.append(row['source_time_s'])
   check={'attempt_sequence':row['attempt_sequence'],'executed_position_violation_rad':float(np.max(hard_violation(row['q'],inp['limits']['lower'],inp['limits']['upper']))),'raw_ik_position_violation_rad':float(np.max(hard_violation(row['raw_ik_q'],inp['limits']['lower'],inp['limits']['upper']))) if row.get('raw_ik_q') else None,'ik_disposition':row.get('ik_disposition'),'execution_state':row['execution_state']};checks.append(check)
   if row.get('raw_ik_v'):
@@ -38,6 +41,7 @@ def verify(request):
    jerk=(row['a'][i]-trace[-2]['a'][i])/cfg['dt_s'] if count>1 else None
    joints.append(dict(attempt_sequence=row['attempt_sequence'],joint=name,q=row['q'][i],v=row['v'][i],a=row['a'][i],jerk=jerk,jerk_source='backward-difference acceleration; first sample unavailable',acceleration_source=row.get('acceleration_source','HOLD-zero'),execution_state=row['execution_state']))
   for e in row.get('projection_events',[]):events.append(dict(attempt_sequence=row['attempt_sequence'],**e))
+  progress.update(record_number)
  expected=math.ceil(cfg['duration_s']/cfg['dt_s']);coverage=count/expected if expected else None
  if count!=expected:issues.append(f'partial tick coverage {count}/{expected}')
  lag={s:correlation_lag(v['goal'],v['execution'],cfg['dt_s'],cfg.get('lag_max_s',.1)) for s,v in lagseries.items()}

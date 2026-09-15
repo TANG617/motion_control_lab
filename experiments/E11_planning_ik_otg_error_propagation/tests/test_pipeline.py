@@ -1,5 +1,5 @@
 import importlib.util,pathlib,sys,unittest
-HERE=pathlib.Path(__file__).resolve().parents[1];sys.path.insert(0,str(HERE));import prepare
+HERE=pathlib.Path(__file__).resolve().parents[1];sys.path.insert(0,str(HERE.parents[1]/'tools/mcc_placo_study'));spec=importlib.util.spec_from_file_location('legacy_planner_fixture',HERE/'declarations/study_prepare.py');prepare=importlib.util.module_from_spec(spec);spec.loader.exec_module(prepare)
 class PipelineTest(unittest.TestCase):
  def test_all_planner_factor_settings_equal(self):
   configs=[prepare.config('mcc-hqp-2',p) for p in prepare.PIPELINES]

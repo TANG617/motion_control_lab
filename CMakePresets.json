@@ -15,12 +15,26 @@
         "BUILD_TESTING": "ON",
         "CMAKE_BUILD_TYPE": "RelWithDebInfo"
       }
+    },
+    {
+      "name": "headless",
+      "inherits": "dev",
+      "displayName": "Native headless development build",
+      "binaryDir": "${sourceDir}/build/headless",
+      "cacheVariables": {
+        "MCL_ENABLE_TUI": "OFF",
+        "MCL_ENABLE_FOXGLOVE_TRANSPORT": "OFF"
+      }
     }
   ],
   "buildPresets": [
     {
       "name": "dev",
       "configurePreset": "dev"
+    },
+    {
+      "name": "headless",
+      "configurePreset": "headless"
     }
   ],
   "testPresets": [
@@ -30,7 +44,13 @@
       "output": {
         "outputOnFailure": true
       }
+    },
+    {
+      "name": "headless",
+      "configurePreset": "headless",
+      "output": {
+        "outputOnFailure": true
+      }
     }
   ]
 }
-

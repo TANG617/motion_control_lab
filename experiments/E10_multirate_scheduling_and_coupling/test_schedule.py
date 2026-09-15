@@ -1,8 +1,47 @@
 """Hand-authored deterministic scheduling fixtures, not real-time evidence."""
-import importlib.util,pathlib,unittest,json
+import importlib.util,pathlib,unittest,json,tempfile,copy
 HERE=pathlib.Path(__file__).parent
 spec=importlib.util.spec_from_file_location('e10verify',HERE/'verify.py');v=importlib.util.module_from_spec(spec);spec.loader.exec_module(v)
 class Schedule(unittest.TestCase):
+    def join_fixture(self):
+        config=dict(duration_s=.001,solver_hz=1000,secondary_hz=1000,target_hz=1000,feedback_hz=1000,output_hz=1000,coupling_enabled=True,schedule_mode='virtual')
+        events=[dict(worker=w,sequence=0,release_ns=0,start_ns=0,finish_ns=100,deadline_ns=1000000,skipped=False,deadline_miss=False) for w in v.RELEASE_WORKERS]
+        events[3].update(capture_ns=0,q=[.2],captured_committed_sequence=5)
+        events[4].update(q=[.2],committed=False)
+        row=dict(worker='primary',attempt_sequence=0,state_sequence=0,proposal_revision=2,proposal_created_ns=100,proposal_age_ns=100,proposal_state_age_ns=200,proposal_state_capture_ns=0,start_ns=200,measured_state_age_ns=200,measured_state_capture_ns=0,coupling_enabled=True,measured_q=[.2],measured_state_committed_sequence=5)
+        return config,events,row
+    def test_publication_index_keeps_last_eligible_input_order(self):
+        config,events,row=self.join_fixture()
+        events.extend([dict(worker='proposal-publication',revision=2,delivery_ns=190,accepted=False),
+                       dict(worker='proposal-publication',revision=2,delivery_ns=100,accepted=True),
+                       dict(worker='proposal-publication',revision=2,delivery_ns=300,accepted=False),
+                       dict(worker='proposal-publication',revision=9)])
+        self.assertTrue(v.check(events,[row],config,{'timing_buffer_overflow':0})['passed'])
+        events[5],events[6]=events[6],events[5]
+        self.assertIn('failed-proposal-consumed',v.check(events,[row],config,{'timing_buffer_overflow':0})['failures'])
+    def test_capture_index_keeps_last_duplicate_and_missing_behavior(self):
+        config,events,row=self.join_fixture()
+        events.append(dict(worker='proposal-publication',revision=2,delivery_ns=100,accepted=True))
+        duplicate=copy.deepcopy(events[3]);duplicate['q']=[.3];events.append(duplicate)
+        self.assertIn('feedback-state-join',v.check(events,[row],config,{'timing_buffer_overflow':0})['failures'])
+        events[3],events[-1]=events[-1],events[3]
+        self.assertNotIn('feedback-state-join',v.check(events,[row],config,{'timing_buffer_overflow':0})['failures'])
+        row.update(measured_state_capture_ns=1,measured_state_age_ns=199)
+        self.assertIn('feedback-capture-missing',v.check(events,[row],config,{'timing_buffer_overflow':0})['failures'])
+        row['proposal_revision']=3
+        self.assertIn('consumed-publication-missing',v.check(events,[row],config,{'timing_buffer_overflow':0})['failures'])
+    def test_progress_finishes_with_invalid_attempt_and_skipped_output(self):
+        config,events,row=self.join_fixture()
+        del row['attempt_sequence']
+        events[-1].update(skipped=True,deadline_miss=True)
+        attempts=[row,{'worker':'secondary'}]
+        with tempfile.TemporaryDirectory() as root:
+            out=pathlib.Path(root);total=v.progress_total(events,attempts)
+            self.assertEqual(total,6)
+            result=v.check(events,attempts,config,{'timing_buffer_overflow':0},progress=v.SampleProgress(out,'app-validation',total))
+            self.assertEqual(result,v.check(events,attempts,config,{'timing_buffer_overflow':0}))
+            state=json.loads((out/'sample_progress.json').read_text())
+            self.assertEqual((state['current'],state['total']),(total,total))
     def test_secondary_first_divided_and_repeated_consumption(self):
         rows=v.virtual_reference(5000,1000,2000,100,200)
         self.assertEqual([r['start_ns'] for r in rows],[200,1000,2200,3000,4200])
@@ -43,7 +82,7 @@ class Schedule(unittest.TestCase):
         del row['attempt_sequence']
         self.assertIn('primary-missing-attempt_sequence',v.check(events,[row],c,{'timing_buffer_overflow':0})['failures'])
     def test_matrix_families_and_pairing(self):
-        d=json.load(open(HERE/'definition.json'));all_units=d['units'];self.assertEqual(len(all_units),193);units=[u for u in all_units if u['case_id']!='fixture-observation-overflow'];self.assertEqual(len(units),192)
+        d=json.load(open(HERE/'declarations/study_legacy.v2.json'));all_units=d['units'];self.assertEqual(len(all_units),193);units=[u for u in all_units if u['case_id']!='fixture-observation-overflow'];self.assertEqual(len(units),192)
         fixture=next(u for u in all_units if u['case_id']=='fixture-observation-overflow');self.assertEqual(fixture['phases'],['development']);self.assertEqual(fixture['config']['buffer_capacity'],8)
         keys=[(u['case_id'],u['arm_id']) for u in units];self.assertEqual(len(keys),len(set(keys)))
         self.assertEqual({u['config']['secondary_hz'] for u in units},{20.,50.,100.,200.,1000.})

@@ -10,12 +10,20 @@
 - `planned-otg-nullspace-admittance-kinematic-sim`：再增加导纳、MuJoCo 运动学投影、viewer
   与完整 replay telemetry gate。
 
-所有 profile 的 Red 均保持两级：Primary 只有双臂位置任务，每臂独立的 position scale；
+默认 `--hqp-layout position-first` 的 Red 保持两级：Primary 只有双臂位置任务，每臂独立的 position scale；
 Secondary 在保持 Primary 位置结果的条件下，优化软姿态、Yellow posture 和启用的 link4。
 姿态与 Secondary 内其余任务通过权重折中，不再要求满足 scaled orientation 等式。
 关节位置、速度、加速度与制动硬约束保持各 profile 原配置。
 
-软姿态配置由以下参数控制（五个 profile 均适用）：
+`planned-otg-nullspace` 新增可选 `--hqp-layout pose-primary`：双臂完整 TCP 位姿
+进入 Primary，同臂位置/姿态共用 scale；Secondary 保留 link4 与 Yellow posture。
+左臂在线推理统一使用 MCC 原生 `posture_reference::Predictor`，入口、安装及完整窗口合同见 [HARP.md](HARP.md)。
+`planned + pose-primary` 沿用同一 HARP 任务拓扑，输出接受的 IK P/V。
+当前可视化按肘部参考功能命名；实时 HARP 保留原 topic，录制回放使用 `foxglove/recorded_elbow_reference.layout.json`，只标为 recorded。
+
+历史 PiM 录制及失败记录仍可读取；其[历史运行评估](../../docs/archive/pim/PIM_IK_EVALUATION.md)不代表当前 HARP 模型结果。
+
+position-first 的软姿态配置由以下参数控制（五个 profile 均适用）：
 
 - `--red-secondary-task-tcp-orientation-weight`：默认 `100`；
 - `--red-secondary-task-tcp-orientation-servo-gain-per-s`：默认 `10`；
@@ -23,7 +31,7 @@ Secondary 在保持 Primary 位置结果的条件下，优化软姿态、Yellow 
 
 姿态代价为 `0.5 * weight * ||(J_angular * qdot - desired_angular_velocity) / normalization||²`。
 position 的历史 `*-cartesian-progress-*` 配置名继续保留，现仅控制 position scale。
-原 `--red-primary-task-tcp-orientation-preservation-tolerance-radps` 已更名为
+position-first 使用
 `--red-secondary-task-tcp-orientation-preservation-tolerance-radps`；它是 Core 注册任务所需的
 后续层保持容差，两级配置中没有后续层，不作为姿态跟踪误差上限。
 
@@ -155,3 +163,53 @@ Red raw IK request 与 OTG 执行状态沿用各 profile 现有来源，不增�
 `manifest.tracking` 分别记录实际跟踪误差、scaled 等式残差与已接受关节约束的违背量，
 并记录最后的关节速度/加速度；scaled 残差为 L2 norm，验收仍逐分量使用原有容差。
 回放结束与等待静止沿用各 profile 的现有行为。
+
+## Native HARP posture reference
+
+`--elbow-reference harp` consumes the optional MCC `posture_reference` library
+in an ordinary C++ worker, using the full left-arm 30-frame model. See
+[HARP.md](HARP.md) for build, planned recipes, recording and lifecycle checks.
+
+## 公开批量执行入口
+
+能力查询不加载模型或 solver：`mcl_hierarchical_kinematics_step --describe-capabilities`。
+`--request FILE [--dump-resolved-options]` 使用 `execution_request.v1`，禁止额外 CLI override。
+`app_config` 包含 `profile`、`target_space:frame|tcp` 与 `options`；后者的键为公开 CLI 名（不带 `--`），值为标量或布尔。
+配置经过同一 `parseOptions`，任务经同一 `configureSolver`，调用同一 `SolverRuntime::solveRed/solveYellow`。
+`tracking` 不参与配置或数值选择。
+
+JSON `snapshot` / `trajectory` 对应 `hierarchical` profile。输入为 `joint_names`、可选 `initial_state:{q,v}` 和 `samples`。
+每个 sample 可带 `q/v`、`source_time_s`、`targets.left/right:{position:[x,y,z],rotation:[[...],[...],[...]],enabled:true}`、`elbow_targets.left/right:[x,y,z]`。
+未指定 Cartesian target 保持当前 FK；初始状态不裁剪。snapshot 使用该输入状态；trajectory 只提交原生接受的实际输出。
+普通入口可用 `--profile hierarchical teleop --batch-input INPUT --batch-output NEWDIR --batch-settings SETTINGS`，与请求入口共用批量驱动。
+`target_space` 默认 `frame`，指 app end-effector frame；`tcp` 指乘过 app TCP offset 的物理 TCP。普通入口使用 `--target-space`。
+规划 profile 的公开请求通过原有 `runLoop` 的 CartesianPlanner/JointPlanner；JSON 由 app 将 frame/TCP 明确转换到物理 TCP CSV，并以公开 `--initial-state` 保留输入 q/v。原 CSV/MCAP `replay` 继续直接读取。
+转换表和实际 solver target 分别留证，不根据实验编号选择坐标语义。
+
+新增命名布局 `position-orientation-posture` 将 Yellow posture/link4 放到 Tertiary，位置 Primary、姿态 Secondary。
+`primary-only` 禁用 orientation/link4/coupling 请求，任务仍以同一构造路径注册；默认 position-first 保持不变。
+
+批量 `execution` 支持 `schedule:sync|divided|async_same_core|async_dual_core`、`timing_mode:virtual|real`、`yellow_divisor`、`red_cpu/yellow_cpu`。
+真实 async 使用独立普通 Yellow worker 与最新状态邮箱；要求明确同核或双核身份。virtual 明确记录为模拟释放顺序，不证明线程实时性。
+`planned_releases` 明确总释放数；`sample_selection:cycle|source_time` 固定输入选择规则。
+`warmup_calls` 指 cold 之后 warm-up 调用数；每次调用保留，cold/steady 耗时在原生求解处测量。
+迟到超过一周期保留 skipped；首次 Red 拒绝保留原始诊断及未运行后缀；不会改为通过。
+输出包含 `raw.jsonl`、`model_mapping.json`、`resolved_options.json`、`summary.json`；请求另存来源哈希和追踪身份。
+
+开发验收：`tests/execution_contract.py --binary /ABS/mcl_hierarchical_kinematics_step --output /ABS/NEWDIR`。
+
+`observation.capacity` 为本次调用观测缓冲容量。容量不足保留 overflow 事件、失败状态、已采原始诊断及 not-run 后缀；不产生可用于性能判断的完整尾部分位数。
+
+公开 `--raw-journal FILE` 默认关闭；请求运行自动启用 `native_calls.jsonl`。
+日志在相同 `SolverRuntime::solveRed/solveYellow` 调用前后逐条 flush，包含输入状态/实际 task targets、原生状态、候选、各 pass 和 selected priority；异常前证据不会依赖退出时才生成的 trace。
+日志的 `committed:false` 仅表示 solver 边界，规划/OTG 后的最终提交仍以原有 replay trace 为准。
+观测在求解原生计时区间外；`call_elapsed_ns` 则包含公开 app 调用的观测成本。此同步 full-observation 路径仅用于明确标记的非 RT 证据，不宣称无观测扰动。
+
+`observation.mode` 明确支持 `minimal|full|cpp-new`；普通 CLI 对应 `--observation-mode`。
+minimal 保留每个调用的原生状态、候选 q/v、selected priority 和提交边界，省略重型任务/约束数组；full 完整保留；cpp-new 另外在原生 MCC 调用区间计数本线程 C++ `new/new[]`（含 aligned）次数和字节，不声称覆盖 `malloc`、Eigen 内部分配或其他线程。
+未知 `app_config` / `execution` / `observation` 字段在 dump 前即拒绝。JSON 输入若声明 `model.locator/sha256`，必须与最终应用 URDF 一致。
+规划 replay 的 execution 仅接受 `target_period_ms`，observation 仅接受 `mode`；批量 scheduling/capacity 不静默用于另一条链。
+
+原 replay 在 worker 启动前保存 `replay/release_plan.json`，停止并 join 后保存 `release_counts.json`；请求 summary 和原生 manifest 引用这些证据。有限输入帧的计划、ReplaySource 原生选择/丢弃计数、未选择后缀独立列出；选择不是求解成功或控制提交。
+控制 worker 没有固定调用计划，运行到 data-dependent settling、故障或 UI 停止；UI duration 也是停止条件，不能乘频率伪造计划调用数。因此 planned worker releases 与 not-run worker suffix 明确 unavailable。
+Red/Yellow 的实际 callback iterations（含 idle/拒绝/异常，排除启动 warmup）、deadline misses 和原生 skipped counter 全部保留。现有 scheduler 的 skipped counter 统计超时后向前推进 release 的次数，包括推进到未来槽的一步，故不能直接与 callback iterations 相加当作精确 deadline 分母。本次未修改调度和旧计数，仅登记语义限制。recorded reference 的实际消费覆盖不能用 ReplaySource 计数替代。

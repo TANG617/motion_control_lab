@@ -8,6 +8,7 @@ HERE=pathlib.Path(__file__).resolve().parent
 sys.path.insert(0,str(HERE.parents[1]/'tools/mcc_placo_study'))
 from inputs import UrdfFk
 from evidence import write_json
+from progress import SampleProgress
 from metrics import position_error,orientation_error,hard_violation,preservation_ratio,secondary_gain,directional_progress,error_reduction,stall_duration,recovery_time
 
 def box_qp(A,b,lower,upper,regularization=0.,E=None,f=None):
@@ -66,8 +67,9 @@ def verify(request):
  o=json.loads(pathlib.Path(request).read_text());out=pathlib.Path(o['output_dir']);data=o['input'];c=o['config'];raw=out/'raw.jsonl';checks=[];oracle=[];priority=[];constraints=[];progress=[];semantics=[];secondary=[];scale_checks=[];native_rows=[]
  if not raw.exists():write_json(out/'app_validation.json',{'status':'unavailable','reason':'native process produced no raw.jsonl'});return 1
  actual_records=[json.loads(line) for line in raw.read_text().splitlines() if line.strip()]
+ sample_progress=SampleProgress(out,'app-validation',len(actual_records))
  if not any(row.get('record_type') in ['attempt','analytic'] for row in actual_records):
-  write_json(out/'app_validation.json',{'status':'unavailable','reason':'no completed native attempt or analytic result; begin-only trace is not validation evidence','native_records':0});return 2
+  write_json(out/'app_validation.json',{'status':'unavailable','reason':'no completed native attempt or analytic result; begin-only trace is not validation evidence','native_records':0});sample_progress.update(len(actual_records));return 2
  fk=UrdfFk(data['model']['locator']);names=data['joint_names'];active=[names.index(n) for n in data['active_joint_names']]
  if HERE.name.startswith('E06'):
   expected={**c,**{key:data[key] for key in ['joint_names','active_joint_names','root_frame','frames','tcp_offsets','limits','units']}}
@@ -75,6 +77,8 @@ def verify(request):
   actual={**c,**mapping};semantics=semantic_audit(expected,actual)
   semantics += [{'field':'TCP task versus evaluated TCP','status':'semantic_mismatch','source':'frame-origin position task p_tcp-R_goal*offset','target':'true TCP Jacobian','reason':'surrogate task row differs from true TCP residual when orientation changes'}, {'field':'cross-method causal pairing','status':'unavailable','reason':'this unit audit is insufficient; compare frozen method_semantics artifacts and accepted common subset'}]
  for line,text in enumerate(raw.read_text().splitlines(),1):
+  # Report only records already processed; final completion follows artifact writes.
+  sample_progress.update(line-1)
   row=json.loads(text)
   if row.get('record_type')=='analytic':
    ref=analytic_reference(row['problem'],'hqp' in o['identity']['method_id'],c['primary_only'],c['regularization']);r={'source_line':line,'reference':ref,'native_status':row['status']}
@@ -86,6 +90,7 @@ def verify(request):
     r.update(hard_violation=hard,objective_gaps=gaps,status='pass' if hard<=c['hard_tolerance'] and all(abs(g)<1e-5 for g in gaps) else 'failed',acceptance_basis='objective and hard feasibility; joint-vector equality not required; numerical oracle tolerance 1e-5')
    oracle.append(r);continue
   if row.get('record_type')!='attempt':continue
+  priority_start=len(priority)
   q=np.asarray(row['q']);state=row.get('input_state',{'q':q.tolist(),'v':[0.]*len(q)});q0=np.asarray(state['q']);v=np.asarray(row['v']);v0=np.asarray(state['v']);lo=np.asarray(data['limits']['lower']);hi=np.asarray(data['limits']['upper']);vmax=np.asarray(data['limits']['velocity']);position_excess=hard_violation(q,lo,hi);velocity_excess=hard_violation(v,-vmax,vmax)
   entry={'source_line':line,'attempt_sequence':row['attempt_sequence'],'position_raw_violation':position_excess.tolist(),'velocity_raw_violation':velocity_excess.tolist(),'initial_position_feasible':bool(np.all((q0>=lo)&(q0<=hi))),'native_disposition':row.get('disposition'),'independent_scope':'URDF XML FK and scalar hard sets; no candidate FK'}
   if c.get('native_acceleration'):
@@ -142,7 +147,7 @@ def verify(request):
    if np.all(lower<upper):
     reference=lsq_linear(np.r_[A,np.sqrt(c['regularization'])*np.eye(len(active))],np.r_[b,np.zeros(len(active))],bounds=(lower,upper),tol=1e-12)
     objective=.5*np.sum((A@reference.x-b)**2);cost=.5*np.sum((A@v[active]-b)**2)
-    for taskcheck in [x for x in priority if x.get('source_line')==line and x.get('independent_A') is not None and x.get('task') not in ['left-position','right-position']]:
+    for taskcheck in [x for x in priority[priority_start:] if x.get('source_line')==line and x.get('independent_A') is not None and x.get('task') not in ['left-position','right-position']]:
      task_A=np.asarray(taskcheck['independent_A']);task_b=np.asarray(taskcheck['desired']);weight=c['orientation_weight'] if taskcheck['task'].endswith('-orientation') else c['secondary_weight'];primary_cost=.5*weight*np.sum((task_A@reference.x-task_b)**2);candidate_cost=.5*weight*np.sum((task_A@v[active]-task_b)**2)
      secondary.append({'source_line':line,'task':taskcheck['task'],'primary_only_reference':'independent position-primary bounded-LS at same frozen linearization','primary_only_secondary_cost':float(primary_cost),'candidate_secondary_cost':float(candidate_cost),'primary_semantic_objective_gap':float(cost-objective),**secondary_gain(float(primary_cost),float(candidate_cost))})
     oracle.append({'source_line':line,'status':'measured' if reference.success else 'unavailable','reference_kind':'independent scipy bounded least squares at frozen state; no candidate solver','reference_scope':'position-primary soft objective','independent_A':A.tolist(),'independent_b':b.tolist(),'lower':lower.tolist(),'upper':upper.tolist(),'reference_velocity':reference.x.tolist(),'reference_semantic_objective':float(objective),'candidate_semantic_objective':float(cost),'reference_objective_gap':float(cost-objective),'reference_optimum_acceptance':'diagnostic gap; same-tick preservation uses exact declared residual tolerance'})
@@ -175,6 +180,6 @@ def verify(request):
   placo='placo' in o['identity']['method_id'];ignored=placo and field!='target_iterations';applicability.append({'field':field,'resolved_value':c.get(field),'applied':not ignored,'reason':'PlaCo native backend or fixed-iteration TargetSolve loop has no corresponding MCC policy; causal mismatch retained' if ignored else 'native MCC policy or explicit fixed PlaCo loop; execution mode applicability in resolved config'})
  table('configuration_applicability',applicability)
  if (out/'method_semantics.json').exists():table('method_semantics',[json.loads((out/'method_semantics.json').read_text())])
- failed=any(r.get('status')=='failed' for r in oracle+checks+priority+scale_checks);write_json(out/'app_validation.json',{'status':'failed' if failed else 'completed','oracle_rows':len(oracle),'priority_rows':len(priority),'raw_native_status_unchanged':True,'R1_reference_optimum':'independent bounded least squares position-primary; complete same-tick task residual verification additionally retained','formal_recovery_threshold_status':'provisional-development; formal freeze required'});return int(failed)
+ failed=any(r.get('status')=='failed' for r in oracle+checks+priority+scale_checks);write_json(out/'app_validation.json',{'status':'failed' if failed else 'completed','oracle_rows':len(oracle),'priority_rows':len(priority),'raw_native_status_unchanged':True,'R1_reference_optimum':'independent bounded least squares position-primary; complete same-tick task residual verification additionally retained','formal_recovery_threshold_status':'provisional-development; formal freeze required'});sample_progress.update(len(actual_records));return int(failed)
 if __name__=='__main__':
  p=argparse.ArgumentParser();p.add_argument('--request',required=True);a=p.parse_args();raise SystemExit(verify(a.request))

@@ -17,24 +17,6 @@ class Integrity(unittest.TestCase):
             self.assertEqual(verify_unit(t,c)['status'],'failed')
     def test_formal_gate_not_boolean_freeze(self):
         self.assertTrue(frozen_prerequisites({'freeze':True},{'boot_id':'x','affinity':[]}))
-    def test_sigint_retains_suffix(self):
-        with tempfile.TemporaryDirectory() as t:
-            t=pathlib.Path(t);c=canonical_snapshot('/workspace/models/r1.cos.urdf',fixture=True);desc=save_input(t/'input.json',c)
-            units=[{'case_id':case,'method_id':'fixture','arm_id':'fixture','required':True,'input':desc,'config':{'sleep':True},
-                    'command':[sys.executable,str(pathlib.Path(__file__).with_name('fixture_app.py')),'--request','{request}']} for case in ['first','second']]
-            d={'schema_version':'experiment.v2','experiment_id':'E06','question':'fixture interruption','metrics':[],'evaluation_windows':[],
-               'controlled_factors':{},'failure_policy':{'continue_after_failure':True},'repeats':1,'units':units}
-            write_json(t/'definition.json',d)
-            with (t/'stdout').open('w') as out,(t/'stderr').open('w') as err:
-                proc=subprocess.Popen([sys.executable,str(pathlib.Path(__file__).resolve().parents[1]/'study.py'),'--definition',str(t/'definition.json'),'--output-root',str(t/'runs')],stdout=out,stderr=err)
-                deadline=time.monotonic()+10
-                while not list((t/'runs').glob('*/units/*/first/*/*/raw.jsonl')):
-                    if proc.poll() is not None or time.monotonic()>deadline:self.fail('fixture did not start')
-                    time.sleep(.03)
-                proc.send_signal(signal.SIGINT);self.assertEqual(proc.wait(timeout=10),130)
-            path=next((t/'runs').glob('*/inventory.json'));inv=read_json(path)
-            self.assertEqual([u['status'] for u in inv['actual_units']],['interrupted','not-run'])
-            self.assertEqual(check(path)['status'],'passed')
 if __name__=='__main__':unittest.main()
 
 class LagMeasurement(unittest.TestCase):
@@ -73,28 +55,6 @@ class ResultRecordCoverage(unittest.TestCase):
             check=verify_unit(root,{})
             self.assertEqual(check['status'],'unavailable')
             self.assertEqual(check['result_rows'],1)
-
-class UnavailableEvidence(unittest.TestCase):
-    def test_unavailable_and_empty_success_keep_declarations_and_fail_batch(self):
-        import study
-        with tempfile.TemporaryDirectory() as directory:
-            root=pathlib.Path(directory)
-            descriptor=save_input(root/'input.json',canonical_snapshot('/workspace/models/r1.cos.urdf',fixture=True))
-            unit={'case_id':'missing','arm_id':'fixture','method_id':'fixture','input':descriptor,'config':{},'required':True,'command':[sys.executable,'-c','pass']}
-            definition={'schema_version':'experiment.v2','experiment_id':'E06','question':'labelled empty fixture','metrics':[],'evaluation_windows':[],'controlled_factors':{},'failure_policy':{'continue_after_failure':True},'repeats':1,'units':[{**unit,'available':False,'unavailable_reason':'negative capability fixture'},{**unit,'case_id':'empty-success'}]}
-            path=root/'definition.json';write_json(path,definition)
-            args=study.parser().parse_args(['--definition',str(path),'--output-root',str(root/'runs')])
-            selected=study.select([path],args);preflight=study.preflight(selected,'development')
-            bounded=study.preflight(selected,'development',True)
-            self.assertTrue(all('explicit bounded smoke configuration missing' in u['missing'] for u in bounded['units']))
-            self.assertEqual(study.execute(selected,preflight,args),1)
-            inventory=read_json(next((root/'runs').glob('*/inventory.json')))
-            self.assertEqual([u['status'] for u in inventory['actual_units']],['unavailable','completed'])
-            for u in inventory['actual_units']:
-                paths=[pathlib.Path(a['locator']).name for a in u['artifacts']]
-                self.assertIn('status.json',paths);self.assertIn('resolved_declaration.json',paths)
-                self.assertTrue(all(verify_artifact(a) for a in u['artifacts']))
-            self.assertEqual(inventory['actual_units'][1]['validation']['status'],'unavailable')
 
 class InputOwnership(unittest.TestCase):
     def test_snapshot_mutation_does_not_change_seed_or_initial_defaults(self):

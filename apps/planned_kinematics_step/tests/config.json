@@ -1,0 +1,14 @@
+{
+  "solver": "mcc",
+  "backend": "eiquadprog",
+  "dt_s": 0.01,
+  "duration_s": 0.03,
+  "servo_gain_per_s": 1.0,
+  "posture_weight": 0.001,
+  "regularization": 1e-06,
+  "cartesian_velocity": 0.1,
+  "cartesian_acceleration": 0.5,
+  "cartesian_jerk": 5.0,
+  "joint_acceleration": 2.0,
+  "joint_jerk": 20.0
+}

@@ -1,6 +1,7 @@
 add_library(
   mcl_step_support
   solver.cpp
+  allocation.cpp
   loop.cpp
 )
 add_library(
@@ -31,7 +32,7 @@ target_link_libraries(
 
 mcl_add_app(
   TARGET mcl_step
-  SOURCES main.cpp options.cpp
+  SOURCES main.cpp options.cpp execution.cpp
   LIBRARIES motion_control_lab::step_support
 )
 if(APPLE)
@@ -68,4 +69,46 @@ if(BUILD_TESTING)
     COMMAND test_step_app_options
   )
 
+endif()
+
+if(BUILD_TESTING AND EXISTS "${MCL_TEST_URDF}")
+  add_test(NAME apps.mcl_step_public_execution
+    COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/public_execution.py"
+      "$<TARGET_FILE:mcl_step>" "${MCL_TEST_URDF}")
+  set_tests_properties(apps.mcl_step_public_execution PROPERTIES TIMEOUT 90 RUN_SERIAL TRUE)
+endif()
+
+if(BUILD_TESTING)
+  add_executable(
+    test_dual_arm_servo_solver_semantics
+    tests/solver_semantics.cpp
+  )
+  target_link_libraries(
+    test_dual_arm_servo_solver_semantics
+    PRIVATE
+      motion_control_lab::step_support
+      motion_control_lab::cpu_affinity
+      motion_control_lab::app_helpers
+      motion_control_lab::r1_robot_config
+      motion_control_core::motion_control_core
+      motion_control_lab::scheduler
+      motion_control_lab::keyboard_input
+      motion_control_lab::standard_ik_tui
+      motion_control_lab::tui
+      motion_control_lab::preview_transport
+      motion_control_lab::preview_projection
+      motion_control_lab::replay
+      libplaco
+  )
+  add_test(
+    NAME apps.mcl_step_semantics
+    COMMAND test_dual_arm_servo_solver_semantics "${MCL_TEST_URDF}"
+  )
+  set_tests_properties(
+    apps.mcl_step_semantics
+    PROPERTIES
+      TIMEOUT 20
+      ENVIRONMENT_MODIFICATION
+        "LD_LIBRARY_PATH=path_list_prepend:$<TARGET_FILE_DIR:libplaco>"
+  )
 endif()

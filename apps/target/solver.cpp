@@ -1,4 +1,5 @@
 #include "solver.hpp"
+#include "allocation.hpp"
 
 #include <algorithm>
 #include <chrono>
@@ -18,6 +19,24 @@ namespace motion_control_lab::target {
 
 namespace mcc = motion_control::core;
 namespace mcl = motion_control_lab;
+namespace {
+Json::Value vectorEvidence(const Eigen::VectorXd &v) {
+  Json::Value r(Json::arrayValue);
+  for (auto x : v)
+    r.append(x);
+  return r;
+}
+Json::Value matrixEvidence(const Eigen::MatrixXd &m) {
+  Json::Value r(Json::arrayValue);
+  for (int i = 0; i < m.rows(); ++i) {
+    Json::Value row(Json::arrayValue);
+    for (int j = 0; j < m.cols(); ++j)
+      row.append(m(i, j));
+    r.append(row);
+  }
+  return r;
+}
+} // namespace
 
 mcc::RobotState makeRobotState(const std::vector<double> &positions,
                                const std::vector<double> &velocities) {
@@ -215,7 +234,8 @@ public:
     target_options.maximum_iterations = algorithm.maximum_iterations;
     target_options.soft_solve_time_budget_ms =
         algorithm.soft_solve_time_budget_ms;
-    solver_config.convergence.position_tolerance_m = algorithm.position_tolerance_m;
+    solver_config.convergence.position_tolerance_m =
+        algorithm.position_tolerance_m;
     solver_config.convergence.orientation_tolerance_rad =
         algorithm.orientation_tolerance_rad;
     target_options.minimum_position_improvement_m =
@@ -265,7 +285,8 @@ public:
         algorithm.posture_weight, static_cast<int>(robot.joint_names.size()));
     mcc::PostureTaskHandle posture_task;
     throwIfError(builder.addPostureTask(posture_config, posture_task));
-    request_.posture_targets.emplace_back(posture_task, mcl::toEigen(positions_));
+    request_.posture_targets.emplace_back(posture_task,
+                                          mcl::toEigen(positions_));
 
     mcc::JointPositionLimitConfig joint_limit_config;
     joint_limit_config.margin = algorithm.joint_position_margin_rad;
@@ -277,6 +298,32 @@ public:
     throwIfError(builder.finalize(solver_));
   }
 
+  std::function<void(const Json::Value &)> observer_;
+  bool full_observation_{true}, allocation_observation_{false};
+  void setState(const std::vector<double> &q, const std::vector<double> &v) {
+    positions_ = q;
+    velocities_ = v;
+  }
+  Json::Value modelMapping() const {
+    Json::Value m;
+    m["root_frame"] = robot_.base_frame;
+    m["frames"]["left"] = robot_.left_end_effector_frame;
+    m["frames"]["right"] = robot_.right_end_effector_frame;
+    for (int j = 0; j < 3; ++j) {
+      m["tcp_offsets"]["left"].append(robot_.left_tcp_offset.translation()[j]);
+      m["tcp_offsets"]["right"].append(
+          robot_.right_tcp_offset.translation()[j]);
+    }
+    for (std::size_t j = 0; j < robot_.joint_names.size(); ++j) {
+      m["joint_names"].append(robot_.joint_names[j]);
+      m["active_joint_names"].append(robot_.joint_names[j]);
+      const auto &limit = model_->jointLimits()[j];
+      m["position_lower"].append(limit.lower);
+      m["position_upper"].append(limit.upper);
+      m["velocity_abs"].append(limit.velocity);
+    }
+    return m;
+  }
   const std::vector<double> &positions() const { return positions_; }
   const std::vector<double> &velocities() const { return velocities_; }
 
@@ -309,10 +356,100 @@ public:
     request.orientation_targets.push_back(
         {right_orientation_task_, right_target.target_pose.linear(), true});
 
+    request.capture_linearization = observer_ && full_observation_;
     mcc::InverseKinematicsSolution solution;
     mcc::InverseKinematicsDiagnostics diagnostics;
+    if (allocation_observation_)
+      beginAllocationObservation();
+    const auto native_start = std::chrono::steady_clock::now();
     const auto status =
         solver_.solveInverseKinematics(request, solution, diagnostics);
+    const auto allocations = allocation_observation_
+                                 ? endAllocationObservation()
+                                 : AllocationObservation{};
+    const double native_ms =
+        std::chrono::duration<double, std::milli>(
+            std::chrono::steady_clock::now() - native_start)
+            .count();
+    if (observer_) {
+      Json::Value raw;
+      raw["record_type"] = "native_result";
+      if (allocation_observation_) {
+        raw["cpp_new_count"] = Json::UInt64(allocations.count);
+        raw["cpp_new_bytes"] = Json::UInt64(allocations.bytes);
+      }
+      raw["native_status_code"] = int(status.code);
+      raw["native_status"] = status.message;
+      raw["disposition"] =
+          mcc::isAccepted(solution.disposition) ? "accepted" : "rejected";
+      raw["candidate_available"] = solution.joint_positions.size() != 0;
+      raw["commit_eligible"] =
+          status.ok() && mcc::isAccepted(solution.disposition);
+      raw["selected_pass"] = Json::nullValue;
+      raw["selected_pass_reason"] = "single-level native kinematics API";
+      raw["native_call_ms"] = native_ms;
+      raw["solver_reported_ms"] = diagnostics.solve_time_ms;
+      raw["iterations"] = diagnostics.iterations;
+      raw["native_qp_status"] = diagnostics.optimization.native_status;
+      raw["maximum_hard_violation"] =
+          diagnostics.optimization.maximum_hard_violation;
+      raw["objective_value"] = diagnostics.optimization.objective_value;
+      raw["warm_start_used"] = diagnostics.optimization.warm_start_used;
+      raw["backend_dimensions_status"] =
+          "unavailable-public-MCC-kinematics-diagnostics";
+      if (full_observation_) {
+        const auto &linear = diagnostics.linearization;
+        raw["native_linearization_available"] = linear.available;
+        raw["native_linearization_configuration"] =
+            vectorEvidence(linear.configuration);
+        raw["native_joint_lower"] = vectorEvidence(linear.joint_bounds.lower);
+        raw["native_joint_upper"] = vectorEvidence(linear.joint_bounds.upper);
+        raw["native_candidate_available"] = linear.candidate_available;
+        raw["native_candidate_values"] =
+            vectorEvidence(linear.candidate_values);
+        for (const auto &task : linear.tasks) {
+          Json::Value row;
+          row["name"] = task.name;
+          row["unit"] = task.unit;
+          row["A"] = matrixEvidence(task.A);
+          row["offset"] = vectorEvidence(task.offset);
+          row["lower"] = vectorEvidence(task.bounds.lower);
+          row["upper"] = vectorEvidence(task.bounds.upper);
+          row["enabled"] = task.enabled;
+          row["decision_unit"] = "joint increment rad";
+          if (const auto *hard =
+                  std::get_if<mcc::HardEnforcement>(&task.enforcement)) {
+            row["enforcement"] = "hard";
+            row["feasibility_tolerance"] = hard->feasibility_tolerance;
+          } else if (const auto *soft =
+                         std::get_if<mcc::SoftEnforcement>(&task.enforcement)) {
+            row["enforcement"] = "soft";
+            row["weight"] = soft->penalty.weight;
+            row["normalization"] =
+                vectorEvidence(soft->penalty.residual_normalization);
+          }
+          raw["native_task_rows"].append(row);
+        }
+        for (const auto &requirement : diagnostics.optimization.requirements) {
+          Json::Value row;
+          row["name"] = requirement.name;
+          row["unit"] = requirement.unit;
+          row["enabled"] = requirement.enabled;
+          row["active"] = requirement.active;
+          row["maximum_violation"] = requirement.maximum_violation;
+          row["cost"] = requirement.cost;
+          raw["requirements"].append(row);
+        }
+      }
+
+      raw["candidate_q"] = vectorEvidence(solution.joint_positions);
+      raw["candidate_v"] = vectorEvidence(solution.joint_velocities);
+      raw["returned_solution_role"] =
+          status.ok() && mcc::isAccepted(solution.disposition)
+              ? "accepted-command"
+              : "rejected-returned-solution-not-selected";
+      observer_(raw);
+    }
 
     TargetSolveResult result;
     result.iterations = diagnostics.iterations;
@@ -373,7 +510,8 @@ private:
   std::vector<double> velocities_;
   std::shared_ptr<const mcc::RobotModel> model_;
   mcc::KinematicsSolver solver_;
-  // The initial posture stays fixed; state and Cartesian goals are refreshed per call.
+  // The initial posture stays fixed; state and Cartesian goals are refreshed
+  // per call.
   mcc::InverseKinematicsRequest request_;
   mcc::PositionTaskHandle left_position_task_;
   mcc::OrientationTaskHandle left_orientation_task_;
@@ -439,6 +577,42 @@ public:
                              algorithm_.posture_weight);
   }
 
+  std::function<void(const Json::Value &)> observer_;
+  bool full_observation_{true}, allocation_observation_{false};
+  void setState(const std::vector<double> &q, const std::vector<double> &v) {
+    positions_ = q;
+    velocities_ = v;
+    for (std::size_t j = 0; j < robot_config_.joint_names.size(); ++j) {
+      robot_.set_joint(robot_config_.joint_names[j], q.at(j));
+      robot_.set_joint_velocity(robot_config_.joint_names[j], v.at(j));
+    }
+    robot_.update_kinematics();
+  }
+  Json::Value modelMapping() const {
+    Json::Value m;
+    m["root_frame"] = robot_config_.base_frame;
+    m["frames"]["left"] = robot_config_.left_end_effector_frame;
+    m["frames"]["right"] = robot_config_.right_end_effector_frame;
+    for (int j = 0; j < 3; ++j) {
+      m["tcp_offsets"]["left"].append(
+          robot_config_.left_tcp_offset.translation()[j]);
+      m["tcp_offsets"]["right"].append(
+          robot_config_.right_tcp_offset.translation()[j]);
+    }
+    for (std::size_t j = 0; j < robot_config_.joint_names.size(); ++j) {
+      m["joint_names"].append(robot_config_.joint_names[j]);
+      m["active_joint_names"].append(robot_config_.joint_names[j]);
+      auto limit =
+          robot_.model
+              .joints[robot_.model.getJointId(robot_config_.joint_names[j])];
+      m["position_lower"].append(
+          robot_.model.lowerPositionLimit[limit.idx_q()]);
+      m["position_upper"].append(
+          robot_.model.upperPositionLimit[limit.idx_q()]);
+      m["velocity_abs"].append(robot_.model.velocityLimit[limit.idx_v()]);
+    }
+    return m;
+  }
   const std::vector<double> &positions() const { return positions_; }
   const std::vector<double> &velocities() const { return velocities_; }
 
@@ -470,7 +644,76 @@ public:
 
     for (int iteration = 0; iteration < algorithm_.maximum_iterations;
          ++iteration) {
+      Json::Value placo_linearization_q(Json::arrayValue);
+      if (observer_ && full_observation_)
+        for (const auto &name : robot_config_.joint_names)
+          placo_linearization_q.append(robot_.get_joint(name));
+
+      if (allocation_observation_)
+        beginAllocationObservation();
+      const auto native_start = std::chrono::steady_clock::now();
       (void)solver_.solve(true);
+      const double placo_native_ms =
+          std::chrono::duration<double, std::milli>(
+              std::chrono::steady_clock::now() - native_start)
+              .count();
+      const auto allocations = allocation_observation_
+                                   ? endAllocationObservation()
+                                   : AllocationObservation{};
+      if (observer_) {
+        Json::Value raw;
+        raw["record_type"] = "native_result";
+        if (allocation_observation_) {
+          raw["cpp_new_count"] = Json::UInt64(allocations.count);
+          raw["cpp_new_bytes"] = Json::UInt64(allocations.bytes);
+        }
+        raw["native_status"] = "PlaCo solve returned";
+        raw["native_dimensions"]["variables"] = solver_.problem.n_variables;
+        raw["native_dimensions"]["equalities"] = solver_.problem.n_equalities;
+        raw["native_dimensions"]["inequalities"] =
+            solver_.problem.n_inequalities;
+        raw["native_dimensions"]["free_variables"] =
+            solver_.problem.free_variables;
+        raw["native_dimensions"]["determined_variables"] =
+            solver_.problem.determined_variables;
+        raw["native_dimensions"]["slack_variables"] =
+            solver_.problem.slack_variables;
+        raw["native_status_code"] = Json::nullValue;
+        raw["native_status_reason"] = "throw-on-failure API";
+        if (full_observation_) {
+          raw["native_linearization_q"] = placo_linearization_q;
+          auto add = [&](const auto *task, const char *name) {
+            Json::Value row;
+            row["name"] = name;
+            row["A"] = matrixEvidence(task->A);
+            row["b"] = vectorEvidence(task->b);
+            row["enforcement"] = "hard";
+            row["decision_unit"] = "joint increment rad";
+            raw["native_task_rows"].append(row);
+          };
+          add(left_position_task_, "left-position");
+          add(left_orientation_task_, "left-orientation");
+          add(right_position_task_, "right-position");
+          add(right_orientation_task_, "right-orientation");
+        }
+
+        raw["candidate_available"] = true;
+        raw["native_call_ms"] = placo_native_ms;
+        raw["selected_pass"] = Json::nullValue;
+        raw["candidate_q"] = Json::Value(Json::arrayValue);
+        raw["candidate_v"] = Json::Value(Json::arrayValue);
+        for (const auto &name : robot_config_.joint_names) {
+          raw["candidate_q"].append(robot_.get_joint(name));
+          raw["candidate_v"].append(robot_.get_joint_velocity(name));
+        }
+        raw["disposition"] = "native-returned";
+        raw["commit_eligible"] = true;
+        raw["returned_solution_role"] =
+            "native-wrapper-state-before-app-commit";
+        raw["candidate_velocity_role"] =
+            "native-wrapper-state-not-a-TargetSolve-commanded-velocity";
+        observer_(raw);
+      }
       robot_.update_kinematics();
       ++iterations;
 
@@ -610,4 +853,32 @@ PlacoTargetSolver::solve(const std::vector<ArmTarget> &targets) {
   return impl_->solve(targets);
 }
 
+void MccTargetSolver::setState(const std::vector<double> &q,
+                               const std::vector<double> &v) {
+  impl_->setState(q, v);
+}
+void MccTargetSolver::observe(std::function<void(const Json::Value &)> observer,
+                              bool full, bool allocations) {
+  impl_->observer_ = std::move(observer);
+  impl_->full_observation_ = full;
+  impl_->allocation_observation_ = allocations;
+}
+void PlacoTargetSolver::setState(const std::vector<double> &q,
+                                 const std::vector<double> &v) {
+  impl_->setState(q, v);
+}
+void PlacoTargetSolver::observe(
+    std::function<void(const Json::Value &)> observer, bool full,
+    bool allocations) {
+  impl_->observer_ = std::move(observer);
+  impl_->full_observation_ = full;
+  impl_->allocation_observation_ = allocations;
+}
+
+Json::Value MccTargetSolver::modelMapping() const {
+  return impl_->modelMapping();
+}
+Json::Value PlacoTargetSolver::modelMapping() const {
+  return impl_->modelMapping();
+}
 } // namespace motion_control_lab::target

@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Public app execution request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "app_id",
+    "execution_structure",
+    "input",
+    "app_config",
+    "execution",
+    "observation",
+    "output_dir",
+    "tracking"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "execution_request.v1"
+    },
+    "app_id": {
+      "type": "string"
+    },
+    "execution_structure": {
+      "type": "string"
+    },
+    "input": {
+      "type": "object",
+      "required": [
+        "path",
+        "sha256",
+        "format"
+      ],
+      "properties": {
+        "path": {
+          "type": "string",
+          "pattern": "^/"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "format": {
+          "enum": [
+            "json",
+            "csv",
+            "mcap"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "app_config": {
+      "type": "object"
+    },
+    "execution": {
+      "type": "object"
+    },
+    "observation": {
+      "type": "object"
+    },
+    "output_dir": {
+      "type": "string",
+      "pattern": "^/"
+    },
+    "tracking": {
+      "type": "object"
+    }
+  }
+}

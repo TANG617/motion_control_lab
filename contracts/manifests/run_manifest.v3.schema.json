@@ -1,0 +1,86 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "run_kind",
+    "run_id",
+    "status",
+    "phase",
+    "metric_version",
+    "outputs"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "run_manifest.v3"
+    },
+    "run_kind": {
+      "enum": [
+        "experiment",
+        "analysis"
+      ]
+    },
+    "status": {
+      "enum": [
+        "running",
+        "completed",
+        "failed",
+        "interrupted"
+      ]
+    },
+    "run_id": {
+      "type": "string"
+    },
+    "outputs": {
+      "type": "object"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "run_kind": {
+            "const": "analysis"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "analysis_id",
+          "definition_hash",
+          "analysis_version",
+          "source_policy",
+          "code",
+          "environment"
+        ],
+        "properties": {
+          "analysis_id": {
+            "type": "string",
+            "pattern": "^A[0-9]{2}$"
+          }
+        },
+        "not": {
+          "required": [
+            "experiment_id"
+          ]
+        }
+      },
+      "else": {
+        "required": [
+          "experiment_id"
+        ],
+        "properties": {
+          "experiment_id": {
+            "type": "string",
+            "pattern": "^E[0-9]{2}$"
+          }
+        },
+        "not": {
+          "required": [
+            "analysis_id"
+          ]
+        }
+      }
+    }
+  ]
+}

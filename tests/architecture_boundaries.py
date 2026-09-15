@@ -37,40 +37,31 @@ MCC_COMPONENT_PATTERNS = (
 APP_SOURCE_FILES = {
     "psibot_teleop": {"main.cpp", "options.cpp", "options.hpp", "client.cpp", "client.hpp", "loop.cpp", "loop.hpp", "tui_projection.cpp", "tui_projection.hpp"},
     "baseline": {"main.cpp", "options.cpp", "options.hpp", "solver.cpp", "solver.hpp", "loop.cpp", "loop.hpp"},
-    "cartesian_planning": {"main.cpp", "options.cpp", "options.hpp", "planning.cpp", "planning.hpp", "loop.cpp", "loop.hpp"},
     "hierarchical_inverse_dynamics_torque_sim": {"main.cpp", "options.cpp", "options.hpp", "solver.cpp", "solver.hpp", "loop.cpp", "loop.hpp"},
     "hierarchical_kinematics_step": {"main.cpp", "options.cpp", "options.hpp", "admittance.cpp", "admittance.hpp", "solver.cpp", "solver.hpp", "nullspace.cpp", "nullspace.hpp", "planning.cpp", "planning.hpp", "rejection_policy.cpp", "rejection_policy.hpp", "telemetry.cpp", "telemetry.hpp", "loop.cpp", "loop.hpp"},
-    "plot_core_planning": {"main.cpp", "options.cpp", "options.hpp", "planning.cpp", "planning.hpp"},
     "replay_plan": {"main.cpp", "options.cpp", "options.hpp", "loop.cpp", "loop.hpp"},
     "step": {"main.cpp", "options.cpp", "options.hpp", "solver.cpp", "solver.hpp", "loop.cpp", "loop.hpp"},
-    "single_arm_step": {"main.cpp", "options.cpp", "options.hpp", "solver.cpp", "solver.hpp", "loop.cpp", "loop.hpp"},
     "target": {"main.cpp", "options.cpp", "options.hpp", "solver.cpp", "solver.hpp", "loop.cpp", "loop.hpp"},
 }
-# Explicit registry entries for independent study apps; no shared solver facade.
-for number in range(6, 13):
-    name = f"study_e{number:02}"
-    APP_SOURCE_FILES[name] = {"main.cpp", "options.cpp", "options.hpp", "solver.cpp", "solver.hpp", "loop.cpp", "loop.hpp"}
-    if number == 9:
-        APP_SOURCE_FILES[name] |= {"allocation.cpp", "allocation.hpp"}
-    if number in (11, 12):
-        APP_SOURCE_FILES[name] |= {"planning.cpp", "planning.hpp"}
+# Functional apps keep algorithm ownership local; request files only adapt public inputs.
+for app in ("step", "target"):
+    APP_SOURCE_FILES[app] |= {"execution.cpp", "execution.hpp", "allocation.cpp", "allocation.hpp"}
+APP_SOURCE_FILES["hierarchical_kinematics_step"] |= {"execution.cpp", "execution.hpp", "elbow_reference.cpp", "elbow_reference.hpp", "elbow_reference_visualization.cpp", "elbow_reference_visualization.hpp", "allocation.cpp", "allocation.hpp"}
+APP_SOURCE_FILES["planned_kinematics_step"] = {"main.cpp", "options.cpp", "options.hpp", "solver.cpp", "solver.hpp", "planning.cpp", "planning.hpp", "loop.cpp", "loop.hpp"}
+APP_SOURCE_FILES["optimization_problem"] = {"main.cpp", "options.cpp", "options.hpp", "solver.cpp", "solver.hpp"}
 APP_MAIN_REQUIREMENTS = {
     "psibot_teleop": ("parseOptions", "runLoop"),
     "baseline": ("parseTeleopOptions", "parseReplayOptions", "BaselineSolver", "runLoop", "runReplayLoop"),
-    "cartesian_planning": ("parseOptions", "CartesianPlanner", "planner.generate", "playTrajectory"),
     "hierarchical_inverse_dynamics_torque_sim": ("parseOptions", "configureSolver", "runLoop"),
     "hierarchical_kinematics_step": ("parseOptions", "SolverRuntime", "configureSolver", "CartesianPlanner", "JointPlanner", "runLoop"),
-    "plot_core_planning": ("parseOptions", "CartesianPlanner", "JointPlanner", "cartesian_planner.generate", "joint_planner.generate"),
     "replay_plan": ("parseOptions", "runLoop"),
     "step": ("parseOptions", "parseReplayOptions", "MccServoSolver", "PlacoServoSolver", "runLoop", "runReplayLoop"),
-    "single_arm_step": ("parseOptions", "KinematicsSolverBuilder", "KinematicsSolver", "configureSolver", "builder.finalize", "runLoop"),
     "target": ("parseOptions", "MccTargetSolver", "PlacoTargetSolver", "runLoop"),
 }
 
-for number in range(6, 13):
-    APP_MAIN_REQUIREMENTS[f"study_e{number:02}"] = ("parse", "Solver", "loop")
-    if number in (11, 12):
-        APP_MAIN_REQUIREMENTS[f"study_e{number:02}"] += ("Planning",)
+APP_MAIN_REQUIREMENTS["optimization_problem"] = ("resolveOptions", "app::solve")
+APP_MAIN_REQUIREMENTS["planned_kinematics_step"] = ("parse", "Solver", "Planning", "loop")
+
 
 
 def fail(message: str) -> None:

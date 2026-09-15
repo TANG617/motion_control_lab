@@ -17,11 +17,6 @@ include(GNUInstallDirs)
 option(MCL_BUILD_PSIBOT_TELEOP "Build the Psi SDK keyboard teleoperation client" OFF)
 
 option(
-  MCL_BUILD_SINGLE_ARM_STEP
-  "Build the single-arm interactive IK application"
-  ON
-)
-option(
   MCL_BUILD_STEP
   "Build the dual-arm Step interactive IK application"
   ON
@@ -46,31 +41,6 @@ option(
   "Build the fixed-base R1 hierarchical inverse-dynamics torque simulation"
   ON
 )
-option(
-  MCL_BUILD_MCC_PLOTS
-  "Build the optional motion_control_core matplotlib renderer"
-  OFF
-)
-option(
-  MCL_BUILD_CARTESIAN_PLANNING
-  "Build the JSON-driven Cartesian MoveLine visualization application"
-  ON
-)
-option(
-  MCL_BUILD_E03_BATCH_REPLAY_IK
-  "Build the E03 PSI R1 motion-library batch replay IK runner"
-  ON
-)
-option(
-  MCL_BUILD_E04_OPENSOT_SMOKE
-  "Build the isolated ROS2 OpenSoT R1 smoke experiment"
-  OFF
-)
-option(
-  MCL_BUILD_E03_REPLAY_VISUALIZATION
-  "Build optional Foxglove live visualization into the E03 legacy replay runner"
-  OFF
-)
 set(MCL_ENABLE_CPU_AFFINITY_DEFAULT OFF)
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
   set(MCL_ENABLE_CPU_AFFINITY_DEFAULT ON)
@@ -88,23 +58,9 @@ if(MCL_ENABLE_CPU_AFFINITY AND NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
   message(FATAL_ERROR "MCL_ENABLE_CPU_AFFINITY is supported only on Linux")
 endif()
 
-if(MCL_BUILD_E03_REPLAY_VISUALIZATION AND
-   NOT MCL_BUILD_E03_BATCH_REPLAY_IK)
-  message(
-    FATAL_ERROR
-    "Replay visualization requires an enabled replay IK runner"
-  )
-endif()
-if(MCL_BUILD_E03_REPLAY_VISUALIZATION AND
-   NOT MCL_ENABLE_FOXGLOVE_TRANSPORT)
-  message(
-    FATAL_ERROR
-    "E03 replay visualization requires MCL_ENABLE_FOXGLOVE_TRANSPORT=ON"
-  )
-endif()
 
 set(MCL_BUILD_ANY_INTERACTIVE_IK OFF)
-if(MCL_BUILD_SINGLE_ARM_STEP OR MCL_BUILD_STEP OR
+if(MCL_BUILD_STEP OR
    MCL_BUILD_TARGET OR MCL_BUILD_BASELINE OR
    MCL_BUILD_HIERARCHICAL_KINEMATICS_STEP OR
    MCL_BUILD_HIERARCHICAL_INVERSE_DYNAMICS_TORQUE_SIM)
@@ -131,7 +87,8 @@ list(PREPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
 include(cmake/Dependencies.cmake)
 include(cmake/MclApp.cmake)
-option(MCL_BUILD_STUDY_EXPERIMENTS "Build E06-E12 research experiment apps" ON)
+option(MCL_BUILD_OPTIMIZATION_PROBLEM "Build explicit matrix optimization debugger" ON)
+option(MCL_BUILD_PLANNED_KINEMATICS_STEP "Build Cartesian planning weighted IK and joint OTG app" ON)
 
 install(
   PROGRAMS "${CMAKE_CURRENT_SOURCE_DIR}/scripts/launch_app.sh"
@@ -139,6 +96,14 @@ install(
 )
 
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
+
+if(BUILD_TESTING)
+  set(MCL_TEST_URDF "/workspace/models/r1.cos.urdf" CACHE FILEPATH
+      "R1 model for runtime-only solver regression tests")
+  find_program(MCL_BASH_EXECUTABLE bash REQUIRED)
+  find_program(MCL_TRUE_EXECUTABLE true REQUIRED)
+  find_program(MCL_SCRIPT_EXECUTABLE script)
+endif()
 
 set(MCL_VISUALIZATION_CONTRACT_DIR
     "${CMAKE_CURRENT_SOURCE_DIR}/contracts/visualization")
@@ -233,13 +198,14 @@ if(MCL_BUILD_HIERARCHICAL_KINEMATICS_STEP)
   target_link_libraries(mcl_telemetry_proto PUBLIC protobuf::libprotobuf)
 endif()
 
-if(MCL_BUILD_E04_OPENSOT_SMOKE)
-  include(cmake/OpenSoTExternal.cmake)
-endif()
 
-if(MCL_BUILD_ANY_INTERACTIVE_IK OR MCL_BUILD_MCC_PLOTS OR MCL_BUILD_CARTESIAN_PLANNING OR
-   MCL_BUILD_E03_BATCH_REPLAY_IK OR MCL_BUILD_STUDY_EXPERIMENTS)
-  find_package(motion_control_core 0.4 CONFIG REQUIRED)
+if(MCL_BUILD_ANY_INTERACTIVE_IK OR MCL_BUILD_OPTIMIZATION_PROBLEM OR MCL_BUILD_PLANNED_KINEMATICS_STEP)
+  option(MCL_BUILD_HARP "Enable native HARP inference in hierarchical_kinematics_step" OFF)
+  if(MCL_BUILD_HARP)
+    find_package(motion_control_core 0.4 CONFIG REQUIRED COMPONENTS posture_reference)
+  else()
+    find_package(motion_control_core 0.4 CONFIG REQUIRED)
+  endif()
 endif()
 
 if(MCL_BUILD_HIERARCHICAL_KINEMATICS_STEP OR
@@ -247,8 +213,7 @@ if(MCL_BUILD_HIERARCHICAL_KINEMATICS_STEP OR
   find_package(motion_control_sim 0.1 CONFIG REQUIRED)
 endif()
 
-if(MCL_BUILD_ANY_INTERACTIVE_IK OR MCL_BUILD_CARTESIAN_PLANNING OR
-   MCL_BUILD_E03_REPLAY_VISUALIZATION)
+if(MCL_BUILD_ANY_INTERACTIVE_IK)
   find_package(motion_control_viz 0.5 CONFIG REQUIRED)
 endif()
 
@@ -438,8 +403,7 @@ add_library(motion_control_lab::app_scaffold ALIAS mcl_app_scaffold)
 target_include_directories(mcl_app_scaffold INTERFACE "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>")
 target_link_libraries(mcl_app_scaffold INTERFACE motion_control_lab::runtime_contract)
 
-if(MCL_BUILD_ANY_INTERACTIVE_IK OR MCL_BUILD_CARTESIAN_PLANNING OR
-   MCL_BUILD_E03_REPLAY_VISUALIZATION)
+if(MCL_BUILD_ANY_INTERACTIVE_IK)
   add_library(
     mcl_preview_transport
     components/visualization/preview_transport.cpp
@@ -491,9 +455,6 @@ if(MCL_BUILD_ANY_INTERACTIVE_IK)
       motion_control_viz::render
   )
 
-  if(MCL_BUILD_SINGLE_ARM_STEP)
-    add_subdirectory(apps/single_arm_step)
-  endif()
   if(MCL_BUILD_STEP)
     add_subdirectory(apps/step)
   endif()
@@ -520,879 +481,23 @@ install(
   PATTERN "*.pyc" EXCLUDE
 )
 
-if(MCL_BUILD_CARTESIAN_PLANNING)
-  if(NOT TARGET motion_control_viz::foxglove)
-    message(
-      FATAL_ERROR
-      "MCL_BUILD_CARTESIAN_PLANNING requires motion_control_viz with Foxglove support"
-    )
-  endif()
-  find_package(Python3 REQUIRED COMPONENTS Interpreter Development NumPy)
-  execute_process(
-    COMMAND "${Python3_EXECUTABLE}" -c "import matplotlib, numpy"
-    RESULT_VARIABLE MCL_CARTESIAN_MATPLOTLIB_IMPORT_RESULT
-    OUTPUT_VARIABLE MCL_CARTESIAN_MATPLOTLIB_IMPORT_OUTPUT
-    ERROR_VARIABLE MCL_CARTESIAN_MATPLOTLIB_IMPORT_ERROR
-  )
-  if(NOT MCL_CARTESIAN_MATPLOTLIB_IMPORT_RESULT EQUAL 0)
-    message(
-      FATAL_ERROR
-      "MCL_BUILD_CARTESIAN_PLANNING requires matplotlib and numpy:\n"
-      "${MCL_CARTESIAN_MATPLOTLIB_IMPORT_OUTPUT}${MCL_CARTESIAN_MATPLOTLIB_IMPORT_ERROR}"
-    )
-  endif()
-  add_subdirectory(apps/cartesian_planning)
-endif()
 
-if(MCL_BUILD_MCC_PLOTS)
-  find_package(Python3 REQUIRED COMPONENTS Interpreter Development NumPy)
-  execute_process(
-    COMMAND "${Python3_EXECUTABLE}" -c "import matplotlib, numpy"
-    RESULT_VARIABLE MCL_MATPLOTLIB_IMPORT_RESULT
-    OUTPUT_VARIABLE MCL_MATPLOTLIB_IMPORT_OUTPUT
-    ERROR_VARIABLE MCL_MATPLOTLIB_IMPORT_ERROR
-  )
-  if(NOT MCL_MATPLOTLIB_IMPORT_RESULT EQUAL 0)
-    message(
-      FATAL_ERROR
-      "MCL_BUILD_MCC_PLOTS requires matplotlib and numpy:\n"
-      "${MCL_MATPLOTLIB_IMPORT_OUTPUT}${MCL_MATPLOTLIB_IMPORT_ERROR}"
-    )
-  endif()
 
-  add_subdirectory(apps/plot_core_planning)
-endif()
-
-if(MCL_BUILD_E03_BATCH_REPLAY_IK)
-  add_library(
-    mcl_e03_legacy_replay_ik_engine
-    experiments/E03_psi_r1_dual_arm_motion_library_replay_ik/src/legacy_replay/replay_ik_engine.cpp
-  )
-  add_library(
-    motion_control_lab::e03_legacy_replay_ik_engine
-    ALIAS mcl_e03_legacy_replay_ik_engine
-  )
-  target_include_directories(
-    mcl_e03_legacy_replay_ik_engine
-    PUBLIC "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>"
-  )
-  target_link_libraries(
-    mcl_e03_legacy_replay_ik_engine
-    PUBLIC
-      motion_control_lab::replay
-      motion_control_lab::r1_robot_config
-      motion_control_core::motion_control_core
-  )
-endif()
 
 add_subdirectory(apps/replay_plan)
 
-set(MCL_SOURCE_REVISION "unborn")
-set(MCL_SOURCE_DIRTY true)
-execute_process(
-  COMMAND git rev-parse HEAD
-  WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-  RESULT_VARIABLE MCL_GIT_REVISION_RESULT
-  OUTPUT_VARIABLE MCL_GIT_REVISION
-  OUTPUT_STRIP_TRAILING_WHITESPACE
-  ERROR_QUIET
-)
-if(MCL_GIT_REVISION_RESULT EQUAL 0)
-  set(MCL_SOURCE_REVISION "${MCL_GIT_REVISION}")
-endif()
-execute_process(
-  COMMAND git status --porcelain
-  WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-  RESULT_VARIABLE MCL_GIT_STATUS_RESULT
-  OUTPUT_VARIABLE MCL_GIT_STATUS
-  OUTPUT_STRIP_TRAILING_WHITESPACE
-  ERROR_QUIET
-)
-if(MCL_GIT_STATUS_RESULT EQUAL 0 AND MCL_GIT_STATUS STREQUAL "")
-  set(MCL_SOURCE_DIRTY false)
-endif()
-
-set(E01_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/experiments/E01_placo_smoke")
-set(E01_DEFINITION "${E01_DIRECTORY}/definition.json")
-set(E01_MODEL "/workspace/models/r1.cos.urdf" CACHE FILEPATH
-  "R1 URDF used by E01 and the standalone solver regression tests")
-set(MCL_PLACO_UPSTREAM_REVISION "e6c288604639d67b979a16cb2ad26913413c8e3a")
-set(
-  MCL_RUNTIME_DESCRIPTION
-  "C++17;${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR};${CMAKE_CXX_COMPILER_ID}-${CMAKE_CXX_COMPILER_VERSION}"
-)
-
-set(E02_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/experiments/E02_dual_arm_replay_ik")
-set(E02_DEFINITION "${E02_DIRECTORY}/definition.json")
-file(SHA256 "${E02_DEFINITION}" E02_DEFINITION_SHA256)
-set_property(
-  DIRECTORY
-  APPEND
-  PROPERTY CMAKE_CONFIGURE_DEPENDS "${E02_DEFINITION}"
-)
-configure_file(
-  "${E02_DIRECTORY}/src/build_config.hpp.in"
-  "${CMAKE_CURRENT_BINARY_DIR}/generated/e02_build_config.hpp"
-  @ONLY
-)
-
-set(
-  E03_DIRECTORY
-  "${CMAKE_CURRENT_SOURCE_DIR}/experiments/E03_psi_r1_dual_arm_motion_library_replay_ik"
-)
-set(E03_DEFINITION "${E03_DIRECTORY}/definition.json")
-set(
-  E03_INPUT_CONTRACT
-  "${E03_DIRECTORY}/inputs/psi_r1_dual_arm_motion_library.v1.json"
-)
-get_filename_component(
-  MCL_WORKSPACE_DIRECTORY
-  "${CMAKE_CURRENT_SOURCE_DIR}/../.."
-  ABSOLUTE
-)
-set(
-  E03_DEFAULT_LIBRARY_DIRECTORY
-  "${MCL_WORKSPACE_DIRECTORY}/fixtures/datasets/psi_r1_dual_arm_motion_library"
-)
-file(SHA256 "${E03_DEFINITION}" E03_DEFINITION_SHA256)
-set_property(
-  DIRECTORY
-  APPEND
-  PROPERTY CMAKE_CONFIGURE_DEPENDS "${E03_DEFINITION}" "${E03_INPUT_CONTRACT}"
-)
-configure_file(
-  "${E03_DIRECTORY}/src/build_config.hpp.in"
-  "${CMAKE_CURRENT_BINARY_DIR}/generated/e03_build_config.hpp"
-  @ONLY
-)
-
-if(MCL_BUILD_E03_BATCH_REPLAY_IK)
-  add_subdirectory(experiments/E03_psi_r1_dual_arm_motion_library_replay_ik)
-endif()
-
-file(SHA256 "${E01_DEFINITION}" E01_DEFINITION_SHA256)
-file(SHA256 "${E01_MODEL}" E01_MODEL_SHA256)
-file(
-  GLOB_RECURSE MCL_PLACO_BUILD_INPUTS
-  CONFIGURE_DEPENDS
-  LIST_DIRECTORIES false
-  RELATIVE "${MCL_PLACO_SOURCE_DIR}"
-  "${MCL_PLACO_SOURCE_DIR}/src/*"
-)
-list(APPEND MCL_PLACO_BUILD_INPUTS "CMakeLists.txt")
-list(SORT MCL_PLACO_BUILD_INPUTS)
-set(MCL_PLACO_FINGERPRINT_INPUT "")
-foreach(MCL_PLACO_BUILD_INPUT IN LISTS MCL_PLACO_BUILD_INPUTS)
-  file(
-    SHA256
-    "${MCL_PLACO_SOURCE_DIR}/${MCL_PLACO_BUILD_INPUT}"
-    MCL_PLACO_BUILD_INPUT_SHA256
-  )
-  string(
-    APPEND MCL_PLACO_FINGERPRINT_INPUT
-    "${MCL_PLACO_BUILD_INPUT}:${MCL_PLACO_BUILD_INPUT_SHA256}\n"
-  )
-endforeach()
-string(
-  SHA256
-  MCL_PLACO_SOURCE_SHA256
-  "${MCL_PLACO_FINGERPRINT_INPUT}"
-)
-set(
-  MCL_PLACO_REVISION
-  "upstream:${MCL_PLACO_UPSTREAM_REVISION};source-sha256:${MCL_PLACO_SOURCE_SHA256}"
-)
-set_property(
-  DIRECTORY
-  APPEND
-  PROPERTY CMAKE_CONFIGURE_DEPENDS "${E01_DEFINITION}" "${E01_MODEL}"
-)
-
-configure_file(
-  "${E01_DIRECTORY}/src/build_config.hpp.in"
-  "${CMAKE_CURRENT_BINARY_DIR}/generated/e01_build_config.hpp"
-  @ONLY
-)
-
-add_executable(
-  e01_placo_smoke
-  experiments/E01_placo_smoke/src/main.cpp
-)
-if(APPLE)
-  set_target_properties(e01_placo_smoke PROPERTIES INSTALL_RPATH "@loader_path/../lib")
-else()
-  set_target_properties(e01_placo_smoke PROPERTIES INSTALL_RPATH "$ORIGIN/../${CMAKE_INSTALL_LIBDIR}")
-endif()
-target_include_directories(
-  e01_placo_smoke
-  PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated"
-)
-target_link_libraries(
-  e01_placo_smoke
-  PRIVATE
-    libplaco
-    motion_control_lab::run_artifacts
-)
-
-set(MCL_INSTALL_RUNTIME_TARGETS e01_placo_smoke)
-if(MCL_BUILD_E04_OPENSOT_SMOKE)
-  set(E04_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/experiments/E04_opensot_smoke")
-  set(E04_DEFINITION "${E04_DIRECTORY}/definition.json")
-  set(E04_MODEL "/workspace/models/r1.cos.urdf")
-  set(MCL_OPENSOT_UPSTREAM_REVISION "f1d8c733bcff49ed5b213191ac85a0629bb97d43")
-  set(
-    E04_RUNTIME_DESCRIPTION
-    "C++17-Lab/C++20-OpenSoT;${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR};${CMAKE_CXX_COMPILER_ID}-${CMAKE_CXX_COMPILER_VERSION};ROS2-Jazzy"
-  )
-
-  file(SHA256 "${E04_DEFINITION}" E04_DEFINITION_SHA256)
-  file(SHA256 "${E04_MODEL}" E04_MODEL_SHA256)
-  file(
-    GLOB_RECURSE MCL_OPENSOT_BUILD_INPUTS
-    CONFIGURE_DEPENDS
-    LIST_DIRECTORIES false
-    RELATIVE "${MCL_OPENSOT_SOURCE_DIR}"
-    "${MCL_OPENSOT_SOURCE_DIR}/*"
-  )
-  # The provenance note records this digest and is therefore not part of the
-  # digest input. All imported source, licenses, build files, and local patches are.
-  list(REMOVE_ITEM MCL_OPENSOT_BUILD_INPUTS "MOTION_CONTROL_LAB.md")
-  list(SORT MCL_OPENSOT_BUILD_INPUTS)
-  set(MCL_OPENSOT_FINGERPRINT_INPUT "")
-  foreach(MCL_OPENSOT_BUILD_INPUT IN LISTS MCL_OPENSOT_BUILD_INPUTS)
-    file(
-      SHA256
-      "${MCL_OPENSOT_SOURCE_DIR}/${MCL_OPENSOT_BUILD_INPUT}"
-      MCL_OPENSOT_BUILD_INPUT_SHA256
-    )
-    string(
-      APPEND MCL_OPENSOT_FINGERPRINT_INPUT
-      "${MCL_OPENSOT_BUILD_INPUT}:${MCL_OPENSOT_BUILD_INPUT_SHA256}\n"
-    )
-  endforeach()
-  string(
-    SHA256
-    MCL_OPENSOT_SOURCE_SHA256
-    "${MCL_OPENSOT_FINGERPRINT_INPUT}"
-  )
-  set(
-    MCL_OPENSOT_REVISION
-    "upstream:${MCL_OPENSOT_UPSTREAM_REVISION};source-sha256:${MCL_OPENSOT_SOURCE_SHA256}"
-  )
-  set_property(
-    DIRECTORY
-    APPEND
-    PROPERTY CMAKE_CONFIGURE_DEPENDS "${E04_DEFINITION}" "${E04_MODEL}"
-  )
-  configure_file(
-    "${E04_DIRECTORY}/src/build_config.hpp.in"
-    "${CMAKE_CURRENT_BINARY_DIR}/generated/e04_build_config.hpp"
-    @ONLY
-  )
-
-  add_executable(
-    e04_opensot_smoke
-    experiments/E04_opensot_smoke/src/main.cpp
-  )
-  add_dependencies(e04_opensot_smoke mcl_opensot_external)
-  target_include_directories(
-    e04_opensot_smoke
-    PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated"
-  )
-  target_link_libraries(
-    e04_opensot_smoke
-    PRIVATE
-      mcl_opensot_bridge
-      motion_control_lab::run_artifacts
-  )
-  if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
-    target_link_options(
-      e04_opensot_smoke
-      PRIVATE
-        "LINKER:-rpath-link,${MCL_OPENSOT_EXTERNAL_INSTALL_DIR}/lib"
-        "LINKER:-rpath-link,${MCL_OPENSOT_DEPENDENCY_PREFIX}/lib"
-        "LINKER:-rpath-link,${MCL_OPENSOT_ROS_PREFIX}/lib"
-    )
-  endif()
-  set_target_properties(
-    e04_opensot_smoke
-    PROPERTIES
-      BUILD_RPATH
-        "${MCL_OPENSOT_EXTERNAL_INSTALL_DIR}/lib;${MCL_OPENSOT_DEPENDENCY_PREFIX}/lib;/opt/openrobots/lib;${MCL_OPENSOT_ROS_PREFIX}/lib"
-      INSTALL_RPATH "$ORIGIN/../${CMAKE_INSTALL_LIBDIR}/motion-control-lab/opensot"
-  )
-  list(APPEND MCL_INSTALL_RUNTIME_TARGETS e04_opensot_smoke)
-
-  install(
-    DIRECTORY "${MCL_OPENSOT_EXTERNAL_INSTALL_DIR}/lib/"
-    DESTINATION "${CMAKE_INSTALL_LIBDIR}/motion-control-lab/opensot"
-    OPTIONAL
-    FILES_MATCHING
-      PATTERN "cmake" EXCLUDE
-      PATTERN "libmcl_opensot_bridge.so*"
-      PATTERN "libOpenSoT.so*"
-      PATTERN "libOpenSotBackEndOSQP.so*"
-  )
-endif()
-
-if(MCL_BUILD_MCC_PLOTS)
-  list(APPEND MCL_INSTALL_RUNTIME_TARGETS motion_control_lab_plot_core_planning)
-endif()
-install(
-  TARGETS ${MCL_INSTALL_RUNTIME_TARGETS}
-  RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
-)
 install(
   TARGETS libplaco
   LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
   RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
 )
 
-if(BUILD_TESTING)
-  add_test(
-    NAME experiments.e05_batch_replay
-    COMMAND "${Python3_EXECUTABLE}" -m unittest discover
-      -s "${CMAKE_CURRENT_SOURCE_DIR}/experiments/E05_real_scene_planned_mcap_batch_replay/tests" -v
-  )
-  set_tests_properties(experiments.e05_batch_replay PROPERTIES TIMEOUT 60)
-  find_program(MCL_BASH_EXECUTABLE bash REQUIRED)
-  find_program(MCL_TRUE_EXECUTABLE true REQUIRED)
-  file(
-    GLOB_RECURSE MCL_APP_SHELL_SCRIPTS
-    CONFIGURE_DEPENDS
-    "${CMAKE_CURRENT_SOURCE_DIR}/scripts/*.sh"
-    "${CMAKE_CURRENT_SOURCE_DIR}/apps/*/scripts/*.sh"
-    "${CMAKE_CURRENT_SOURCE_DIR}/experiments/*/scripts/*.sh"
-  )
-  add_test(NAME scripts.bash_syntax COMMAND "${MCL_BASH_EXECUTABLE}" -n ${MCL_APP_SHELL_SCRIPTS})
-  find_program(MCL_SCRIPT_EXECUTABLE script)
-
-  if(TARGET mcl_hierarchical_kinematics_step)
-    add_test(
-      NAME scripts.hierarchical_kinematics_source_recipe_path_resolution
-      COMMAND
-        "${CMAKE_COMMAND}" -E env
-        --unset=MCL_BINARY
-        "PATH=$<TARGET_FILE_DIR:mcl_hierarchical_kinematics_step>:$ENV{PATH}"
-        "MCL_CPU_SET="
-        "MCL_RT_PRIORITY="
-        "${CMAKE_CURRENT_SOURCE_DIR}/apps/hierarchical_kinematics_step/scripts/profiles/planned_otg_nullspace_admittance_kinematic_sim/run_keyboard.py"
-        --help
-    )
-    add_test(
-      NAME scripts.hierarchical_kinematics_mcap_preset_smoke
-      COMMAND
-        "${CMAKE_COMMAND}" -E env
-        "MCL_BINARY=${MCL_TRUE_EXECUTABLE}"
-        "MCL_CPU_SET="
-        "MCL_RT_PRIORITY="
-        "${CMAKE_CURRENT_SOURCE_DIR}/apps/hierarchical_kinematics_step/scripts/profiles/planned_otg_nullspace_admittance_kinematic_sim/run_mcap_interactive.py"
-    )
-    add_test(
-      NAME scripts.hierarchical_kinematics_csv_preset_smoke
-      COMMAND
-        "${CMAKE_COMMAND}" -E env
-        "MCL_BINARY=${MCL_TRUE_EXECUTABLE}"
-        "MCL_CPU_SET="
-        "MCL_RT_PRIORITY="
-        "${CMAKE_CURRENT_SOURCE_DIR}/apps/hierarchical_kinematics_step/scripts/profiles/planned_otg_nullspace_admittance_kinematic_sim/run_csv_batch.py"
-        --input /tmp/mcl-nullspace-admittance-csv-launcher-smoke.csv
-    )
-    if(MCL_SCRIPT_EXECUTABLE)
-      add_test(
-        NAME scripts.hierarchical_kinematics_keyboard_smoke
-        COMMAND
-          "${CMAKE_COMMAND}" -E env
-          "MCL_BINARY=$<TARGET_FILE:mcl_hierarchical_kinematics_step>"
-          "MCL_CPU_SET="
-          "MCL_RT_PRIORITY="
-          "${MCL_SCRIPT_EXECUTABLE}" -qec
-          "${CMAKE_CURRENT_SOURCE_DIR}/apps/hierarchical_kinematics_step/scripts/profiles/planned_otg_nullspace_admittance_kinematic_sim/run_keyboard.py --no-mujoco-viewer --ui none --viz none --duration 0.05"
-          /dev/null
-      )
-      set_tests_properties(
-        scripts.hierarchical_kinematics_keyboard_smoke
-        PROPERTIES TIMEOUT 15
-      )
-    endif()
-  endif()
-
-  add_test(
-    NAME contracts.visualization_generator
-    COMMAND
-      "${Python3_EXECUTABLE}"
-      "${CMAKE_CURRENT_SOURCE_DIR}/tests/visualization_contract_generator.py"
-      "${MCL_CONTRACT_GENERATOR}"
-      ${MCL_VISUALIZATION_CONTRACT_JSONS}
-  )
-
-  add_executable(
-    test_data_pipeline
-    tests/data_pipeline.cpp
-  )
-  target_link_libraries(
-    test_data_pipeline
-    PRIVATE motion_control_lab::replay
-  )
-  add_test(NAME data.pipeline COMMAND test_data_pipeline)
-
-  add_executable(test_input_teleop tests/input_teleop.cpp)
-  target_link_libraries(
-    test_input_teleop PRIVATE motion_control_lab::keyboard_teleop motion_control_lab::cartesian_teleop
-  )
-  add_test(NAME input.teleop_contract COMMAND test_input_teleop)
-
-  add_executable(test_replay_source tests/replay_source.cpp)
-  target_link_libraries(test_replay_source PRIVATE motion_control_lab::replay)
-  add_test(NAME replay.state_machine COMMAND test_replay_source)
-
-  add_executable(test_replay_manifest tests/replay_manifest.cpp)
-  target_link_libraries(test_replay_manifest PRIVATE motion_control_lab::replay)
-  add_test(NAME artifacts.replay_manifest COMMAND test_replay_manifest)
-
-  add_executable(test_app_scaffold tests/app_scaffold.cpp)
-  target_link_libraries(test_app_scaffold PRIVATE motion_control_lab::app_scaffold)
-  add_test(NAME runtime.app_scaffold COMMAND test_app_scaffold)
-
-  add_test(
-    NAME architecture.boundaries
-    COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/architecture_boundaries.py"
-            "${CMAKE_CURRENT_SOURCE_DIR}"
-  )
-
-  if(TARGET mcl_preview_transport)
-    add_executable(test_preview_null tests/preview_null.cpp)
-    target_link_libraries(test_preview_null PRIVATE motion_control_lab::preview_transport)
-    add_test(NAME visualization.null_sink COMMAND test_preview_null)
-  endif()
-
-  add_executable(
-    test_cpu_affinity
-    tests/cpu_affinity.cpp
-  )
-  target_link_libraries(
-    test_cpu_affinity
-    PRIVATE motion_control_lab::cpu_affinity
-  )
-  add_test(NAME apps.cpu_affinity COMMAND test_cpu_affinity)
-
-  if(MCL_BUILD_ANY_INTERACTIVE_IK)
-    add_executable(
-      test_interactive_ik_configuration
-      tests/interactive_ik_configuration.cpp
-    )
-    target_link_libraries(
-      test_interactive_ik_configuration
-      PRIVATE
-        motion_control_lab::app_helpers
-        motion_control_lab::r1_robot_config
-        motion_control_lab::scheduler
-        motion_control_lab::preview_projection
-        motion_control_lab::visualization_contracts
-    )
-    add_test(
-      NAME interactive.ik_configuration
-      COMMAND test_interactive_ik_configuration
-    )
-
-    add_executable(
-      test_rolling_percentiles
-      tests/rolling_percentiles.cpp
-    )
-    target_link_libraries(
-      test_rolling_percentiles
-      PRIVATE motion_control_lab::scheduler
-    )
-    add_test(
-      NAME interactive.rolling_percentiles
-      COMMAND test_rolling_percentiles
-    )
-
-    add_executable(
-      test_grouped_runtime
-      tests/grouped_runtime.cpp
-    )
-    target_link_libraries(
-      test_grouped_runtime
-      PRIVATE
-        motion_control_lab::scheduler
-        Threads::Threads
-    )
-    add_test(
-      NAME interactive.grouped_runtime
-      COMMAND test_grouped_runtime
-    )
-
-    add_executable(
-      test_tui_console
-      tests/tui_console.cpp
-    )
-    target_link_libraries(
-      test_tui_console
-      PRIVATE
-        motion_control_lab::terminal_frontend
-        motion_control_lab::keyboard_input
-        motion_control_lab::tui
-    )
-
-    add_executable(test_standard_ik_tui tests/standard_ik_tui.cpp)
-    target_link_libraries(test_standard_ik_tui PRIVATE motion_control_lab::standard_ik_tui)
-    add_test(NAME interactive.standard_ik_tui COMMAND test_standard_ik_tui)
-    if(MCL_ENABLE_TUI)
-      add_test(
-        NAME interactive.tui_console_pty
-        COMMAND
-          "${Python3_EXECUTABLE}"
-          "${CMAKE_CURRENT_SOURCE_DIR}/tests/run_tui_pty.py"
-          "$<TARGET_FILE:test_tui_console>"
-      )
-      add_test(
-        NAME interactive.tui_exception_pty
-        COMMAND
-          "${Python3_EXECUTABLE}"
-          "${CMAKE_CURRENT_SOURCE_DIR}/tests/run_tui_pty.py"
-          "$<TARGET_FILE:test_tui_console>"
-          --expect-exception
-      )
-      add_test(
-        NAME interactive.tui_fault_hold_pty
-        COMMAND
-          "${Python3_EXECUTABLE}"
-          "${CMAKE_CURRENT_SOURCE_DIR}/tests/run_tui_pty.py"
-          "$<TARGET_FILE:test_tui_console>"
-          --fault-hold
-      )
-      add_test(
-        NAME interactive.tui_replay_controls_pty
-        COMMAND
-          "${Python3_EXECUTABLE}"
-          "${CMAKE_CURRENT_SOURCE_DIR}/tests/run_tui_pty.py"
-          "$<TARGET_FILE:test_tui_console>"
-          --replay
-      )
-      add_test(
-        NAME interactive.tui_replay_start_paused_pty
-        COMMAND
-          "${Python3_EXECUTABLE}"
-          "${CMAKE_CURRENT_SOURCE_DIR}/tests/run_tui_pty.py"
-          "$<TARGET_FILE:test_tui_console>"
-          --replay-start-paused
-      )
-      set_tests_properties(
-        interactive.tui_console_pty
-        interactive.tui_exception_pty
-        interactive.tui_fault_hold_pty
-        interactive.tui_replay_controls_pty
-        interactive.tui_replay_start_paused_pty
-        PROPERTIES TIMEOUT 15
-      )
-
-      if(TARGET mcl_hierarchical_kinematics_step)
-        add_test(
-          NAME apps.mcl_hierarchical_kinematics_step_tui_pages_pty
-          COMMAND
-            "${Python3_EXECUTABLE}"
-            "${CMAKE_CURRENT_SOURCE_DIR}/tests/run_planned_tui_pages_pty.py"
-            "$<TARGET_FILE:mcl_hierarchical_kinematics_step>"
-            6
-            "/workspace/products/synrobot/modules/common/robot_description/psi_r1/urdf/Psi_R1_rev1.urdf"
-            --profile planned-otg-nullspace
-        )
-        set_tests_properties(
-          apps.mcl_hierarchical_kinematics_step_tui_pages_pty
-          PROPERTIES TIMEOUT 20
-        )
-      endif()
-    endif()
-
-    foreach(MCL_DUAL_ARM_TARGET IN ITEMS
-        mcl_step
-        mcl_target)
-      if(TARGET ${MCL_DUAL_ARM_TARGET})
-        if(MCL_DUAL_ARM_TARGET STREQUAL "mcl_step")
-          set(MCL_DUAL_ARM_SUBCOMMAND teleop)
-        else()
-          set(MCL_DUAL_ARM_SUBCOMMAND "")
-        endif()
-        add_test(
-          NAME apps.${MCL_DUAL_ARM_TARGET}_solver_cli
-          COMMAND
-            "${CMAKE_COMMAND}"
-            "-DAPP=$<TARGET_FILE:${MCL_DUAL_ARM_TARGET}>"
-            "-DSUBCOMMAND=${MCL_DUAL_ARM_SUBCOMMAND}"
-            -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/check_dual_arm_solver_cli.cmake"
-        )
-      endif()
-    endforeach()
-
-    foreach(MCL_SERVO_TARGET IN ITEMS
-        mcl_step
-        mcl_hierarchical_kinematics_step)
-      if(TARGET ${MCL_SERVO_TARGET})
-        set(MCL_SERVO_PLANNED OFF)
-        if(MCL_SERVO_TARGET STREQUAL "mcl_hierarchical_kinematics_step")
-          set(MCL_SERVO_PLANNED ON)
-          set(MCL_SERVO_PROFILE planned-otg-nullspace)
-        else()
-          set(MCL_SERVO_PROFILE "")
-        endif()
-        add_test(
-          NAME apps.${MCL_SERVO_TARGET}_subcommands
-          COMMAND
-            "${CMAKE_COMMAND}"
-            "-DAPP=$<TARGET_FILE:${MCL_SERVO_TARGET}>"
-            "-DPLANNED=${MCL_SERVO_PLANNED}"
-            "-DPROFILE=${MCL_SERVO_PROFILE}"
-            -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/check_servo_subcommands.cmake"
-        )
-      endif()
-    endforeach()
-
-    if(TARGET mcl_step)
-      add_executable(
-        test_dual_arm_servo_solver_semantics
-        tests/dual_arm_servo_solver_semantics.cpp
-      )
-      target_link_libraries(
-        test_dual_arm_servo_solver_semantics
-        PRIVATE
-          motion_control_lab::step_support
-          motion_control_lab::cpu_affinity
-          motion_control_lab::app_helpers
-          motion_control_lab::r1_robot_config
-          motion_control_core::motion_control_core
-          motion_control_lab::scheduler
-          motion_control_lab::keyboard_input
-          motion_control_lab::standard_ik_tui
-          motion_control_lab::tui
-          motion_control_lab::preview_transport
-          motion_control_lab::preview_projection
-          motion_control_lab::replay
-          libplaco
-      )
-      add_test(
-        NAME apps.mcl_step_semantics
-        COMMAND test_dual_arm_servo_solver_semantics "${E01_MODEL}"
-      )
-      set_tests_properties(
-        apps.mcl_step_semantics
-        PROPERTIES
-          TIMEOUT 20
-          ENVIRONMENT_MODIFICATION
-            "LD_LIBRARY_PATH=path_list_prepend:$<TARGET_FILE_DIR:libplaco>"
-      )
-    endif()
-
-    if(TARGET mcl_target)
-      add_executable(
-        test_dual_arm_target_solver_semantics
-        tests/dual_arm_target_solver_semantics.cpp
-      )
-      target_link_libraries(
-        test_dual_arm_target_solver_semantics
-        PRIVATE
-          motion_control_lab::target_support
-          motion_control_lab::cpu_affinity
-          motion_control_lab::app_helpers
-          motion_control_lab::r1_robot_config
-          motion_control_core::motion_control_core
-          motion_control_lab::scheduler
-          motion_control_lab::keyboard_input
-          motion_control_lab::standard_ik_tui
-          motion_control_lab::tui
-          motion_control_lab::preview_transport
-          motion_control_lab::preview_projection
-          libplaco
-      )
-      add_test(
-        NAME apps.mcl_target_semantics
-        COMMAND test_dual_arm_target_solver_semantics "${E01_MODEL}"
-      )
-      set_tests_properties(
-        apps.mcl_target_semantics
-        PROPERTIES
-          TIMEOUT 20
-          ENVIRONMENT_MODIFICATION
-            "LD_LIBRARY_PATH=path_list_prepend:$<TARGET_FILE_DIR:libplaco>"
-      )
-    endif()
-
-    if(MCL_ENABLE_TUI)
-      foreach(MCL_DUAL_ARM_TARGET IN ITEMS
-          mcl_step
-          mcl_target)
-        if(TARGET ${MCL_DUAL_ARM_TARGET})
-          foreach(MCL_SOLVER_TEST IN ITEMS default mcc_proxqp mcc_eiquadprog placo_ignored_backend)
-          if(MCL_SOLVER_TEST STREQUAL "default")
-            set(MCL_SOLVER_ARGUMENT default)
-            set(MCL_BACKEND_ARGUMENT default)
-          elseif(MCL_SOLVER_TEST STREQUAL "mcc_proxqp")
-            set(MCL_SOLVER_ARGUMENT mcc)
-            set(MCL_BACKEND_ARGUMENT proxqp)
-          elseif(MCL_SOLVER_TEST STREQUAL "mcc_eiquadprog")
-            set(MCL_SOLVER_ARGUMENT mcc)
-            set(MCL_BACKEND_ARGUMENT eiquadprog)
-          else()
-            set(MCL_SOLVER_ARGUMENT placo)
-            set(MCL_BACKEND_ARGUMENT proxqp)
-          endif()
-          add_test(
-            NAME apps.${MCL_DUAL_ARM_TARGET}_${MCL_SOLVER_TEST}_pty
-            COMMAND
-              "${Python3_EXECUTABLE}"
-              "${CMAKE_CURRENT_SOURCE_DIR}/tests/run_dual_arm_solver_pty.py"
-              "$<TARGET_FILE:${MCL_DUAL_ARM_TARGET}>"
-              "${MCL_SOLVER_ARGUMENT}"
-              "${MCL_BACKEND_ARGUMENT}"
-              "${E01_MODEL}"
-          )
-          set_tests_properties(
-            apps.${MCL_DUAL_ARM_TARGET}_${MCL_SOLVER_TEST}_pty
-            PROPERTIES
-              TIMEOUT 20
-              ENVIRONMENT_MODIFICATION
-                "LD_LIBRARY_PATH=path_list_prepend:$<TARGET_FILE_DIR:libplaco>"
-          )
-          endforeach()
-        endif()
-      endforeach()
-    endif()
-  endif()
-
-  add_test(
-    NAME contracts.e01_definition
-    COMMAND
-      "${Python3_EXECUTABLE}"
-      "${CMAKE_CURRENT_SOURCE_DIR}/tests/validate_contracts.py"
-      definition
-      "${E01_DEFINITION}"
-  )
-
-  add_test(
-    NAME contracts.e02_definition
-    COMMAND
-      "${Python3_EXECUTABLE}"
-      "${CMAKE_CURRENT_SOURCE_DIR}/tests/validate_contracts.py"
-      definition
-      "${E02_DEFINITION}"
-  )
-
-  add_test(
-    NAME contracts.e03_definition
-    COMMAND
-      "${Python3_EXECUTABLE}"
-      "${CMAKE_CURRENT_SOURCE_DIR}/tests/validate_contracts.py"
-      definition
-      "${E03_DEFINITION}"
-  )
-
-  set(E04_DEFINITION_FOR_CONTRACT
-      "${CMAKE_CURRENT_SOURCE_DIR}/experiments/E04_opensot_smoke/definition.json")
-  add_test(
-    NAME contracts.e04_definition
-    COMMAND
-      "${Python3_EXECUTABLE}"
-      "${CMAKE_CURRENT_SOURCE_DIR}/tests/validate_contracts.py"
-      definition
-      "${E04_DEFINITION_FOR_CONTRACT}"
-  )
-  add_test(
-    NAME contracts.r1_smoke_pair
-    COMMAND
-      "${Python3_EXECUTABLE}"
-      "${CMAKE_CURRENT_SOURCE_DIR}/tests/validate_r1_smoke_pair.py"
-      "${E01_DEFINITION}"
-      "${E04_DEFINITION_FOR_CONTRACT}"
-  )
-  set_tests_properties(
-    contracts.r1_smoke_pair
-    PROPERTIES DEPENDS "contracts.e01_definition;contracts.e04_definition"
-  )
-
-  add_test(
-    NAME experiments.e01_placo_smoke
-    COMMAND
-      "${Python3_EXECUTABLE}"
-      "${CMAKE_CURRENT_SOURCE_DIR}/tests/run_e01_smoke.py"
-      --executable "$<TARGET_FILE:e01_placo_smoke>"
-      --definition "${E01_DEFINITION}"
-      --work-root "${CMAKE_CURRENT_BINARY_DIR}/test-runs"
-  )
-  set_tests_properties(
-    experiments.e01_placo_smoke
-    PROPERTIES
-      DEPENDS "contracts.e01_definition;contracts.r1_smoke_pair"
-      ENVIRONMENT_MODIFICATION
-        "LD_LIBRARY_PATH=path_list_prepend:$<TARGET_FILE_DIR:libplaco>"
-  )
-
-  if(MCL_BUILD_E04_OPENSOT_SMOKE)
-    add_test(
-      NAME experiments.e04_opensot_smoke
-      COMMAND
-        "${Python3_EXECUTABLE}"
-        "${CMAKE_CURRENT_SOURCE_DIR}/tests/run_e04_smoke.py"
-        --executable "$<TARGET_FILE:e04_opensot_smoke>"
-        --definition "${E04_DEFINITION}"
-        --work-root "${CMAKE_CURRENT_BINARY_DIR}/test-runs"
-        --ros-setup "${MCL_OPENSOT_ROS_PREFIX}/setup.bash"
-        --library-path "${MCL_OPENSOT_RUNTIME_LIBRARY_PATH}"
-    )
-    set_tests_properties(
-      experiments.e04_opensot_smoke
-      PROPERTIES
-        DEPENDS "contracts.e04_definition;contracts.r1_smoke_pair"
-        TIMEOUT 120
-    )
-  endif()
+# Functional execution programs, reusable across experiment declarations.
+if(MCL_BUILD_OPTIMIZATION_PROBLEM)
+  add_subdirectory(apps/optimization_problem)
+endif()
+if(MCL_BUILD_PLANNED_KINEMATICS_STEP)
+  add_subdirectory(apps/planned_kinematics_step)
 endif()
 
-# Study executables remain independent app-owned algorithms.
-if(MCL_BUILD_STUDY_EXPERIMENTS)
-  foreach(number RANGE 6 12)
-    if(number LESS 10)
-      set(study_app study_e0${number})
-    else()
-      set(study_app study_e${number})
-    endif()
-    add_subdirectory(apps/${study_app})
-  endforeach()
-  if(BUILD_TESTING)
-    add_test(NAME study.public_contracts
-      COMMAND "${Python3_EXECUTABLE}" -m unittest discover
-        -s "${PROJECT_SOURCE_DIR}/tools/mcc_placo_study/tests" -v)
-    set_tests_properties(study.public_contracts PROPERTIES TIMEOUT 60)
-  endif()
-endif()
-
-if(BUILD_TESTING AND MCL_BUILD_STUDY_EXPERIMENTS)
-  add_test(NAME study.e09_measurements COMMAND "${Python3_EXECUTABLE}"
-    "${PROJECT_SOURCE_DIR}/experiments/E09_solver_cost_and_scalability/test_measurements.py")
-  add_test(NAME study.e10_schedule COMMAND "${Python3_EXECUTABLE}"
-    "${PROJECT_SOURCE_DIR}/experiments/E10_multirate_scheduling_and_coupling/test_schedule.py")
-endif()
-
-if(BUILD_TESTING AND MCL_BUILD_STUDY_EXPERIMENTS)
-  foreach(number RANGE 6 12)
-    if(number LESS 10)
-      set(experiment_prefix E0${number})
-    else()
-      set(experiment_prefix E${number})
-    endif()
-    file(GLOB study_experiment_dirs "${PROJECT_SOURCE_DIR}/experiments/${experiment_prefix}_*")
-    foreach(experiment_dir IN LISTS study_experiment_dirs)
-      if(EXISTS "${experiment_dir}/tests")
-        if(number LESS 9)
-          add_test(NAME study.${experiment_prefix}_independent
-            COMMAND "${Python3_EXECUTABLE}" -m pytest "${experiment_dir}/tests" -q)
-        else()
-          add_test(NAME study.${experiment_prefix}_independent
-            COMMAND "${Python3_EXECUTABLE}" -m unittest discover -s "${experiment_dir}/tests" -v)
-        endif()
-      endif()
-      add_test(NAME study.${experiment_prefix}_definition
-        COMMAND "${Python3_EXECUTABLE}" "${PROJECT_SOURCE_DIR}/tests/validate_contracts.py"
-          definition "${experiment_dir}/definition.json")
-    endforeach()
-  endforeach()
-endif()
+include(cmake/SharedTests.cmake)

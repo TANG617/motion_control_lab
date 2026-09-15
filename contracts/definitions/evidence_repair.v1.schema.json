@@ -1,0 +1,126 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "base_campaign",
+    "stage_counts",
+    "stages",
+    "issues",
+    "minimum_free_bytes",
+    "inputs",
+    "source_code",
+    "runtime",
+    "build",
+    "base_sources",
+    "execution"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "evidence_repair.v1"
+    },
+    "base_campaign": {
+      "type": "object",
+      "required": [
+        "plan",
+        "status",
+        "execution_index"
+      ],
+      "additionalProperties": {
+        "type": "object",
+        "required": [
+          "locator",
+          "sha256",
+          "size_bytes"
+        ],
+        "properties": {
+          "locator": {
+            "type": "string"
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "size_bytes": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "stage_counts": {
+      "const": {
+        "E06": 12,
+        "E08": 56,
+        "E09-audit": 24,
+        "E09-timing": 216
+      }
+    },
+    "stages": {
+      "type": "object",
+      "required": [
+        "E06",
+        "E08",
+        "E09-audit",
+        "E09-timing"
+      ],
+      "additionalProperties": {
+        "type": "object",
+        "required": [
+          "locator",
+          "sha256",
+          "size_bytes"
+        ],
+        "properties": {
+          "locator": {
+            "type": "string"
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "size_bytes": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "issues": {
+      "type": "array",
+      "minItems": 1
+    },
+    "minimum_free_bytes": {
+      "type": "integer",
+      "minimum": 17179869184
+    },
+    "inputs": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "locator",
+          "sha256",
+          "size_bytes"
+        ],
+        "properties": {
+          "locator": {
+            "type": "string"
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "size_bytes": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  }
+}

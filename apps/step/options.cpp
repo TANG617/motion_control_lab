@@ -162,7 +162,9 @@ AppOptions parseOptions(int argc, char **argv) {
   }
   for (int index = 1; index < argc; ++index) {
     const std::string argument{argv[index]};
-    if (argument == "--help" || argument == "-h") {
+    if (argument == "--dump-resolved-options") {
+      result.dump_resolved_options = true;
+    } else if (argument == "--help" || argument == "-h") {
       printTeleopUsage(argv[0]);
       std::exit(EXIT_SUCCESS);
     } else if (argument == "--solver" || argument == "--backend") {
@@ -242,7 +244,9 @@ ReplayAppOptions parseReplayOptions(int argc, char **argv) {
   std::vector<char *> replay_arguments{argv[0]};
   for (int index = 1; index < argc; ++index) {
     const std::string argument{argv[index]};
-    if (argument == "--solver" || argument == "--backend") {
+    if (argument == "--dump-resolved-options") {
+      result.dump_resolved_options = true;
+    } else if (argument == "--solver" || argument == "--backend") {
       parseSolverOption(argument, requireValue(index, argc, argv, argument),
                         result.solver, result.backend);
     } else if (argument == "--regularization" ||

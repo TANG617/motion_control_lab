@@ -93,7 +93,7 @@ def main() -> int:
     deadline = time.monotonic() + 12.0
     try:
         while process.poll() is None and time.monotonic() < deadline:
-            if ui_ready_at is None and expected_label in output and b"Cartesian" in output:
+            if ui_ready_at is None and expected_label in output and b"TCP tracking" in output:
                 ui_ready_at = time.monotonic()
             ready_elapsed = (
                 time.monotonic() - ui_ready_at if ui_ready_at is not None else 0.0
@@ -138,18 +138,23 @@ def main() -> int:
         terminal_restored = bool(local_flags & termios.ICANON) and bool(
             local_flags & termios.ECHO
         )
+        if return_code and b"CPU affinity request is outside the launch allowed set" in output:
+            sys.stderr.buffer.write(output)
+            print("SKIP: frozen interactive CPU assignment is unavailable in this cpuset")
+            return 77
+        # Shared standard IK TUI now exposes compact pass/attempt tables. Native
+        # status and backend numerics are checked by public execution tests.
         expected_markers = (
             expected_label,
-            expected_qp,
-            b"IK calculation percentiles [ms]",
-            b"90th percentile",
-            b"95th percentile",
-            b"99th percentile",
-            b"Run counters",
-            b"Attempts",
-            b"Accepted",
-            b"Rejected",
-            b"Disposition",
+            b"TCP tracking",
+            b"SOLVED",
+            b"Passes",
+            b"P90 [ms]",
+            b"P95 [ms]",
+            b"P99 [ms]",
+            b"Attempt summary",
+            b"Last-iterate violations",
+            b"Failure context",
         )
         missing = [marker for marker in expected_markers if marker not in output]
         if return_code != 0 or not terminal_restored or missing:

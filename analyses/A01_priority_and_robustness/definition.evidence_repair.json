@@ -1,0 +1,200 @@
+{
+  "admission_source": null,
+  "analysis_directory": "A01_priority_and_robustness",
+  "analysis_id": "A01",
+  "campaign": {
+    "execution_index": {
+      "locator": "/workspace/labs/motion-control-lab/runs/mcc_placo_study/nonrt_fresh16_20260911T080119Z/execution_index.json",
+      "sha256": "8ae06557799d995e9b9a2c043c13142f88abd6e9bd3fbcc1f98d595a1690c77c",
+      "size_bytes": 6448
+    },
+    "plan": {
+      "locator": "/workspace/labs/motion-control-lab/runs/mcc_placo_study/nonrt_fresh16_20260911T080119Z/plan.json",
+      "sha256": "62931243c4c12f83ea7a19f7e2e17d65e9472b241e67e68dc16fe960d6b48d67",
+      "size_bytes": 81427
+    },
+    "status": {
+      "locator": "/workspace/labs/motion-control-lab/runs/mcc_placo_study/nonrt_fresh16_20260911T080119Z/campaign_status.json",
+      "sha256": "aa242265bf2527790b924b88aa72d5085bb70944d03e54b6c2295912285d1e94",
+      "size_bytes": 4168
+    }
+  },
+  "display": {
+    "confidence_intervals": false,
+    "downsampling": "display only; fixed per-bin min/max plus all discrete event transitions",
+    "family_fallback": "unmatched explicit canonical case ID; no outcome based families",
+    "family_prefixes": [
+      "analytic",
+      "r1_hold_tcp",
+      "r1_orientation_conflict",
+      "r1_weight_sweep",
+      "r1_task_transition",
+      "joint_limit",
+      "unreachable_one_arm",
+      "moving_state",
+      "singular",
+      "near_singular",
+      "conflicting_tasks",
+      "collision_diagnostic",
+      "initial_infeasible",
+      "fixture_compressed_events",
+      "hard_primary",
+      "recovery"
+    ],
+    "formats": [
+      "svg",
+      "pdf",
+      "png"
+    ],
+    "language": "Chinese report; technical figure labels with units",
+    "representative": "lexicographically first case per canonical generator case-prefix family and state_mode; repeat 0; separate arm_id lines",
+    "windows": "original declared full and disturbance windows"
+  },
+  "expected_units": 879,
+  "pairing": {
+    "allow_cross_placo_mcc": true,
+    "allowed_factors": {
+      "backend": [
+        "backend"
+      ],
+      "hierarchy": [
+        "method",
+        "layers"
+      ],
+      "observation": [
+        "observation"
+      ],
+      "rate": [
+        "secondary_hz"
+      ],
+      "scheduler": [
+        "scheduler",
+        "cpu_ids"
+      ],
+      "secondary": [
+        "primary_only",
+        "secondary_tasks",
+        "secondary_weight"
+      ],
+      "warm_start": [
+        "warm_start"
+      ]
+    },
+    "cross_batch": "traceability and diagnosis only; no controlled pooled comparison",
+    "cross_framework_admission": "Only new common ServoStep identities with matching hash-bound actual native audits; old identities retain blocked status",
+    "keys": [
+      "experiment_id",
+      "case_id",
+      "input_hash",
+      "model_hash",
+      "window_id",
+      "repeat_id",
+      "session_id",
+      "split_id",
+      "component_id"
+    ],
+    "production_static": "historical-only"
+  },
+  "phase": "development",
+  "repair_interpretation": {
+    "A03": "deferred",
+    "formal_RT": "deferred",
+    "new_validation": "immutable recorded supplement outcomes; independent final-scale analysis does not overwrite them",
+    "old_validation": "immutable",
+    "paper": "deferred"
+  },
+  "repair_metrics": {
+    "E06": "common_servo_audit.v1",
+    "E07_cost": "actual-output-task-cost.v1",
+    "E07_reference": "e07_reference_contract.v1",
+    "E08": "e08-final-scale-reanalysis.v1",
+    "coverage": "original 879 and supplemental 68 counted separately"
+  },
+  "repair_source_archive": {
+    "locator": "/workspace/labs/motion-control-lab/runs/mcc_placo_study/evidence_repair_20260912/supplement02/frozen_closure/manifest.json",
+    "sha256": "462ed59dfe93b1d04be91f701750cc3729920242db195d18294d6674501d3bec",
+    "size_bytes": 1012911
+  },
+  "schema_version": "analysis.v2",
+  "source_policy": {
+    "allowed_statuses": [
+      "completed",
+      "failed"
+    ],
+    "dirty": "allow recorded source content hashes; no reinterpretation of old environment",
+    "failed_partial": "retain all required units; deny unsupported positive effects",
+    "historical_campaigns": "excluded"
+  },
+  "sources": [
+    {
+      "exit_code": 1,
+      "experiment_id": "E06",
+      "inventory": {
+        "locator": "/workspace/labs/motion-control-lab/experiments/E06_solver_semantic_parity/runs/20260911T081013.041023Z-93358841be/inventory.json",
+        "sha256": "78838691494188d5ebffb2a5ff601db3dbd607353a84e8c4b3ed8dc9f105559b",
+        "size_bytes": 380716
+      },
+      "manifest": {
+        "locator": "/workspace/labs/motion-control-lab/experiments/E06_solver_semantic_parity/runs/20260911T081013.041023Z-93358841be/E06.manifest.json",
+        "sha256": "81733ce2eb0f4f1986acbcc56f6087c34b6b023bb8bfec824d5c69ea1d58279c",
+        "size_bytes": 362006
+      },
+      "run_dir": "/workspace/labs/motion-control-lab/experiments/E06_solver_semantic_parity/runs/20260911T081013.041023Z-93358841be",
+      "run_id": "20260911T081013.041023Z-93358841be",
+      "status": "finished"
+    },
+    {
+      "exit_code": 0,
+      "experiment_id": "E07",
+      "inventory": {
+        "locator": "/workspace/labs/motion-control-lab/experiments/E07_hqp_priority_and_redundancy/runs/20260911T081015.889871Z-27d8b61243/inventory.json",
+        "sha256": "e1bc98a507a5f8e525b0ea6e245b2153aaed920acc2178f4bbb3d7b22a844259",
+        "size_bytes": 11054417
+      },
+      "manifest": {
+        "locator": "/workspace/labs/motion-control-lab/experiments/E07_hqp_priority_and_redundancy/runs/20260911T081015.889871Z-27d8b61243/E07.manifest.json",
+        "sha256": "f5aeb912e34262acdc9a00364b69d12e2cf862beab69bde20505e44da40cbd3f",
+        "size_bytes": 10552840
+      },
+      "run_dir": "/workspace/labs/motion-control-lab/experiments/E07_hqp_priority_and_redundancy/runs/20260911T081015.889871Z-27d8b61243",
+      "run_id": "20260911T081015.889871Z-27d8b61243",
+      "status": "finished"
+    },
+    {
+      "exit_code": 1,
+      "experiment_id": "E08",
+      "inventory": {
+        "locator": "/workspace/labs/motion-control-lab/experiments/E08_constraints_scaling_and_degeneracy/runs/20260911T084041.594878Z-1a5f912f70/inventory.json",
+        "sha256": "a951671fdd8b589d8ceab258de172530f654e3b8c509943144f63ca39a9e804b",
+        "size_bytes": 5278762
+      },
+      "manifest": {
+        "locator": "/workspace/labs/motion-control-lab/experiments/E08_constraints_scaling_and_degeneracy/runs/20260911T084041.594878Z-1a5f912f70/E08.manifest.json",
+        "sha256": "5be9b529747ac3483840762856b3f878bab8f27863c57dd18d7ac318412d5e8a",
+        "size_bytes": 5011478
+      },
+      "run_dir": "/workspace/labs/motion-control-lab/experiments/E08_constraints_scaling_and_degeneracy/runs/20260911T084041.594878Z-1a5f912f70",
+      "run_id": "20260911T084041.594878Z-1a5f912f70",
+      "status": "finished"
+    }
+  ],
+  "statistics": {
+    "bootstrap": false,
+    "independent_unit": "case/seed; process repeats nested, ticks not independent",
+    "quantile": "nearest-rank; raw all calls; no average of P99",
+    "significance_tests": false,
+    "summary": "per case and process repeat; descriptive median and range within identical strata"
+  },
+  "supplement": {
+    "declaration": {
+      "locator": "/workspace/labs/motion-control-lab/runs/mcc_placo_study/evidence_repair_20260912/supplement02/declaration.json",
+      "sha256": "8b2969c51b18bb48320907b9de6a7ba728f2fa9518cd0dca0f48f59c855bed1c",
+      "size_bytes": 394680
+    },
+    "execution_index": {
+      "locator": "/workspace/labs/motion-control-lab/runs/mcc_placo_study/evidence_repair_20260912/supplement02/execution_index.json",
+      "sha256": "ffee3d9e912bf23e702d903f0c0aae47b0712347d992da2f1c2cc9793963f7c0",
+      "size_bytes": 5395
+    }
+  }
+}

@@ -156,7 +156,9 @@ AppOptions parseOptions(int argc, char **argv) {
   }
   for (int index = 1; index < argc; ++index) {
     const std::string argument{argv[index]};
-    if (argument == "--help" || argument == "-h") {
+    if (argument == "--dump-resolved-options") {
+      result.dump_resolved_options = true;
+    } else if (argument == "--help" || argument == "-h") {
       printUsage(argv[0]);
       std::exit(EXIT_SUCCESS);
     } else if (argument == "--solver") {

@@ -1,4 +1,5 @@
 #include "solver.hpp"
+#include "allocation.hpp"
 
 #include <algorithm>
 #include <chrono>
@@ -136,7 +137,7 @@ addCartesianTasks(mcc::HierarchicalKinematicsSolverBuilder &builder,
     mcc::TaskScaleGroupConfig scale;
     scale.progress_weight =
         options.red_primary_task_tcp_cartesian_progress_weight;
-    scale.name = "red-primary/task/left-tcp-position-progress";
+    scale.name = options.hqp_layout == "pose-primary" ? "red-primary/task/left-tcp-pose-progress" : "red-primary/task/left-tcp-position-progress";
     requireOk(
         builder.addTaskScaleGroup(
             mcc::PriorityLevel::Primary,
@@ -145,7 +146,7 @@ addCartesianTasks(mcc::HierarchicalKinematicsSolverBuilder &builder,
                  .red_primary_task_tcp_cartesian_progress_preservation_tolerance},
             handles.left_cartesian_scale),
         "register " + scale.name);
-    scale.name = "red-primary/task/right-tcp-position-progress";
+    scale.name = options.hqp_layout == "pose-primary" ? "red-primary/task/right-tcp-pose-progress" : "red-primary/task/right-tcp-position-progress";
     requireOk(
         builder.addTaskScaleGroup(
             mcc::PriorityLevel::Primary,
@@ -180,6 +181,25 @@ addCartesianTasks(mcc::HierarchicalKinematicsSolverBuilder &builder,
                     .red_primary_task_tcp_position_preservation_tolerance_mps),
             handles.right_position),
         "register " + position.name);
+  }
+  if (options.hqp_layout == "pose-primary") {
+    mcc::OrientationTaskConfig orientation;
+    orientation.servo_gain_per_s = options.red_primary_task_tcp_orientation_servo_gain_per_s;
+    const auto tolerance = Eigen::Vector3d::Constant(
+        options.red_primary_task_tcp_orientation_preservation_tolerance_radps);
+    orientation.name = "red-primary/task/left-tcp-orientation";
+    orientation.enforcement = mcc::ScaledEnforcement{handles.left_cartesian_scale,
+        options.red_primary_task_tcp_orientation_feasibility_tolerance_radps};
+    requireOk(builder.addOrientationTask(mcc::PriorityLevel::Primary,
+        robot.left_end_effector_frame, orientation, tolerance, handles.left_orientation),
+        "register " + orientation.name);
+    orientation.name = "red-primary/task/right-tcp-orientation";
+    orientation.enforcement = mcc::ScaledEnforcement{handles.right_cartesian_scale,
+        options.red_primary_task_tcp_orientation_feasibility_tolerance_radps};
+    requireOk(builder.addOrientationTask(mcc::PriorityLevel::Primary,
+        robot.right_end_effector_frame, orientation, tolerance, handles.right_orientation),
+        "register " + orientation.name);
+    return handles;
   }
   mcc::OrientationTaskConfig orientation;
   orientation.enforcement = mcc::SoftEnforcement{mcc::QuadraticPenalty{
@@ -355,8 +375,10 @@ void configureSolver(
     const std::shared_ptr<const mcc::SelfCollisionModel> &collision_model,
     const R1RobotConfig &robot, const Options &options) {
   const auto &solver_options = options.interactive.solver;
+  runtime.setPrimaryOnly(solver_options.hqp_layout == "primary-only");
+  const auto posture_priority = solver_options.hqp_layout == "position-orientation-posture" ? mcc::PriorityLevel::Tertiary : mcc::PriorityLevel::Secondary;
   const bool strict_priority_topology =
-      profileCapabilities(options.profile).nullspace;
+      profileCapabilities(options).nullspace;
   mcc::HierarchicalKinematicsSolverBuilder red_builder;
   requireOk(
       red_builder.configure(model, active_joint_names,
@@ -372,7 +394,7 @@ void configureSolver(
       solver_options.red_secondary_task_link4_position_servo_gain_per_s;
   requireOk(
       red_builder.addPositionTask(
-          mcc::PriorityLevel::Secondary, robot.left_link4_frame, elbow,
+          posture_priority, robot.left_link4_frame, elbow,
           Eigen::Vector3d::Constant(
               solver_options
                   .red_secondary_task_link4_position_preservation_tolerance_mps),
@@ -381,7 +403,7 @@ void configureSolver(
   elbow.name = "red-secondary/task/right-link4-position";
   requireOk(
       red_builder.addPositionTask(
-          mcc::PriorityLevel::Secondary, robot.right_link4_frame, elbow,
+          posture_priority, robot.right_link4_frame, elbow,
           Eigen::Vector3d::Constant(
               solver_options
                   .red_secondary_task_link4_position_preservation_tolerance_mps),
@@ -409,7 +431,7 @@ void configureSolver(
   }
   requireOk(
       red_builder.addPostureTask(
-          mcc::PriorityLevel::Secondary, coupling,
+          posture_priority, coupling,
           Eigen::VectorXd::Constant(
               static_cast<Eigen::Index>(active_joint_names.size()),
               strict_priority_topology
@@ -546,8 +568,12 @@ mcc::Status SolverRuntime::solveYellow(const SolverRequest &request,
   local.position_targets = request.position_targets;
   local.orientation_targets = request.orientation_targets;
   mcc::InverseKinematicsSolution candidate;
+  if(observer_)observer_(request,diagnostics,nullptr);
+  if(allocation_observation_)beginAllocationObservation();
   const auto status = yellow_solver_.solveInverseKinematics(
       local, candidate, diagnostics.kinematics);
+  if(allocation_observation_){const auto observation=endAllocationObservation();diagnostics.allocation_observation=true;diagnostics.cpp_new_count=observation.count;diagnostics.cpp_new_bytes=observation.bytes;}
+  diagnostics.native_candidate = candidate;
   diagnostics.solve_time_ms = diagnostics.kinematics.solve_time_ms;
   diagnostics.qp_solve_time_ms =
       diagnostics.kinematics.optimization.solve_time_ms;
@@ -556,6 +582,7 @@ mcc::Status SolverRuntime::solveYellow(const SolverRequest &request,
   diagnostics.maximum_hard_violation =
       diagnostics.kinematics.optimization.maximum_hard_violation;
   diagnostics.coupling_state = CouplingState::Unavailable;
+  if(observer_)observer_(request,diagnostics,&status);
   if (!status.ok()) {
     diagnostics.rejection_reason = status.code == mcc::StatusCode::InvalidTarget
                                        ? SolverRejectionReason::InvalidTarget
@@ -569,6 +596,8 @@ mcc::Status SolverRuntime::solveYellow(const SolverRequest &request,
   yellow_publish_.accepted_positions = candidate.joint_positions;
   yellow_publish_.value_revision = yellow_state_.value_revision;
   yellow_publish_.attempt_accepted = true;
+  yellow_publish_.source_sequence=request.captured_state.sequence;
+  yellow_publish_.source_time_nanoseconds=request.captured_state.monotonic_time_nanoseconds;
   yellow_to_red_.publish(yellow_publish_);
   diagnostics.rejection_reason = SolverRejectionReason::None;
   diagnostics.value_revision = yellow_state_.value_revision;
@@ -588,23 +617,34 @@ mcc::Status SolverRuntime::solveRed(const SolverRequest &request,
   local.position_targets = request.position_targets;
   local.orientation_targets = request.orientation_targets;
   const bool has_attempt = yellow_to_red_.readLatest(yellow_read_);
-  const bool coupling_active = has_attempt && yellow_read_.attempt_accepted;
+  const bool coupling_active = !primary_only_ && has_attempt && yellow_read_.attempt_accepted;
+  if (primary_only_) {
+    for (auto &target : local.orientation_targets) target.enabled = false;
+    for (auto &target : local.position_targets)
+      if (target.handle == handles_.red_left_link4 || target.handle == handles_.red_right_link4) target.enabled = false;
+  }
   diagnostics.coupling_state =
       !has_attempt ? CouplingState::WaitingForValue
                    : (coupling_active ? CouplingState::Active
                                       : CouplingState::RejectedSource);
   diagnostics.consumed_source_value_revision =
       coupling_active ? yellow_read_.value_revision : 0;
+  diagnostics.consumed_source_state_sequence = coupling_active?yellow_read_.source_sequence:0;
+  diagnostics.consumed_source_state_time_nanoseconds = coupling_active?yellow_read_.source_time_nanoseconds:0;
   local.posture_targets.emplace_back(handles_.red_yellow_posture,
                                      coupling_active
                                          ? yellow_read_.accepted_positions
                                          : disabled_coupling_positions_,
                                      coupling_active);
   mcc::InverseKinematicsSolution candidate;
+  if(observer_){auto observed=request;observed.position_targets=local.position_targets;observed.orientation_targets=local.orientation_targets;observer_(observed,diagnostics,nullptr);}
+  if(allocation_observation_)beginAllocationObservation();
   const auto solve_started = std::chrono::steady_clock::now();
   const auto status = red_solver_.solveInverseKinematics(local, candidate,
                                                          diagnostics.hierarchy);
   const auto solve_finished = std::chrono::steady_clock::now();
+  if(allocation_observation_){const auto observation=endAllocationObservation();diagnostics.allocation_observation=true;diagnostics.cpp_new_count=observation.count;diagnostics.cpp_new_bytes=observation.bytes;}
+  diagnostics.native_candidate = candidate;
   diagnostics.solve_time_ms =
       std::chrono::duration<double, std::milli>(solve_finished - solve_started)
           .count();
@@ -612,6 +652,7 @@ mcc::Status SolverRuntime::solveRed(const SolverRequest &request,
   diagnostics.iterations = hierarchyIterations(diagnostics.hierarchy);
   diagnostics.maximum_hard_violation =
       diagnostics.hierarchy.maximum_shared_hard_violation;
+  if(observer_){auto observed=request;observed.position_targets=local.position_targets;observed.orientation_targets=local.orientation_targets;observer_(observed,diagnostics,&status);}
   if (!status.ok()) {
     diagnostics.rejection_reason = status.code == mcc::StatusCode::InvalidTarget
                                        ? SolverRejectionReason::InvalidTarget

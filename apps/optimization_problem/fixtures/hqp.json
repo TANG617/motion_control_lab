@@ -1,0 +1,1 @@
+{"solver":"mcc","mode":"hqp","backend":"eiquadprog","regularization":1e-8,"preservation_tolerance":1e-7}

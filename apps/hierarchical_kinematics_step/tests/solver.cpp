@@ -1,4 +1,5 @@
 #include "../solver.hpp"
+#include "../elbow_reference.hpp"
 #include "../planning.hpp"
 
 #include <Eigen/Geometry>
@@ -150,7 +151,8 @@ int main(int argc, char **argv) {
     fk_request.reference_frame_name = robot.base_frame;
     fk_request.frame_names = {robot.left_end_effector_frame,
                               robot.right_end_effector_frame,
-                              robot.left_link4_frame, robot.right_link4_frame};
+                              robot.left_link4_frame, robot.right_link4_frame,
+                              robot.left_shoulder_frame, robot.left_wrist_frame};
     motion_control::core::ForwardKinematicsSolution initial_fk;
     motion_control::core::ForwardKinematicsDiagnostics fk_diagnostics;
     app::requireOk(runtime.computeForwardKinematics(fk_request, initial_fk,
@@ -167,6 +169,17 @@ int main(int argc, char **argv) {
     const auto initial_right_link4 =
         requirePose(initial_fk.poses, robot.right_link4_frame)
             .pose.translation();
+    const auto arm_geometry = app::ElbowGeometry::fromFk(
+        requirePose(initial_fk.poses, robot.left_shoulder_frame).pose,
+        requirePose(initial_fk.poses, robot.left_link4_frame).pose,
+        requirePose(initial_fk.poses, robot.left_wrist_frame).pose, initial_left_tcp);
+    const auto swivel=arm_geometry.angle(
+        requirePose(initial_fk.poses,robot.left_shoulder_frame).pose.translation(),
+        requirePose(initial_fk.poses,robot.left_wrist_frame).pose.translation(),initial_left_link4);
+    require((arm_geometry.target(requirePose(initial_fk.poses,robot.left_shoulder_frame).pose.translation(),
+        initial_left_tcp,swivel.x(),swivel.y())-initial_left_link4).norm()<1e-9,
+        "R1 public-FK arm angle roundtrip");
+
 
     runtime.beginRun(1);
     app::SolverRequest yellow;
@@ -515,6 +528,66 @@ int main(int argc, char **argv) {
               app_options.interactive.solver
                   .red_primary_task_tcp_position_preservation_tolerance_mps,
               "Secondary changed a Primary position residual beyond tolerance");
+    }
+    for (const auto profile : {app::Profile::PlannedOtgNullspace, app::Profile::Planned}) {
+      auto pose_options = app::profileDefaults(profile);
+      pose_options.interactive.red_rate_hz = 1000;
+      pose_options.interactive.solver.hqp_layout="pose-primary";
+      pose_options.interactive.robot.inactive_joint_names={"head_yaw_joint","head_pitch_joint","torso_yaw_joint","torso_pitch_joint","knee_pitch_joint","ankle_pitch_joint"};
+      pose_options.interactive.urdf_path=argv[1];
+      const auto active=app::activeJointNames(robot,pose_options.interactive.robot);
+      require(active.size()==14,"pose-primary experiment must use 14 arm joints");
+      app::SolverRuntime pose_runtime;app::SolverHandles h;
+      app::configureSolver(pose_runtime,h,model,active,collision_model,robot,pose_options);
+      app::SolverRequest r;r.reference_frame_name=robot.base_frame;r.captured_state={state,1U,1};
+      r.position_targets={{h.red.left_position,initial_left_tcp.translation()},
+          {h.red.right_position,initial_right_tcp.translation()},
+          {h.red_left_link4,initial_left_link4+Eigen::Vector3d(.005,0,0),true},
+          {h.red_right_link4,initial_right_link4,false}};
+      r.orientation_targets={{h.red.left_orientation,initial_left_tcp.linear()},
+          {h.red.right_orientation,initial_right_tcp.linear()}};
+      app::SolverRequest y;y.reference_frame_name=robot.base_frame;y.captured_state={state,1U,1};
+      app::SolverSolution solution;app::SolverDiagnostics d;
+      app::requireOk(pose_runtime.solveYellow(y,solution,d),"pose-primary Yellow");
+      for(int test_case=0;test_case<3;++test_case) {
+        if(test_case==1)r.position_targets[2].position+=Eigen::Vector3d(0,.02,0);
+        if(test_case==2) {
+          r.orientation_targets[0].orientation=Eigen::AngleAxisd(.4,Eigen::Vector3d::UnitX()).toRotationMatrix()*initial_left_tcp.linear();
+          r.position_targets[0].feed_forward_velocity=Eigen::Vector3d(.05,.02,0);
+        }
+        app::requireOk(pose_runtime.solveRed(r,solution,d),"pose-primary solve");
+        std::size_t primary=0,tertiary=0;
+        for(const auto &task:d.hierarchy.tasks) {
+          if(task.priority==motion_control::core::PriorityLevel::Primary) {
+            ++primary;
+            require(task.enforcement==motion_control::core::HierarchicalTaskEnforcement::Scaled,"all pose Primary tasks must be scaled");
+            const double tolerance=task.kind==motion_control::core::HierarchicalTaskKind::Position ?
+                pose_options.interactive.solver.red_primary_task_tcp_position_preservation_tolerance_mps :
+                pose_options.interactive.solver.red_primary_task_tcp_orientation_preservation_tolerance_radps;
+            if(task.actual_preservation_drift.size())require(task.actual_preservation_drift.maxCoeff()<=tolerance+1e-8,"Primary residual preservation");
+          }
+          if(task.priority==motion_control::core::PriorityLevel::Tertiary)++tertiary;
+        }
+        require(primary==4 && tertiary==0,"pose-primary topology requires four Primary tasks and no Tertiary");
+        require(d.hierarchy.task_scales.size()==2,"pose-primary requires two arm scale groups");
+        for(const auto &scale:d.hierarchy.task_scales)
+          require(scale.actual_preservation_drift<=pose_options.interactive.solver.red_primary_task_tcp_cartesian_progress_preservation_tolerance+1e-8,"scale preservation");
+        require(d.maximum_hard_violation<=pose_options.interactive.solver.maximum_accepted_hard_violation,"shared hard limits");
+        if(test_case<2)require(d.hierarchy.passes[1].attempted && d.hierarchy.passes[1].succeeded,"Secondary must execute for elbow perturbation");
+        if(test_case==2)require(d.hierarchy.task_scales[0].weighted_progress_scale<d.hierarchy.task_scales[1].weighted_progress_scale,"orientation-limited left arm must have independent scale");
+        if(test_case==2) {
+          auto candidate=state;
+          const auto active_indices=app::activeJointFullIndices(robot,pose_options.interactive.robot);
+          for(std::size_t i=0;i<active_indices.size();++i)
+            candidate.joint_positions[active_indices[i]]=solution.kinematics_solution.joint_positions[i];
+          auto fk=fk_request;fk.state=candidate;
+          motion_control::core::ForwardKinematicsSolution result;
+          app::requireOk(pose_runtime.computeForwardKinematics(fk,result,fk_diagnostics),"pose-primary correction FK");
+          const Eigen::Vector3d velocity=(requirePose(result.poses,robot.left_end_effector_frame).pose.translation()-initial_left_tcp.translation())*pose_options.interactive.red_rate_hz;
+          const Eigen::Vector3d expected=d.hierarchy.task_scales[0].weighted_progress_scale*Eigen::Vector3d(.05,.02,0);
+          require((velocity-expected).norm()<.003,"position correction must share the orientation-limited arm scale");
+        }
+      }
     }
     return EXIT_SUCCESS;
   } catch (const std::exception &error) {

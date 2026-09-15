@@ -1,6 +1,10 @@
 add_library(
   mcl_hierarchical_kinematics_step_support
   options.cpp
+  execution.cpp
+  allocation.cpp
+  elbow_reference.cpp
+  elbow_reference_visualization.cpp
   admittance.cpp
   solver.cpp
   nullspace.cpp
@@ -28,6 +32,7 @@ target_link_libraries(
     motion_control_core::motion_control_core
     motion_control_sim::mujoco
     motion_control_sim::viewer
+    motion_control_lab::run_artifacts
     motion_control_lab::cpu_affinity
     motion_control_lab::app_helpers
     motion_control_lab::scheduler
@@ -50,15 +55,40 @@ install(
   DIRECTORY
     scripts/_launcher
     scripts/profiles
+    scripts/harp
   DESTINATION
     "${CMAKE_INSTALL_LIBEXECDIR}/motion-control-lab/mcl_hierarchical_kinematics_step"
   USE_SOURCE_PERMISSIONS
   FILES_MATCHING
     PATTERN "*.py"
+    PATTERN "requirements.txt"
     PATTERN "__pycache__" EXCLUDE
 )
 
+install(DIRECTORY foxglove/
+  DESTINATION "${CMAKE_INSTALL_LIBEXECDIR}/motion-control-lab/mcl_hierarchical_kinematics_step/foxglove"
+  FILES_MATCHING PATTERN "*.json")
+install(FILES HARP.md
+  DESTINATION "${CMAKE_INSTALL_LIBEXECDIR}/motion-control-lab/mcl_hierarchical_kinematics_step")
+
 if(BUILD_TESTING)
+  add_executable(test_hierarchical_kinematics_step_replay_accounting tests/replay_accounting.cpp)
+  target_link_libraries(test_hierarchical_kinematics_step_replay_accounting PRIVATE motion_control_lab::hierarchical_kinematics_step_support)
+  add_test(NAME apps.mcl_hierarchical_kinematics_step_replay_accounting COMMAND test_hierarchical_kinematics_step_replay_accounting)
+  add_test(NAME apps.mcl_hierarchical_kinematics_step_execution_contract
+    COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/execution_contract.py"
+    --binary $<TARGET_FILE:mcl_hierarchical_kinematics_step>)
+  add_executable(test_hierarchical_kinematics_step_tcp_mirror tests/tcp_mirror.cpp)
+  target_link_libraries(test_hierarchical_kinematics_step_tcp_mirror PRIVATE motion_control_lab::hierarchical_kinematics_step_support)
+  add_test(NAME apps.mcl_hierarchical_kinematics_step_tcp_mirror COMMAND test_hierarchical_kinematics_step_tcp_mirror)
+
+  add_executable(test_hierarchical_kinematics_step_elbow_reference_visualization tests/elbow_reference_visualization.cpp)
+  target_link_libraries(test_hierarchical_kinematics_step_elbow_reference_visualization PRIVATE motion_control_lab::hierarchical_kinematics_step_support)
+  add_test(NAME apps.mcl_hierarchical_kinematics_step_elbow_reference_visualization COMMAND test_hierarchical_kinematics_step_elbow_reference_visualization)
+
+  add_executable(test_hierarchical_kinematics_step_elbow_reference tests/elbow_reference.cpp)
+  target_link_libraries(test_hierarchical_kinematics_step_elbow_reference PRIVATE motion_control_lab::hierarchical_kinematics_step_support)
+  add_test(NAME apps.mcl_hierarchical_kinematics_step_elbow_geometry COMMAND test_hierarchical_kinematics_step_elbow_reference)
   add_executable(
     test_hierarchical_kinematics_step_app_options
     tests/app_options_contract.cpp
@@ -231,4 +261,88 @@ if(BUILD_TESTING)
     COMMAND test_hierarchical_kinematics_step_replay_pipeline_gate
   )
 
+endif()
+
+if(MCL_BUILD_HARP)
+  target_link_libraries(mcl_hierarchical_kinematics_step_support PRIVATE motion_control_core::posture_reference)
+  target_compile_definitions(mcl_hierarchical_kinematics_step_support PRIVATE MCL_HAS_HARP=1)
+  if(BUILD_TESTING)
+    add_executable(test_hierarchical_kinematics_step_harp_lifecycle tests/harp_lifecycle.cpp)
+    target_link_libraries(test_hierarchical_kinematics_step_harp_lifecycle
+      PRIVATE motion_control_lab::hierarchical_kinematics_step_support)
+    set(MCL_HARP_TEST_MODEL "" CACHE PATH "Optional CUDA model for native HARP lifecycle acceptance")
+    if(MCL_HARP_TEST_MODEL)
+      add_test(NAME apps.mcl_hierarchical_kinematics_step_harp_lifecycle
+        COMMAND test_hierarchical_kinematics_step_harp_lifecycle "${MCL_HARP_TEST_MODEL}"
+        "${CMAKE_CURRENT_BINARY_DIR}/harp_lifecycle.jsonl")
+    endif()
+  endif()
+endif()
+
+if(BUILD_TESTING)
+  if(TARGET mcl_hierarchical_kinematics_step)
+    add_test(
+      NAME scripts.hierarchical_kinematics_source_recipe_path_resolution
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        --unset=MCL_BINARY
+        "PATH=$<TARGET_FILE_DIR:mcl_hierarchical_kinematics_step>:$ENV{PATH}"
+        "MCL_CPU_SET="
+        "MCL_RT_PRIORITY="
+        "${PROJECT_SOURCE_DIR}/apps/hierarchical_kinematics_step/scripts/profiles/planned_otg_nullspace_admittance_kinematic_sim/run_keyboard.py"
+        --help
+    )
+    add_test(
+      NAME scripts.hierarchical_kinematics_mcap_preset_smoke
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        "MCL_BINARY=${MCL_TRUE_EXECUTABLE}"
+        "MCL_CPU_SET="
+        "MCL_RT_PRIORITY="
+        "${PROJECT_SOURCE_DIR}/apps/hierarchical_kinematics_step/scripts/profiles/planned_otg_nullspace_admittance_kinematic_sim/run_mcap_interactive.py"
+    )
+    add_test(
+      NAME scripts.hierarchical_kinematics_csv_preset_smoke
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        "MCL_BINARY=${MCL_TRUE_EXECUTABLE}"
+        "MCL_CPU_SET="
+        "MCL_RT_PRIORITY="
+        "${PROJECT_SOURCE_DIR}/apps/hierarchical_kinematics_step/scripts/profiles/planned_otg_nullspace_admittance_kinematic_sim/run_csv_batch.py"
+        --input /tmp/mcl-nullspace-admittance-csv-launcher-smoke.csv
+    )
+    if(MCL_SCRIPT_EXECUTABLE)
+      add_test(
+        NAME scripts.hierarchical_kinematics_keyboard_smoke
+        COMMAND
+          "${CMAKE_COMMAND}" -E env
+          "MCL_BINARY=$<TARGET_FILE:mcl_hierarchical_kinematics_step>"
+          "MCL_CPU_SET="
+          "MCL_RT_PRIORITY="
+          "${MCL_SCRIPT_EXECUTABLE}" -qec
+          "${PROJECT_SOURCE_DIR}/apps/hierarchical_kinematics_step/scripts/profiles/planned_otg_nullspace_admittance_kinematic_sim/run_keyboard.py --no-mujoco-viewer --ui none --viz none --duration 0.05"
+          /dev/null
+      )
+      set_tests_properties(
+        scripts.hierarchical_kinematics_keyboard_smoke
+        PROPERTIES TIMEOUT 15
+      )
+    endif()
+  endif()
+      if(MCL_ENABLE_TUI)
+        add_test(
+          NAME apps.mcl_hierarchical_kinematics_step_tui_pages_pty
+          COMMAND
+            "${Python3_EXECUTABLE}"
+            "${PROJECT_SOURCE_DIR}/tests/run_planned_tui_pages_pty.py"
+            "$<TARGET_FILE:mcl_hierarchical_kinematics_step>"
+            6
+            "/workspace/products/synrobot/modules/common/robot_description/psi_r1/urdf/Psi_R1_rev1.urdf"
+            --profile planned-otg-nullspace
+        )
+        set_tests_properties(
+          apps.mcl_hierarchical_kinematics_step_tui_pages_pty
+          PROPERTIES TIMEOUT 20
+        )
+      endif()
 endif()

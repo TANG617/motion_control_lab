@@ -4,14 +4,18 @@ import numpy as np
 from evidence import read_json,write_json
 from inputs import UrdfFk
 from metrics import position_error,orientation_error,hard_violation
+from progress import SampleProgress
 
-def verify_unit(output,canonical,identity=None,config=None,metric_roles=None):
+def verify_unit(output,canonical,identity=None,config=None,metric_roles=None,on_progress=None):
     output=pathlib.Path(output); raw=output/'raw.jsonl'; rows=[]; failures=[]; metric_rows=[]; result_rows=0
     identity=identity or {}; config=config or {}; metric_roles=metric_roles or {}
     if not raw.exists(): return {'status':'unavailable','reason':'raw.jsonl missing','rows':0}
     import json
     fk=UrdfFk(canonical['model']['locator']) if canonical.get('model') else None
-    for line_no,line in enumerate(raw.read_text().splitlines(),1):
+    lines=raw.read_text().splitlines()
+    progress=SampleProgress(output,'independent-fk',len(lines),on_progress)
+    for line_no,line in enumerate(lines,1):
+        progress.update(line_no-1)
         try: r=json.loads(line)
         except ValueError:
             failures.append({'line':line_no,'reason':'incomplete or invalid JSON'});continue
@@ -51,5 +55,6 @@ def verify_unit(output,canonical,identity=None,config=None,metric_roles=None):
         for r in rows: f.write(json.dumps(r,allow_nan=False)+'\n')
     with (output/'metrics.jsonl').open('w') as f:
         for r in metric_rows: f.write(json.dumps(r,allow_nan=False)+'\n')
+    progress.update(len(lines))
     return {'schema_version':'unit_validation.v1','status':'failed' if failures else ('passed' if rows and all(r['status']=='passed' for r in rows) else 'unavailable'),
             'rows':len(rows),'result_rows':result_rows,'failures':failures,'model_dependency':'independent XML URDF tree and NumPy; no candidate FK or diagnostics consumed'}

@@ -83,6 +83,12 @@ public:
   std::vector<std::string> helpLines() const;
   void setExecutedLink4Positions(const Eigen::Vector3d &left,
                                  const Eigen::Vector3d &right);
+  void setElbowReferenceSource(std::string source) { elbow_reference_source_ = std::move(source); }
+  void setLeftElbowOwned(bool owned) noexcept { left_elbow_owned_ = owned; }
+  void configureTcpMirror(const Pose &left_tcp_offset, const Pose &right_tcp_offset,
+                          bool enabled);
+  bool mirrorTcpInput() const noexcept { return mirror_tcp_input_; }
+  void resetMirroredTargets(const Pose &left, const Pose &right);
   void setStatus(std::string status);
   void setPaused(bool paused, std::string status);
   void setMotionInputEnabled(bool enabled, std::string status);
@@ -97,6 +103,9 @@ private:
   void apply(const KeyboardAction &action, double dt);
   void captureLink4(ArmSide side, ElbowTeleopEventKind kind);
   void clearLink4();
+  void setMirrorTcpInput(bool enabled);
+  void captureMirrorAnchors();
+  void updateMirroredRightTarget();
   void recordElbowEvent(ElbowTeleopEventKind kind, std::optional<ArmSide> side,
                         const Eigen::Vector3d &target);
   Eigen::Vector3d &mutableLink4Target(ArmSide side);
@@ -112,6 +121,12 @@ private:
   Eigen::Vector3d executed_left_link4_{Eigen::Vector3d::Zero()};
   Eigen::Vector3d executed_right_link4_{Eigen::Vector3d::Zero()};
   ControlPoint control_point_{ControlPoint::Tcp};
+  bool left_elbow_owned_{false};
+  std::string elbow_reference_source_{"manual"};
+  bool mirror_available_{false};
+  bool mirror_tcp_input_{false};
+  Pose left_tcp_offset_{Pose::Identity()}, right_tcp_offset_{Pose::Identity()};
+  Pose left_tcp_anchor_{Pose::Identity()}, right_tcp_anchor_{Pose::Identity()};
   bool paused_{false};
   bool stop_requested_{false};
   bool motion_input_enabled_{true};
@@ -124,6 +139,10 @@ private:
 };
 
 struct NullspaceTuiDebug {
+  bool mirror_tcp_input{false};
+  bool pose_primary{false};
+  std::string elbow_source{"manual"};
+  double reference_age_ms{0}, inference_ms{0};
   ArmSide selected_side{ArmSide::Left};
   ControlPoint control_point{ControlPoint::Tcp};
   std::optional<ArmSide> held_link4_side;

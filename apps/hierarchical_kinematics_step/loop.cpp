@@ -29,6 +29,8 @@
 
 #include "adapters/replay/replay_support.hpp"
 #include "admittance.hpp"
+#include "elbow_reference.hpp"
+#include "elbow_reference_visualization.hpp"
 #include "components/app_helpers/app_helpers.hpp"
 #include "components/replay/replay_source.hpp"
 #include "components/scheduler/grouped_worker.hpp"
@@ -45,6 +47,8 @@
 #include "contracts/visualization/mcl_state_v1.hpp"
 #include "contracts/visualization/mcl_telemetry_v1.hpp"
 #include "loop.hpp"
+#include "execution.hpp"
+#include <motion_control_lab/execution_request.hpp>
 #include "motion_control_lab/run_artifacts.hpp"
 #include "motion_control_lab/sha256.hpp"
 #include "nullspace.hpp"
@@ -690,6 +694,7 @@ const mcl::ArmTarget &requireTarget(const std::vector<mcl::ArmTarget> &targets,
 }
 
 struct TargetSnapshot {
+  bool mirror_tcp_input{false};
   std::uint64_t revision{0};
   std::optional<std::size_t> replay_source_index;
   bool replay_joint_hold{false};
@@ -783,6 +788,9 @@ struct RedOutputSnapshot {
   mcc::Pose left_link4_pose{mcc::Pose::Identity()};
   mcc::Pose right_link4_pose{mcc::Pose::Identity()};
   Link4TargetSnapshot link4_target;
+  ElbowPrediction elbow_prediction;
+  ElbowReferenceVisualizationSnapshot elbow_reference_visualization;
+  double elbow_reference_time_s{0};
   double solve_time_ms{0.0};
   int iterations{0};
   bool converged{false};
@@ -1209,6 +1217,8 @@ double hierarchicalTaskTolerance(const mcc::HierarchicalTaskDiagnostics &task,
     return options.red_secondary_task_link4_position_preservation_tolerance_mps;
   }
   if (task.kind == mcc::HierarchicalTaskKind::Orientation) {
+    if (task.priority == mcc::PriorityLevel::Primary)
+      return options.red_primary_task_tcp_orientation_preservation_tolerance_radps;
     return options
         .red_secondary_task_tcp_orientation_preservation_tolerance_radps;
   }
@@ -2284,7 +2294,7 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
             const std::vector<std::size_t> &active_joint_full_indices,
             std::string &normal_exit_detail) {
   const auto &options = planned_options.interactive;
-  const auto capabilities = profileCapabilities(planned_options.profile);
+  const auto capabilities = profileCapabilities(planned_options);
   if (capabilities.cartesian_planning != (cartesian_planner != nullptr) ||
       capabilities.joint_otg != (joint_planner != nullptr)) {
     throw std::logic_error("profile capability/planner construction mismatch");
@@ -2315,6 +2325,7 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
                           replay_options.playback_rate,
                           planned_options.start_paused);
     replay::createOutputDirectory(replay_options.output_dir);
+    execution::writeJson(replay_options.output_dir/"release_plan.json",replayReleasePlan(planned_options,loaded_replay->timeline.timeline.size()));
   }
   const auto &joint_names = robot.joint_names;
   const Eigen::VectorXd initial_positions = toEigen(robot.default_positions);
@@ -2330,11 +2341,24 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
                             initial_state.velocities);
   }
 
+  if (!planned_options.initial_state_path.empty()) {
+    const auto input = motion_control_lab::execution::readJson(planned_options.initial_state_path);
+    const auto &initial=input.isMember("initial_state")?input["initial_state"]:input;
+    if(input.isMember("joint_names")) {Json::Value expected(Json::arrayValue);for(const auto &name:robot.joint_names)expected.append(name);if(input["joint_names"]!=expected)throw std::runtime_error("initial state joint order differs from app RobotOptions");}
+    if(initial.isMember("q")){if(initial["q"].size()!=initial_state.positions.size())throw std::runtime_error("initial state q size mismatch");for(Json::ArrayIndex i=0;i<initial["q"].size();++i)initial_state.positions[i]=initial["q"][i].asDouble();}
+    if(initial.isMember("v")){if(initial["v"].size()!=initial_state.velocities.size())throw std::runtime_error("initial state v size mismatch");for(Json::ArrayIndex i=0;i<initial["v"].size();++i)initial_state.velocities[i]=initial["v"][i].asDouble();}
+  }
+
   mcc::ForwardKinematicsRequest initial_fk_request;
   initial_fk_request.state = robotState(initial_state);
   initial_fk_request.frame_names = {
       robot.left_end_effector_frame, robot.right_end_effector_frame,
       robot.left_link4_frame, robot.right_link4_frame};
+  const bool learned_elbow = options.elbow_reference.source != "manual";
+  if (learned_elbow) {
+    initial_fk_request.frame_names.push_back(robot.left_shoulder_frame);
+    initial_fk_request.frame_names.push_back(robot.left_wrist_frame);
+  }
   initial_fk_request.reference_frame_name = robot.base_frame;
   mcc::ForwardKinematicsSolution initial_fk;
   mcc::ForwardKinematicsDiagnostics initial_fk_diagnostics;
@@ -2343,6 +2367,7 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
             "Initial FK failed");
 
   TargetSnapshot warmup_target;
+  warmup_target.mirror_tcp_input = options.mirror_tcp_input;
   warmup_target.revision = 0;
   warmup_target.left =
       requirePose(initial_fk.poses, robot.left_end_effector_frame).pose;
@@ -2353,6 +2378,43 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
       requirePose(initial_fk.poses, robot.left_link4_frame).pose.translation();
   initial_link4_target.right =
       requirePose(initial_fk.poses, robot.right_link4_frame).pose.translation();
+  const auto recordGoal = [](const mcc::Pose &pose) {
+    const Eigen::Quaterniond q(pose.linear());
+    return std::array<double,7>{pose.translation().x(),pose.translation().y(),pose.translation().z(),q.x(),q.y(),q.z(),q.w()};
+  };
+  const auto restoreGoal = [](const std::array<double,7> &values) {
+    mcc::Pose pose=mcc::Pose::Identity();pose.translation()=Eigen::Vector3d(values[0],values[1],values[2]);
+    pose.linear()=Eigen::Quaterniond(values[6],values[3],values[4],values[5]).normalized().toRotationMatrix();return pose;
+  };
+  const bool recorded_elbow = options.elbow_reference.source == "recorded";
+  std::atomic_bool recorded_elbow_complete{false};
+  std::atomic<std::uint64_t> recorded_source_index{0};
+  std::unique_ptr<ElbowReference> elbow_reference;
+  ElbowGeometry elbow_geometry;
+  if (learned_elbow) {
+    elbow_geometry = ElbowGeometry::fromFk(
+        requirePose(initial_fk.poses, robot.left_shoulder_frame).pose,
+        requirePose(initial_fk.poses, robot.left_link4_frame).pose,
+        requirePose(initial_fk.poses, robot.left_wrist_frame).pose, warmup_target.left);
+    elbow_reference = std::make_unique<ElbowReference>(options.elbow_reference, options.red_rate_hz);
+    elbow_reference->initialize(warmup_target.left);
+    const auto prediction = elbow_reference->consume(0);
+    if (recorded_elbow)
+      warmup_target.mirror_tcp_input = elbow_reference->recordedConsumption().mirror_tcp_input;
+    initial_link4_target.left = elbow_geometry.target(
+        requirePose(initial_fk.poses, robot.left_shoulder_frame).pose.translation(),
+        warmup_target.left, prediction.cosine, prediction.sine);
+    initial_link4_target.left_enabled = true;
+    ElbowConsumption initial_record;initial_record.prediction=prediction;
+    initial_record.mirror_tcp_input = warmup_target.mirror_tcp_input;
+    initial_record.left_goal=recordGoal(warmup_target.left);initial_record.right_goal=recordGoal(warmup_target.right);
+    for(int axis=0;axis<3;++axis) {
+      initial_record.target[axis]=initial_link4_target.left[axis];
+      initial_record.raw[axis]=requirePose(initial_fk.poses,robot.left_link4_frame).pose.translation()[axis];
+      initial_record.executed[axis]=initial_record.raw[axis];
+    }
+    elbow_reference->record(initial_record);
+  }
   TargetSnapshot first_replay_target = warmup_target;
   if (loaded_replay.has_value()) {
     const auto &first = replay_source->sourceFrame();
@@ -2533,6 +2595,9 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
       initial_link4_target.left, initial_link4_target.right,
                               capabilities.nullspace,
       capabilities.nullspace && planned_options.replay_elbow_teleop_enabled);
+  input.setLeftElbowOwned(learned_elbow);
+  input.setElbowReferenceSource(options.elbow_reference.source);
+  input.configureTcpMirror(robot.left_tcp_offset, robot.right_tcp_offset, options.mirror_tcp_input);
   mcl::PlannedGroupedTui tui(options.presentation);
   if (planned_options.source_mode == SourceMode::Replay) {
     if (!planned_options.replay_elbow_teleop_enabled) {
@@ -2615,7 +2680,9 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
            "elbow_right_executed_error_m,"
            "primary_maximum_position_preservation_drift_mps,"
            "primary_maximum_orientation_preservation_drift_radps,"
-           "elbow_task_error_m,replay_source_index\n";
+           "elbow_task_error_m,replay_source_index,reference_left_pose,reference_right_pose,"
+           "secondary_attempted,secondary_succeeded,selected_priority,left_scale,right_scale,"
+           "scale_preservation_drift,elbow_reference_source,selected_shared_hard_violation\n";
   }
 
   visualization_sink->open();
@@ -2745,6 +2812,14 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
     SolverSolution solution;
     SolverDiagnostics diagnostics;
     RedAttemptSnapshot attempt = initial_red_attempt;
+    std::uint64_t elbow_active_ticks = 0;
+    ElbowPrediction elbow_prediction;
+    ElbowReferenceAngleTracker elbow_reference_angle_tracker;
+    mcc::ForwardKinematicsRequest shoulder_request;
+    shoulder_request.reference_frame_name = robot.base_frame;
+    shoulder_request.frame_names = {robot.left_shoulder_frame};
+    mcc::ForwardKinematicsSolution shoulder_fk;
+    mcc::ForwardKinematicsDiagnostics shoulder_diagnostics;
     std::optional<std::uint64_t> rejected_target_revision;
     mcc::PlanningDiagnostics planning_diagnostics;
     mcc::CartesianTrajectorySample accepted_planner_sample =
@@ -2799,7 +2874,7 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
     };
 
     const auto makeReplayRow = [&](std::uint64_t attempt_revision) {
-      std::vector<std::string> row(66U);
+      std::vector<std::string> row(76U);
       row[0] = std::to_string(attempt_revision);
       row[14] = mcl::hierarchical_kinematics_step::jointTargetModeName(
               planned_options.joint_target.mode);
@@ -2921,6 +2996,22 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
                                               diagnostics.attempt_revision,
                                               0.0,
                                               {}};
+          }
+          if (elbow_reference) {
+            const double active_time_s=(elbow_active_ticks+1)/options.red_rate_hz;
+            if(recorded_elbow && active_time_s>elbow_reference->recordedEndTime()+1e-9) {
+              recorded_elbow_complete.store(true);
+              return mcl::WorkerIterationResult{mcl::WorkerIterationOutcome::Idle, diagnostics.attempt_revision, 0.0, {}};
+            }
+            elbow_prediction=elbow_reference->consume(active_time_s);
+            if(recorded_elbow) {
+              const auto &consumption=elbow_reference->recordedConsumption();
+              target.mirror_tcp_input = consumption.mirror_tcp_input;
+              target.left=restoreGoal(consumption.left_goal);target.right=restoreGoal(consumption.right_goal);
+              target.revision=consumption.target_revision;
+              if(loaded_replay)target.replay_source_index=consumption.source_index;
+              recorded_source_index.store(consumption.source_index);
+            }
           }
           if (shouldSkipRejectedRevision(rejected_target_revision,
                                          target.revision)) {
@@ -3069,7 +3160,16 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
           request.captured_state = capturedState(ik_state);
           addCartesianTargets(handles.red, command_for_attempt, request);
           if (capabilities.nullspace) {
-            addLink4Targets(handles, link4_target, request);
+            if (elbow_reference) {
+            shoulder_request.state = robotState(ik_state);
+            requireOk(solver.computeForwardKinematics(shoulder_request, shoulder_fk, shoulder_diagnostics),
+                      "elbow shoulder FK failed");
+            link4_target.left = elbow_geometry.target(
+                requirePose(shoulder_fk.poses, robot.left_shoulder_frame).pose.translation(),
+                reference.left, elbow_prediction.cosine, elbow_prediction.sine);
+            link4_target.left_enabled = true;
+          }
+          addLink4Targets(handles, link4_target, request);
           }
           const auto ik_status =
               solver.solveRed(request, solution, diagnostics);
@@ -3401,6 +3501,10 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
           if (joint_target_builder) {
             joint_target_builder->commit(mapped_raw_ik.positions, raw_target);
           }
+          if (elbow_reference) {
+            ++elbow_active_ticks;
+            elbow_reference->sampleAccepted(elbow_active_ticks / options.red_rate_hz, reference.left);
+          }
           state_to_yellow.publish(otg_state);
           accepted_planner_sample = *staged_planner_sample;
           staged_planner_sample.reset();
@@ -3496,6 +3600,50 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
                     "plan+step", joint_tick_diagnostics,
                     joint_sample.time_from_start)));
           }
+          if (elbow_reference) {
+            output.elbow_prediction = elbow_prediction;
+            output.elbow_reference_time_s = elbow_active_ticks / options.red_rate_hz;
+            ElbowConsumption record;
+            record.mirror_tcp_input = target.mirror_tcp_input;
+            record.time_s = output.elbow_reference_time_s; record.prediction = elbow_prediction;
+            record.target_revision=target.revision;record.source_index=target.replay_source_index.value_or(0);
+            record.left_goal=recordGoal(target.left);record.right_goal=recordGoal(target.right);
+            for(int axis=0;axis<3;++axis) {
+              record.target[axis]=link4_target.left[axis];
+              record.raw[axis]=raw_left_link4_pose.translation()[axis];
+              record.executed[axis]=executed_left_link4_pose.translation()[axis];
+            }
+            record.raw_position_error_m=(raw_left_pose.translation()-reference.left.translation()).norm();
+            record.raw_orientation_error_rad=Eigen::AngleAxisd(raw_left_pose.linear().transpose()*reference.left.linear()).angle();
+            record.executed_position_error_m=(executed_left_pose.translation()-reference.left.translation()).norm();
+            record.executed_orientation_error_rad=Eigen::AngleAxisd(executed_left_pose.linear().transpose()*reference.left.linear()).angle();
+            record.hard_violation=diagnostics.maximum_hard_violation;
+            for(const auto &constraint:diagnostics.hierarchy.constraints)
+              if(constraint.kind==mcc::HierarchicalConstraintKind::JointBound)
+                record.selected_shared_hard_violation=std::max(record.selected_shared_hard_violation,constraint.maximum_violation);
+            record.primary_position_drift=output.primary_maximum_position_preservation_drift_mps;
+            record.primary_orientation_drift=output.primary_maximum_orientation_preservation_drift_radps;
+            for(const auto &scale:diagnostics.hierarchy.task_scales)
+              record.scale_drift=std::max(record.scale_drift,scale.actual_preservation_drift);
+            for(const auto &pass:diagnostics.hierarchy.passes) {
+              if(pass.pass==mcc::HierarchicalSolvePass::Secondary) {
+                record.secondary_executed=pass.attempted;record.secondary_succeeded=pass.succeeded;
+              }
+            }
+            if(diagnostics.hierarchy.selected_priority)
+              record.selected_priority=priorityNumber(*diagnostics.hierarchy.selected_priority);
+            output.elbow_reference_visualization = makeElbowReferenceVisualizationSnapshot(
+                record, elbow_geometry,
+                requirePose(shoulder_fk.poses, robot.left_shoulder_frame).pose.translation(),
+                reference.left, elbow_reference_angle_tracker);
+            output.elbow_reference_visualization.left_scale = output.left_scale.scale;
+            output.elbow_reference_visualization.right_scale = output.right_scale.scale;
+            output.elbow_reference_visualization.left_tcp_position_error_m = output.left_position_error_m;
+            output.elbow_reference_visualization.right_tcp_position_error_m = output.right_position_error_m;
+            output.elbow_reference_visualization.left_tcp_orientation_error_rad = output.left_orientation_error_rad;
+            output.elbow_reference_visualization.right_tcp_orientation_error_rad = output.right_orientation_error_rad;
+            elbow_reference->record(record);
+          }
           output_to_ui.publish(output);
 
           attempt.state = RedAttemptState::Accepted;
@@ -3530,6 +3678,18 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
               row[11] = "true";
               row[12] = "";
               row[13] = "ok";
+              row[66] = tracePose(reference.left);row[67] = tracePose(reference.right);
+              row[68] = output.pass_attempted[1] ? "true" : "false";
+              row[69] = output.pass_succeeded[1] ? "true" : "false";
+              row[70] = output.selected_priority ? std::to_string(priorityNumber(*output.selected_priority)) : "none";
+              row[71] = std::to_string(output.left_scale.scale);row[72] = std::to_string(output.right_scale.scale);
+              double scale_drift=0;for(const auto &scale:diagnostics.hierarchy.task_scales)scale_drift=std::max(scale_drift,scale.actual_preservation_drift);
+              row[73] = std::to_string(scale_drift);row[74] = options.elbow_reference.source;
+              double selected_violation=0;
+              for(const auto &constraint:diagnostics.hierarchy.constraints)
+                if(constraint.kind==mcc::HierarchicalConstraintKind::JointBound)
+                  selected_violation=std::max(selected_violation,constraint.maximum_violation);
+              row[75] = std::to_string(selected_violation);
               row[15] = std::to_string(diagnostics.solve_time_ms);
               row[16] = std::to_string(diagnostics.maximum_hard_violation);
               row[17] = traceEigenVector(target.left.translation());
@@ -3694,6 +3854,10 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
   };
 
   while (true) {
+    if (recorded_elbow_complete.load()) {
+      replay_completed = loaded_replay && recorded_source_index.load()+1>=loaded_replay->timeline.timeline.size();
+      break;
+    }
     const auto schedule = ui_scheduler.next();
     if (!schedule) {
       break;
@@ -3754,13 +3918,19 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
                 handled_rejected_target_revision) {
           handled_rejected_target_revision = latest_red_attempt.target.revision;
           if (planned_options.source_mode == SourceMode::Teleop) {
-            input.setTargetPose(mcl::ArmSide::Left,
-                                latest_output.accepted_target.left,
-                                "Restoring last accepted Red target");
-            input.setTargetPose(
-                mcl::ArmSide::Right, latest_output.accepted_target.right,
-                "Red target rejected; edit from the last accepted "
-                "target to retry");
+            if (input.mirrorTcpInput()) {
+              input.resetMirroredTargets(latest_output.accepted_target.left,
+                                         latest_output.accepted_target.right);
+              input.setStatus("Red target rejected; mirror anchors restored from last accepted target");
+            } else {
+              input.setTargetPose(mcl::ArmSide::Left,
+                                  latest_output.accepted_target.left,
+                                  "Restoring last accepted Red target");
+              input.setTargetPose(
+                  mcl::ArmSide::Right, latest_output.accepted_target.right,
+                  "Red target rejected; edit from the last accepted "
+                  "target to retry");
+            }
             last_command_target = latest_output.accepted_target;
           } else {
             input.setStatus(
@@ -3793,6 +3963,17 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
         held_fault = *recorded_fault;
         pending_fault_event = faultSummary(*recorded_fault);
         workers.join();
+  if (elbow_reference) {
+    elbow_reference->finish();
+    const auto error=elbow_reference->failureDetail();
+    if(!error.empty()) {
+      mcl::GroupedWorkerFault reference_fault;
+      reference_fault.group=mcl::WorkerGroup::Red;
+      reference_fault.failure=mcl::WorkerFailureKind::Exception;
+      reference_fault.detail=error;
+      fault.trigger(std::move(reference_fault));
+    }
+  }
         input.setMotionInputEnabled(
             false, std::string{"FAULT HOLD: "} +
                        mcl::workerGroupName(recorded_fault->group) + " " +
@@ -3825,12 +4006,16 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
     }
     if (!held_fault.has_value()) {
       if (const auto reset_side = input.consumeResetRequest()) {
-        input.setTargetPose(
-            *reset_side,
-            *reset_side == mcl::ArmSide::Left ? latest_output.left_pose
-                                              : latest_output.right_pose,
-            std::string{"Reset "} + mcl::armSideName(*reset_side) +
-                " target from latest Red output");
+        if (input.mirrorTcpInput()) {
+          input.resetMirroredTargets(latest_output.left_pose, latest_output.right_pose);
+        } else {
+          input.setTargetPose(
+              *reset_side,
+              *reset_side == mcl::ArmSide::Left ? latest_output.left_pose
+                                                : latest_output.right_pose,
+              std::string{"Reset "} + mcl::armSideName(*reset_side) +
+                  " target from latest Red output");
+        }
       }
       if (input.link4Targets().revision != published_link4_revision) {
         published_link4_revision = input.link4Targets().revision;
@@ -3894,7 +4079,8 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
       }
       const bool worker_consumed_current =
           replay_last_consumed_revision.load() >= published_target.revision;
-      const bool may_advance = planned_options.replay->execution_mode ==
+      const bool may_advance = recorded_elbow ?
+          replay_source->sourceIndex()<recorded_source_index.load() : planned_options.replay->execution_mode ==
                                    mcl::data::ExecutionMode::Realtime ||
                                worker_consumed_current;
       const auto advance =
@@ -3922,9 +4108,11 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
     if (schedule->update_due) {
       if (planned_options.source_mode == SourceMode::Teleop &&
           !held_fault.has_value() && !input.paused() &&
-          !sameTargetPoses(last_command_target, input.targets())) {
-        published_target =
-            targetSnapshot(input.targets(), published_target.revision + 1);
+          (!sameTargetPoses(last_command_target, input.targets()) ||
+           published_target.mirror_tcp_input != input.mirrorTcpInput())) {
+        const bool poses_changed = !sameTargetPoses(last_command_target, input.targets());
+        published_target = targetSnapshot(input.targets(), published_target.revision + (poses_changed ? 1 : 0));
+        published_target.mirror_tcp_input = input.mirrorTcpInput();
         latest_input_targets = input.targets();
         last_command_target = published_target;
         target_to_red.publish(published_target);
@@ -4046,6 +4234,7 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
           (latest_output.raw_ik_velocities - latest_output.state.velocities)
               .cwiseAbs()
               .maxCoeff();
+      if (capabilities.joint_otg) {
       frame.ik_status +=
           " joint_otg=" +
           std::string{mcl::hierarchical_kinematics_step::jointTargetModeName(
@@ -4075,6 +4264,10 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
           std::to_string(maximumAbsolute(latest_output.state.accelerations)) +
           " raw_otg_max_dq=" + std::to_string(raw_otg_position_delta) +
           " raw_otg_max_dv=" + std::to_string(raw_otg_velocity_delta);
+      } else {
+        frame.ik_status += " joint_otg=disabled feedback=accepted-ik";
+        frame.status += " | Direct IK output";
+      }
       frame.iterations = latest_red_attempt.solver_debug.ik_iterations;
       frame.converged = latest_red_attempt.solver_debug.converged;
       frame.solve_time_ms = latest_red_attempt.solver_debug.ik_solve_time_ms;
@@ -4246,6 +4439,11 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
             latest_output.raw_left_link4_pose,
             latest_output.raw_right_link4_pose, latest_output.left_link4_pose,
             latest_output.right_link4_pose);
+      }
+      if (learned_elbow && options.visualization.enabled) {
+        appendElbowReferenceVisualization(visualization_frame, robot.base_frame,
+                               options.elbow_reference.source,
+                               latest_output.elbow_reference_visualization);
       }
       if (capabilities.admittance) {
         appendAdmittanceVisualization(latest_output.admittance,
@@ -4482,6 +4680,10 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
               jointWeightMultipliersString(
                   options.solver
                       .red_secondary_task_yellow_posture_coupling_joint_weight_multipliers));
+          add_option("hqp_layout", options.solver.hqp_layout);
+          add_option("elbow_reference", options.elbow_reference.source);
+          add_option("red_primary_task_tcp_orientation_servo_gain_per_s", std::to_string(options.solver.red_primary_task_tcp_orientation_servo_gain_per_s));
+          add_option("red_primary_task_tcp_orientation_preservation_tolerance_radps", std::to_string(options.solver.red_primary_task_tcp_orientation_preservation_tolerance_radps));
           add_option("cartesian_algorithm", "jerk_limited");
           add_option("joint_algorithm", "jerk_limited");
           add_option("cartesian_synchronization",
@@ -4689,7 +4891,7 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
       }
       ++publish_count;
 
-      if (planned_options.source_mode == SourceMode::Replay &&
+      if (!recorded_elbow && planned_options.source_mode == SourceMode::Replay &&
           (replay_settled.load() || final_replay_primary_max_iter_rejected)) {
         replay_source->markFrameProcessed();
         if (replay_source->endOfStream()) {
@@ -4700,10 +4902,16 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
     }
     if (schedule->draw_due) {
       NullspaceTuiDebug nullspace_debug;
+      nullspace_debug.mirror_tcp_input = planned_options.source_mode == SourceMode::Teleop
+          ? input.mirrorTcpInput() : latest_output.accepted_target.mirror_tcp_input;
+      nullspace_debug.pose_primary = options.solver.hqp_layout == "pose-primary";
+      nullspace_debug.elbow_source = options.elbow_reference.source;
+      nullspace_debug.reference_age_ms = (latest_output.elbow_reference_time_s - latest_output.elbow_prediction.sample_time_s)*1000;
+      nullspace_debug.inference_ms = latest_output.elbow_prediction.inference_ms;
       nullspace_debug.selected_side = input.selectedSide();
       nullspace_debug.control_point = input.controlPoint();
       nullspace_debug.held_link4_side = input.heldLink4Side();
-      nullspace_debug.link4_target = input.link4Targets();
+      nullspace_debug.link4_target = learned_elbow ? latest_output.link4_target : input.link4Targets();
       nullspace_debug.raw_left_link4 =
           latest_output.raw_left_link4_pose.translation();
       nullspace_debug.raw_right_link4 =
@@ -4741,7 +4949,8 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
       nullspace_debug.primary_position_preservation_tolerance_mps =
           options.solver
               .red_primary_task_tcp_position_preservation_tolerance_mps;
-      nullspace_debug.primary_orientation_preservation_tolerance_radps = 0.0;
+      nullspace_debug.primary_orientation_preservation_tolerance_radps = nullspace_debug.pose_primary ?
+          options.solver.red_primary_task_tcp_orientation_preservation_tolerance_radps : 0.0;
       nullspace_debug.link4_task_error_m = latest_output.link4_task_error_m;
       nullspace_debug.yellow_posture_error_rad =
           latest_output.yellow_posture_error_rad;
@@ -4815,12 +5024,29 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
   }
 
   workers.join();
+  if (elbow_reference) {
+    elbow_reference->finish();
+    const auto error=elbow_reference->failureDetail();
+    if(!error.empty()) {
+      mcl::GroupedWorkerFault reference_fault;
+      reference_fault.group=mcl::WorkerGroup::Red;
+      reference_fault.failure=mcl::WorkerFailureKind::Exception;
+      reference_fault.detail=error;
+      fault.trigger(std::move(reference_fault));
+    }
+  }
   const auto recorded_fault =
       held_fault.has_value() ? held_fault : fault.snapshot();
   visualization_sink->flush();
   visualization_sink->close();
 
   const auto red_stats = red_worker_diagnostics.snapshot();
+  const auto yellow_final_stats = yellow_worker_diagnostics.snapshot();
+  Json::Value final_release_counts;
+  if(planned_options.replay){
+    final_release_counts=replayReleaseCounts(planned_options,red_stats,yellow_final_stats,loaded_replay->timeline.timeline.size(),replay_source->consumedFrameCount(),replay_source->droppedFrameCount(),replay_source->sourceIndex(),replay_completed,recorded_fault.has_value(),recorded_elbow);
+    execution::writeJson(planned_options.replay->output_dir/"release_counts.json",final_release_counts);
+  }
   const auto replay_run_disposition =
       decideReplayRunDisposition(recorded_fault.has_value(), replay_completed,
                                  replay_primary_max_iter_rejection_count);
@@ -5051,6 +5277,7 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
     tracking_summary["final_max_joint_acceleration"] =
         maximumAbsolute(latest_output.state.accelerations);
 
+    manifest["release_accounting"]=final_release_counts;
     manifest["red_timing"]["scope"] =
         "entire run; worker execution excludes post-iteration observer";
     manifest["red_timing"]["solver"] = red_run_solver_timing.json();
@@ -5193,6 +5420,12 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
       joint_otg["max_jerk_rad_per_s3"].append(
           options.robot.joint_stream.max_jerk_rad_per_s3[index]);
     }
+    if (!capabilities.joint_otg) {
+      joint_otg = Json::Value(Json::objectValue);
+      joint_otg["execution_semantics"] = "direct accepted IK P/V; no JointPlanner";
+      joint_otg["feedback_topology"] = "accepted-ik";
+    }
+    joint_otg["enabled"] = capabilities.joint_otg;
     replay::writeTextFile(planned_options.replay->output_dir / "manifest.json",
                           jsonText(manifest));
     const auto status = replay::makeReplayStatus(
@@ -5207,6 +5440,7 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
                           jsonText(status));
   }
 
+  if(!planned_options.execution_output_dir.empty())writeReplaySummary(planned_options.execution_output_dir,(recorded_fault.has_value() || replay_run_disposition.fail_process)?1:0);
   if (recorded_fault.has_value()) {
     throw std::runtime_error(faultSummary(*recorded_fault));
   }

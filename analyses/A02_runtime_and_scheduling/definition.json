@@ -1,0 +1,154 @@
+{
+  "admission_source": {
+    "manifest": {
+      "locator": "/workspace/labs/motion-control-lab/analyses/A01_priority_and_robustness/runs/20260911T115830.986753Z-0a77c1e2b1/manifest.json",
+      "sha256": "1c28258e8ae6ad31e3c8580def5a07833320d9afe000131c3a3afba8f1e9e4ca",
+      "size_bytes": 25126
+    },
+    "pair_admission": {
+      "locator": "/workspace/labs/motion-control-lab/analyses/A01_priority_and_robustness/runs/20260911T115830.986753Z-0a77c1e2b1/evaluation/pair_admission.csv",
+      "sha256": "118a4af179e159cc52dcea755d8fba868aea4e00176d280027621e3c829a202d",
+      "size_bytes": 1110486
+    },
+    "parity_table": {
+      "locator": "/workspace/labs/motion-control-lab/analyses/A01_priority_and_robustness/runs/20260911T115830.986753Z-0a77c1e2b1/evaluation/parity_table.csv",
+      "sha256": "5e93e1b999edb6600ebb15b0cacfdde4f6e7b9a39dd2d90d24882059b1745f6d",
+      "size_bytes": 282781
+    }
+  },
+  "analysis_directory": "A02_runtime_and_scheduling",
+  "analysis_id": "A02",
+  "campaign": {
+    "execution_index": {
+      "locator": "/workspace/labs/motion-control-lab/runs/mcc_placo_study/nonrt_fresh16_20260911T080119Z/execution_index.json",
+      "sha256": "8ae06557799d995e9b9a2c043c13142f88abd6e9bd3fbcc1f98d595a1690c77c",
+      "size_bytes": 6448
+    },
+    "plan": {
+      "locator": "/workspace/labs/motion-control-lab/runs/mcc_placo_study/nonrt_fresh16_20260911T080119Z/plan.json",
+      "sha256": "62931243c4c12f83ea7a19f7e2e17d65e9472b241e67e68dc16fe960d6b48d67",
+      "size_bytes": 81427
+    },
+    "status": {
+      "locator": "/workspace/labs/motion-control-lab/runs/mcc_placo_study/nonrt_fresh16_20260911T080119Z/campaign_status.json",
+      "sha256": "aa242265bf2527790b924b88aa72d5085bb70944d03e54b6c2295912285d1e94",
+      "size_bytes": 4168
+    }
+  },
+  "display": {
+    "confidence_intervals": false,
+    "downsampling": "display only; fixed per-bin min/max plus all discrete event transitions",
+    "formats": [
+      "svg",
+      "pdf",
+      "png"
+    ],
+    "language": "Chinese report; technical figure labels with units",
+    "representative": "lexicographically first case per input-defined scene family; repeat 0",
+    "windows": "original declared full and disturbance windows"
+  },
+  "expected_units": 5593,
+  "pairing": {
+    "allow_cross_placo_mcc": false,
+    "allowed_factors": {
+      "backend": [
+        "backend"
+      ],
+      "coupling": [
+        "coupling_enabled"
+      ],
+      "hierarchy": [
+        "method",
+        "layers"
+      ],
+      "observation": [
+        "observation"
+      ],
+      "rate": [
+        "secondary_hz"
+      ],
+      "rate_and_scheduler": [
+        "scheduler",
+        "secondary_hz"
+      ],
+      "scheduler": [
+        "scheduler",
+        "cpu_ids"
+      ],
+      "secondary": [
+        "primary_only",
+        "secondary_tasks",
+        "secondary_weight"
+      ],
+      "warm_start": [
+        "warm_start"
+      ]
+    },
+    "keys": [
+      "experiment_id",
+      "case_id",
+      "input_hash",
+      "model_hash",
+      "window_id",
+      "repeat_id",
+      "session_id",
+      "split_id",
+      "component_id"
+    ],
+    "production_static": "historical-only"
+  },
+  "phase": "development",
+  "schema_version": "analysis.v1",
+  "source_policy": {
+    "allowed_statuses": [
+      "completed",
+      "failed"
+    ],
+    "dirty": "allow recorded source content hashes; no reinterpretation of old environment",
+    "failed_partial": "retain all required units; deny unsupported positive effects",
+    "historical_campaigns": "excluded"
+  },
+  "sources": [
+    {
+      "exit_code": 1,
+      "experiment_id": "E09",
+      "inventory": {
+        "locator": "/workspace/labs/motion-control-lab/experiments/E09_solver_cost_and_scalability/runs/20260911T094039.326110Z-cf6c32f5a8/inventory.json",
+        "sha256": "50ad1f4a6bd632b583770c0e1a42bf0e19bf03247e36574aa97bbdc4774b3575",
+        "size_bytes": 29927881
+      },
+      "manifest": {
+        "locator": "/workspace/labs/motion-control-lab/experiments/E09_solver_cost_and_scalability/runs/20260911T094039.326110Z-cf6c32f5a8/E09.manifest.json",
+        "sha256": "231d191da46bbdcbbcb404eb1959d7d0bfe76b2345a1f244558fb8431edfa7c0",
+        "size_bytes": 24796300
+      },
+      "run_dir": "/workspace/labs/motion-control-lab/experiments/E09_solver_cost_and_scalability/runs/20260911T094039.326110Z-cf6c32f5a8",
+      "run_id": "20260911T094039.326110Z-cf6c32f5a8",
+      "status": "finished"
+    },
+    {
+      "exit_code": 1,
+      "experiment_id": "E10",
+      "inventory": {
+        "locator": "/workspace/labs/motion-control-lab/experiments/E10_multirate_scheduling_and_coupling/runs/20260911T095444.165012Z-f043b35f38/inventory.json",
+        "sha256": "7b4f9cc521c1eefef14e1902b4814bcbc1c5eac98b95e6cd51b0110eeae006aa",
+        "size_bytes": 2681590
+      },
+      "manifest": {
+        "locator": "/workspace/labs/motion-control-lab/experiments/E10_multirate_scheduling_and_coupling/runs/20260911T095444.165012Z-f043b35f38/E10.manifest.json",
+        "sha256": "83933144f4459c8d1d595aeac14b59c4418cdccb38d9552546fa685483406d7e",
+        "size_bytes": 2503436
+      },
+      "run_dir": "/workspace/labs/motion-control-lab/experiments/E10_multirate_scheduling_and_coupling/runs/20260911T095444.165012Z-f043b35f38",
+      "run_id": "20260911T095444.165012Z-f043b35f38",
+      "status": "finished"
+    }
+  ],
+  "statistics": {
+    "bootstrap": false,
+    "independent_unit": "case/seed; process repeats nested, ticks not independent",
+    "quantile": "nearest-rank; raw all calls; no average of P99",
+    "significance_tests": false,
+    "summary": "per case and process repeat; descriptive median and range within identical strata"
+  }
+}

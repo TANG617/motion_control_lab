@@ -1,0 +1,1 @@
+{"lower":[-2,-2],"upper":[2,2],"tasks":[{"name":"sum","A":[[1,1]],"b":[1],"priority":0},{"name":"x","A":[[1,0]],"b":[0.25],"priority":1}]}

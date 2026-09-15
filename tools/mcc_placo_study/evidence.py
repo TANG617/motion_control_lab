@@ -60,8 +60,8 @@ def source_fingerprint(path):
     path=pathlib.Path(path).resolve()
     def git(*args): return subprocess.run(['git','-C',str(path),*args],capture_output=True,text=True,check=True).stdout
     top=pathlib.Path(git('rev-parse','--show-toplevel').strip())
-    tracked=git('ls-files','-z','--',str(path)).split('\0')
-    untracked=git('ls-files','--others','--exclude-standard','-z','--',str(path)).split('\0')
+    tracked=git('ls-files','--full-name','-z','--',str(path)).split('\0')
+    untracked=git('ls-files','--full-name','--others','--exclude-standard','-z','--',str(path)).split('\0')
     files=[]
     for name in sorted(set(tracked+untracked)):
         p=top/name

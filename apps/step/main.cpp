@@ -5,6 +5,7 @@
 
 #include "adapters/replay/replay_support.hpp"
 #include "components/robot/r1/r1_robot_config.hpp"
+#include "execution.hpp"
 #include "loop.hpp"
 #include "options.hpp"
 #include "solver.hpp"
@@ -18,6 +19,10 @@ constexpr const char *kProgramId = "mcl_step";
 
 int runTeleop(int argc, char **argv) {
   const auto options = app::parseOptions(argc, argv);
+  if (options.dump_resolved_options) {
+    std::cout << app::resolvedOptions(options) << '\n';
+    return EXIT_SUCCESS;
+  }
   const auto &robot = motion_control_lab::r1RobotConfig();
   if (options.solver == app::SolverKind::Mcc) {
     const std::string solver_title = app::mccSolverTitle(options.backend);
@@ -34,6 +39,16 @@ int runTeleop(int argc, char **argv) {
 
 int runReplay(int argc, char **argv, int process_argc, char **process_argv) {
   auto options = app::parseReplayOptions(argc, argv);
+  if (options.dump_resolved_options) {
+    app::AppOptions resolved;
+    resolved.solver = options.solver;
+    resolved.backend = options.backend;
+    resolved.algorithm = options.algorithm;
+    resolved.interactive.urdf_path = options.replay.urdf_path.string();
+    resolved.interactive.rate_hz = options.rate_hz;
+    std::cout << app::resolvedOptions(resolved) << '\n';
+    return EXIT_SUCCESS;
+  }
   options.replay.original_argv.assign(process_argv,
                                       process_argv + process_argc);
   const auto loaded = replay::loadReplay(options.replay);
@@ -57,6 +72,8 @@ int runReplay(int argc, char **argv, int process_argc, char **process_argv) {
 }
 
 int run(int argc, char **argv) {
+  if (app::publicExecution(argc, argv))
+    return app::executePublic(argc, argv);
   if (argc < 2 || std::string{argv[1]} == "--help" ||
       std::string{argv[1]} == "-h") {
     app::printTopLevelUsage(argv[0]);

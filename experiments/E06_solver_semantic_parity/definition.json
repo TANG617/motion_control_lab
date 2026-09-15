@@ -1,9 +1,12 @@
 {
-  "controlled_factors": {
-    "family_scan": "README discrete required factors",
-    "formal_status": "threshold provenance, parity and input/config freeze pending",
-    "seed": 20260910
-  },
+  "controlled_factors": [
+    "app",
+    "execution_structure",
+    "app_config",
+    "input",
+    "observation",
+    "execution_resources"
+  ],
   "evaluation_windows": {
     "E07": [
       "0-1 baseline",
@@ -17,11 +20,19 @@
     ],
     "snapshot": "one frozen common state"
   },
+  "execution_contract": "execution_request.v1",
   "experiment_id": "E06",
   "failure_policy": "continue units; retain native failure and independent checks; failed required units make batch nonzero",
-  "metric_roles": {
-    "orientation_error": "primary",
-    "position_error": "primary"
+  "formal_execution": false,
+  "legacy_controlled_factors": {
+    "family_scan": "README discrete required factors",
+    "formal_status": "threshold provenance, parity and input/config freeze pending",
+    "seed": 20260910
+  },
+  "legacy_definition": {
+    "path": "/workspace/labs/motion-control-lab/experiments/E06_solver_semantic_parity/declarations/study_legacy.v2.json",
+    "sha256": "d55e1e7051032e377d28c5dca7299d2ca8db239a117afe5e9afca5526d72dc3b",
+    "size_bytes": 59920
   },
   "metrics": [
     "position_error",
@@ -40,6 +51,7 @@
     "joint_vaj",
     "source_coverage"
   ],
+  "migration_version": "app-reuse.v1",
   "question": "Which native mathematical semantics are comparable?",
   "repeats": {
     "confirmatory": 10,
@@ -47,28 +59,57 @@
     "pilot": 3
   },
   "schema_version": "experiment.v2",
+  "scientific_admission": "New application methods require equation/acceptance audit; old A01/A02 conclusions apply only to old identities.",
   "units": [
     {
+      "app": "mcl_baseline",
       "arm_id": "production-static-full",
+      "available": true,
       "binary": "mcl_baseline",
-      "case_id": "model_mapping",
-      "command": [
-        "/usr/bin/python3",
-        "/workspace/labs/motion-control-lab/experiments/E06_solver_semantic_parity/production_adapter.py",
-        "--request",
-        "{request}",
-        "--binary",
-        "{binary}"
-      ],
-      "config": {
-        "algorithm_overrides": "forbidden",
-        "mode": "historical-TargetSolve",
-        "profile": "production-static",
-        "state_mode": "snapshot",
-        "steps": 1
+      "capability_binding": {
+        "app_id": "mcl_baseline",
+        "status": "must-freeze-installed-capabilities-before-execution"
       },
+      "case_id": "model_mapping",
+      "config": {
+        "profile": "production-static"
+      },
+      "execution": {},
+      "execution_structure": "frozen-public-replay",
       "input": "/workspace/labs/motion-control-lab/experiments/E06_solver_semantic_parity/inputs/generated/model_mapping.descriptor.json",
+      "input_preparation": {
+        "status": "ready"
+      },
       "method_id": "production-static",
+      "migration": {
+        "differences": {
+          "comparison_admission": "requires-new-equation-and-acceptance-audit",
+          "new_configuration": {
+            "profile": "production-static"
+          },
+          "new_execution": {},
+          "old_configuration": {
+            "algorithm_overrides": "forbidden",
+            "mode": "historical-TargetSolve",
+            "profile": "production-static",
+            "state_mode": "snapshot",
+            "steps": 1
+          },
+          "policy": "Actual app task construction and failure policy take precedence. Input bytes retained; input interpretation explicitly app-owned. No prior causal or timing admission.",
+          "production_static_changed": false
+        },
+        "legacy_definition": {
+          "path": "/workspace/labs/motion-control-lab/experiments/E06_solver_semantic_parity/declarations/study_legacy.v2.json",
+          "sha256": "d55e1e7051032e377d28c5dca7299d2ca8db239a117afe5e9afca5526d72dc3b",
+          "size_bytes": 59920
+        },
+        "old_arm_id": "production-static-full",
+        "old_config_sha256": "b44d28ad4e4b374f5a9a4e7626e6e30b4ab7e9d020e990d815ba32a1aab9f1fb",
+        "old_method_id": "production-static",
+        "reason": "New app-owned method; historical mathematical and acceptance admission not inherited.",
+        "status": "mapped"
+      },
+      "observation": {},
       "repeats": {
         "confirmatory": 10,
         "development": 1,
@@ -76,73 +117,168 @@
       },
       "required": true,
       "smoke_config": {
-        "maximum_input_samples": 1
-      },
-      "validation_command": [
-        "/usr/bin/python3",
-        "/workspace/labs/motion-control-lab/experiments/E06_solver_semantic_parity/verify.py",
-        "--request",
-        "{request}"
-      ]
+        "maximum_calls": 3,
+        "maximum_duration_s": 0.03
+      }
     },
     {
+      "app": "mcl_step",
       "arm_id": "placo-controlled-full",
-      "binary": "mcl_study_e06",
+      "available": true,
+      "binary": "mcl_step",
+      "capability_binding": {
+        "app_id": "mcl_step",
+        "app_version": "2",
+        "document": {
+          "acceptance_contract": "existing-app-native-v1",
+          "app_id": "mcl_step",
+          "app_version": "2",
+          "execution_structures": [
+            "servo_step"
+          ],
+          "input_formats": [
+            "json"
+          ],
+          "native_pose_enforcement": "hard",
+          "observation_modes": [
+            "full",
+            "minimal",
+            "cpp-new"
+          ],
+          "schema_version": "app_capabilities.v1",
+          "solvers": {
+            "mcc": {
+              "backends": [
+                "proxqp",
+                "eiquadprog"
+              ]
+            },
+            "placo": {
+              "backends": [
+                "eiquadprog"
+              ]
+            }
+          },
+          "state_modes": [
+            "snapshot",
+            "evolving"
+          ],
+          "task_layouts": [
+            "dual-arm-hard-pose"
+          ]
+        },
+        "sha256": "64094320c27a4ee0e4dd586ee16777815cad165d861032ffb05ce5a618630f0c"
+      },
       "case_id": "model_mapping",
       "config": {
-        "acceleration_limit": 4.0,
-        "causal_parity_artifact": null,
-        "causal_parity_status": "unavailable-until-E06-audit",
-        "derivative_policy": "solver-commanded-velocity; TargetSolve derivative unavailable",
-        "enforcement": "soft",
-        "feedback_model": "ideal-kinematic-accepted-state; rejected attempt freezes measured q and v",
-        "gain_per_s": 1.0,
-        "geometry_policy": "model-only",
-        "hard_position_margin": 0.0,
-        "hard_tolerance": 1e-07,
-        "maximum_iterations_policy": "reject",
-        "mode": "ServoStep",
-        "native_acceleration": false,
-        "normalization": "identity",
-        "orientation_tolerance_rad": 0.01,
-        "orientation_weight": 1.0,
-        "period_s": 0.001,
-        "placo_rewrite_equalities": true,
-        "placo_use_sparsity": false,
-        "position_tolerance_m": 0.001,
-        "preservation_tolerance": 1e-07,
-        "primary_only": false,
-        "qp_absolute_tolerance": 1e-07,
-        "qp_iterations": 100,
-        "qp_relative_tolerance": 0.0,
-        "recovery_dwell_s": 0.1,
-        "recovery_orientation_threshold_rad": 0.01,
-        "recovery_position_threshold_m": 0.001,
-        "recovery_release_s": 4.0,
-        "regularization": 1e-08,
-        "rejected_derivative_limit": "frozen measured velocity is not a physical zero-velocity stopped plant",
-        "rejection_policy": "freeze-measured-q-and-v; no failed iterate consumed",
-        "scale_equation": "J*(v-v_baseline)=s*(gain*error-J*v_baseline)",
-        "scale_group": "shared",
-        "scale_progress_weight": 1.0,
-        "secondary_link4": true,
-        "secondary_posture": true,
-        "secondary_tasks": false,
-        "secondary_weight": 1.0,
-        "stall_threshold_mps": 0.0001,
-        "state_mode": "snapshot",
-        "steps": 1,
-        "swap_priorities": false,
-        "target_budget_ms": 3.0,
-        "target_iterations": 20,
-        "target_min_orientation_improvement_rad": 0.0001,
-        "target_min_position_improvement_m": 1e-05,
-        "target_min_posture_improvement_rad": 1e-05,
-        "terminal_policy": "disabled",
-        "warm_start": true
+        "algorithm": {},
+        "backend": "eiquadprog",
+        "rate_hz": 1000.0,
+        "solver": "placo",
+        "target_space": "tcp",
+        "task_layout": "dual-arm-hard-pose",
+        "urdf_path": "/workspace/models/r1.cos.urdf"
       },
+      "execution": {
+        "cold_calls": 1,
+        "measured_calls": 0,
+        "state_mode": "snapshot",
+        "warmup_calls": 0
+      },
+      "execution_structure": "servo_step",
       "input": "/workspace/labs/motion-control-lab/experiments/E06_solver_semantic_parity/inputs/generated/model_mapping.descriptor.json",
-      "method_id": "placo-controlled",
+      "input_preparation": {
+        "status": "ready"
+      },
+      "method_id": "step-placo-app-v1",
+      "migration": {
+        "differences": {
+          "comparison_admission": "requires-new-equation-and-acceptance-audit",
+          "new_configuration": {
+            "algorithm": {},
+            "backend": "eiquadprog",
+            "rate_hz": 1000.0,
+            "solver": "placo",
+            "target_space": "tcp",
+            "task_layout": "dual-arm-hard-pose",
+            "urdf_path": "/workspace/models/r1.cos.urdf"
+          },
+          "new_execution": {
+            "cold_calls": 1,
+            "measured_calls": 0,
+            "state_mode": "snapshot",
+            "warmup_calls": 0
+          },
+          "old_configuration": {
+            "acceleration_limit": 4.0,
+            "causal_parity_artifact": null,
+            "causal_parity_status": "unavailable-until-E06-audit",
+            "derivative_policy": "solver-commanded-velocity; TargetSolve derivative unavailable",
+            "enforcement": "soft",
+            "feedback_model": "ideal-kinematic-accepted-state; rejected attempt freezes measured q and v",
+            "gain_per_s": 1.0,
+            "geometry_policy": "model-only",
+            "hard_position_margin": 0.0,
+            "hard_tolerance": 1e-07,
+            "maximum_iterations_policy": "reject",
+            "mode": "ServoStep",
+            "native_acceleration": false,
+            "normalization": "identity",
+            "orientation_tolerance_rad": 0.01,
+            "orientation_weight": 1.0,
+            "period_s": 0.001,
+            "placo_rewrite_equalities": true,
+            "placo_use_sparsity": false,
+            "position_tolerance_m": 0.001,
+            "preservation_tolerance": 1e-07,
+            "primary_only": false,
+            "qp_absolute_tolerance": 1e-07,
+            "qp_iterations": 100,
+            "qp_relative_tolerance": 0.0,
+            "recovery_dwell_s": 0.1,
+            "recovery_orientation_threshold_rad": 0.01,
+            "recovery_position_threshold_m": 0.001,
+            "recovery_release_s": 4.0,
+            "regularization": 1e-08,
+            "rejected_derivative_limit": "frozen measured velocity is not a physical zero-velocity stopped plant",
+            "rejection_policy": "freeze-measured-q-and-v; no failed iterate consumed",
+            "scale_equation": "J*(v-v_baseline)=s*(gain*error-J*v_baseline)",
+            "scale_group": "shared",
+            "scale_progress_weight": 1.0,
+            "secondary_link4": true,
+            "secondary_posture": true,
+            "secondary_tasks": false,
+            "secondary_weight": 1.0,
+            "stall_threshold_mps": 0.0001,
+            "state_mode": "snapshot",
+            "steps": 1,
+            "swap_priorities": false,
+            "target_budget_ms": 3.0,
+            "target_iterations": 20,
+            "target_min_orientation_improvement_rad": 0.0001,
+            "target_min_position_improvement_m": 1e-05,
+            "target_min_posture_improvement_rad": 1e-05,
+            "terminal_policy": "disabled",
+            "warm_start": true
+          },
+          "policy": "Actual app task construction and failure policy take precedence. Input bytes retained; input interpretation explicitly app-owned. No prior causal or timing admission.",
+          "production_static_changed": false,
+          "task_change": "Dual-arm hard pose app tasks replace study soft pose/posture/workload variants; regularization, constraints, acceptance use existing app defaults."
+        },
+        "legacy_definition": {
+          "path": "/workspace/labs/motion-control-lab/experiments/E06_solver_semantic_parity/declarations/study_legacy.v2.json",
+          "sha256": "d55e1e7051032e377d28c5dca7299d2ca8db239a117afe5e9afca5526d72dc3b",
+          "size_bytes": 59920
+        },
+        "old_arm_id": "placo-controlled-full",
+        "old_config_sha256": "90b36563edbd3bb5ecb41917ccd9ece0602a3cebfb988305199cffae073d52aa",
+        "old_method_id": "placo-controlled",
+        "reason": "New app-owned method; historical mathematical and acceptance admission not inherited.",
+        "status": "mapped"
+      },
+      "observation": {
+        "mode": "full"
+      },
       "repeats": {
         "confirmatory": 10,
         "development": 1,
@@ -150,73 +286,168 @@
       },
       "required": true,
       "smoke_config": {
-        "steps": 1
-      },
-      "validation_command": [
-        "/usr/bin/python3",
-        "/workspace/labs/motion-control-lab/experiments/E06_solver_semantic_parity/verify.py",
-        "--request",
-        "{request}"
-      ]
+        "maximum_calls": 3,
+        "maximum_duration_s": 0.03
+      }
     },
     {
+      "app": "mcl_step",
       "arm_id": "mcc-weighted-full",
-      "binary": "mcl_study_e06",
+      "available": true,
+      "binary": "mcl_step",
+      "capability_binding": {
+        "app_id": "mcl_step",
+        "app_version": "2",
+        "document": {
+          "acceptance_contract": "existing-app-native-v1",
+          "app_id": "mcl_step",
+          "app_version": "2",
+          "execution_structures": [
+            "servo_step"
+          ],
+          "input_formats": [
+            "json"
+          ],
+          "native_pose_enforcement": "hard",
+          "observation_modes": [
+            "full",
+            "minimal",
+            "cpp-new"
+          ],
+          "schema_version": "app_capabilities.v1",
+          "solvers": {
+            "mcc": {
+              "backends": [
+                "proxqp",
+                "eiquadprog"
+              ]
+            },
+            "placo": {
+              "backends": [
+                "eiquadprog"
+              ]
+            }
+          },
+          "state_modes": [
+            "snapshot",
+            "evolving"
+          ],
+          "task_layouts": [
+            "dual-arm-hard-pose"
+          ]
+        },
+        "sha256": "64094320c27a4ee0e4dd586ee16777815cad165d861032ffb05ce5a618630f0c"
+      },
       "case_id": "model_mapping",
       "config": {
-        "acceleration_limit": 4.0,
-        "causal_parity_artifact": null,
-        "causal_parity_status": "unavailable-until-E06-audit",
-        "derivative_policy": "solver-commanded-velocity; TargetSolve derivative unavailable",
-        "enforcement": "soft",
-        "feedback_model": "ideal-kinematic-accepted-state; rejected attempt freezes measured q and v",
-        "gain_per_s": 1.0,
-        "geometry_policy": "model-only",
-        "hard_position_margin": 0.0,
-        "hard_tolerance": 1e-07,
-        "maximum_iterations_policy": "reject",
-        "mode": "ServoStep",
-        "native_acceleration": false,
-        "normalization": "identity",
-        "orientation_tolerance_rad": 0.01,
-        "orientation_weight": 1.0,
-        "period_s": 0.001,
-        "placo_rewrite_equalities": true,
-        "placo_use_sparsity": false,
-        "position_tolerance_m": 0.001,
-        "preservation_tolerance": 1e-07,
-        "primary_only": false,
-        "qp_absolute_tolerance": 1e-07,
-        "qp_iterations": 100,
-        "qp_relative_tolerance": 0.0,
-        "recovery_dwell_s": 0.1,
-        "recovery_orientation_threshold_rad": 0.01,
-        "recovery_position_threshold_m": 0.001,
-        "recovery_release_s": 4.0,
-        "regularization": 1e-08,
-        "rejected_derivative_limit": "frozen measured velocity is not a physical zero-velocity stopped plant",
-        "rejection_policy": "freeze-measured-q-and-v; no failed iterate consumed",
-        "scale_equation": "J*(v-v_baseline)=s*(gain*error-J*v_baseline)",
-        "scale_group": "shared",
-        "scale_progress_weight": 1.0,
-        "secondary_link4": true,
-        "secondary_posture": true,
-        "secondary_tasks": false,
-        "secondary_weight": 1.0,
-        "stall_threshold_mps": 0.0001,
-        "state_mode": "snapshot",
-        "steps": 1,
-        "swap_priorities": false,
-        "target_budget_ms": 3.0,
-        "target_iterations": 20,
-        "target_min_orientation_improvement_rad": 0.0001,
-        "target_min_position_improvement_m": 1e-05,
-        "target_min_posture_improvement_rad": 1e-05,
-        "terminal_policy": "disabled",
-        "warm_start": true
+        "algorithm": {},
+        "backend": "proxqp",
+        "rate_hz": 1000.0,
+        "solver": "mcc",
+        "target_space": "tcp",
+        "task_layout": "dual-arm-hard-pose",
+        "urdf_path": "/workspace/models/r1.cos.urdf"
       },
+      "execution": {
+        "cold_calls": 1,
+        "measured_calls": 0,
+        "state_mode": "snapshot",
+        "warmup_calls": 0
+      },
+      "execution_structure": "servo_step",
       "input": "/workspace/labs/motion-control-lab/experiments/E06_solver_semantic_parity/inputs/generated/model_mapping.descriptor.json",
-      "method_id": "mcc-weighted",
+      "input_preparation": {
+        "status": "ready"
+      },
+      "method_id": "step-mcc-app-v1",
+      "migration": {
+        "differences": {
+          "comparison_admission": "requires-new-equation-and-acceptance-audit",
+          "new_configuration": {
+            "algorithm": {},
+            "backend": "proxqp",
+            "rate_hz": 1000.0,
+            "solver": "mcc",
+            "target_space": "tcp",
+            "task_layout": "dual-arm-hard-pose",
+            "urdf_path": "/workspace/models/r1.cos.urdf"
+          },
+          "new_execution": {
+            "cold_calls": 1,
+            "measured_calls": 0,
+            "state_mode": "snapshot",
+            "warmup_calls": 0
+          },
+          "old_configuration": {
+            "acceleration_limit": 4.0,
+            "causal_parity_artifact": null,
+            "causal_parity_status": "unavailable-until-E06-audit",
+            "derivative_policy": "solver-commanded-velocity; TargetSolve derivative unavailable",
+            "enforcement": "soft",
+            "feedback_model": "ideal-kinematic-accepted-state; rejected attempt freezes measured q and v",
+            "gain_per_s": 1.0,
+            "geometry_policy": "model-only",
+            "hard_position_margin": 0.0,
+            "hard_tolerance": 1e-07,
+            "maximum_iterations_policy": "reject",
+            "mode": "ServoStep",
+            "native_acceleration": false,
+            "normalization": "identity",
+            "orientation_tolerance_rad": 0.01,
+            "orientation_weight": 1.0,
+            "period_s": 0.001,
+            "placo_rewrite_equalities": true,
+            "placo_use_sparsity": false,
+            "position_tolerance_m": 0.001,
+            "preservation_tolerance": 1e-07,
+            "primary_only": false,
+            "qp_absolute_tolerance": 1e-07,
+            "qp_iterations": 100,
+            "qp_relative_tolerance": 0.0,
+            "recovery_dwell_s": 0.1,
+            "recovery_orientation_threshold_rad": 0.01,
+            "recovery_position_threshold_m": 0.001,
+            "recovery_release_s": 4.0,
+            "regularization": 1e-08,
+            "rejected_derivative_limit": "frozen measured velocity is not a physical zero-velocity stopped plant",
+            "rejection_policy": "freeze-measured-q-and-v; no failed iterate consumed",
+            "scale_equation": "J*(v-v_baseline)=s*(gain*error-J*v_baseline)",
+            "scale_group": "shared",
+            "scale_progress_weight": 1.0,
+            "secondary_link4": true,
+            "secondary_posture": true,
+            "secondary_tasks": false,
+            "secondary_weight": 1.0,
+            "stall_threshold_mps": 0.0001,
+            "state_mode": "snapshot",
+            "steps": 1,
+            "swap_priorities": false,
+            "target_budget_ms": 3.0,
+            "target_iterations": 20,
+            "target_min_orientation_improvement_rad": 0.0001,
+            "target_min_position_improvement_m": 1e-05,
+            "target_min_posture_improvement_rad": 1e-05,
+            "terminal_policy": "disabled",
+            "warm_start": true
+          },
+          "policy": "Actual app task construction and failure policy take precedence. Input bytes retained; input interpretation explicitly app-owned. No prior causal or timing admission.",
+          "production_static_changed": false,
+          "task_change": "Dual-arm hard pose app tasks replace study soft pose/posture/workload variants; regularization, constraints, acceptance use existing app defaults."
+        },
+        "legacy_definition": {
+          "path": "/workspace/labs/motion-control-lab/experiments/E06_solver_semantic_parity/declarations/study_legacy.v2.json",
+          "sha256": "d55e1e7051032e377d28c5dca7299d2ca8db239a117afe5e9afca5526d72dc3b",
+          "size_bytes": 59920
+        },
+        "old_arm_id": "mcc-weighted-full",
+        "old_config_sha256": "90b36563edbd3bb5ecb41917ccd9ece0602a3cebfb988305199cffae073d52aa",
+        "old_method_id": "mcc-weighted",
+        "reason": "New app-owned method; historical mathematical and acceptance admission not inherited.",
+        "status": "mapped"
+      },
+      "observation": {
+        "mode": "full"
+      },
       "repeats": {
         "confirmatory": 10,
         "development": 1,
@@ -224,73 +455,168 @@
       },
       "required": true,
       "smoke_config": {
-        "steps": 1
-      },
-      "validation_command": [
-        "/usr/bin/python3",
-        "/workspace/labs/motion-control-lab/experiments/E06_solver_semantic_parity/verify.py",
-        "--request",
-        "{request}"
-      ]
+        "maximum_calls": 3,
+        "maximum_duration_s": 0.03
+      }
     },
     {
+      "app": "mcl_step",
       "arm_id": "placo-controlled-full",
-      "binary": "mcl_study_e06",
+      "available": true,
+      "binary": "mcl_step",
+      "capability_binding": {
+        "app_id": "mcl_step",
+        "app_version": "2",
+        "document": {
+          "acceptance_contract": "existing-app-native-v1",
+          "app_id": "mcl_step",
+          "app_version": "2",
+          "execution_structures": [
+            "servo_step"
+          ],
+          "input_formats": [
+            "json"
+          ],
+          "native_pose_enforcement": "hard",
+          "observation_modes": [
+            "full",
+            "minimal",
+            "cpp-new"
+          ],
+          "schema_version": "app_capabilities.v1",
+          "solvers": {
+            "mcc": {
+              "backends": [
+                "proxqp",
+                "eiquadprog"
+              ]
+            },
+            "placo": {
+              "backends": [
+                "eiquadprog"
+              ]
+            }
+          },
+          "state_modes": [
+            "snapshot",
+            "evolving"
+          ],
+          "task_layouts": [
+            "dual-arm-hard-pose"
+          ]
+        },
+        "sha256": "64094320c27a4ee0e4dd586ee16777815cad165d861032ffb05ce5a618630f0c"
+      },
       "case_id": "representation",
       "config": {
-        "acceleration_limit": 4.0,
-        "causal_parity_artifact": null,
-        "causal_parity_status": "unavailable-until-E06-audit",
-        "derivative_policy": "solver-commanded-velocity; TargetSolve derivative unavailable",
-        "enforcement": "soft",
-        "feedback_model": "ideal-kinematic-accepted-state; rejected attempt freezes measured q and v",
-        "gain_per_s": 1.0,
-        "geometry_policy": "model-only",
-        "hard_position_margin": 0.0,
-        "hard_tolerance": 1e-07,
-        "maximum_iterations_policy": "reject",
-        "mode": "ServoStep",
-        "native_acceleration": false,
-        "normalization": "identity",
-        "orientation_tolerance_rad": 0.01,
-        "orientation_weight": 1.0,
-        "period_s": 0.001,
-        "placo_rewrite_equalities": true,
-        "placo_use_sparsity": false,
-        "position_tolerance_m": 0.001,
-        "preservation_tolerance": 1e-07,
-        "primary_only": false,
-        "qp_absolute_tolerance": 1e-07,
-        "qp_iterations": 100,
-        "qp_relative_tolerance": 0.0,
-        "recovery_dwell_s": 0.1,
-        "recovery_orientation_threshold_rad": 0.01,
-        "recovery_position_threshold_m": 0.001,
-        "recovery_release_s": 4.0,
-        "regularization": 1e-08,
-        "rejected_derivative_limit": "frozen measured velocity is not a physical zero-velocity stopped plant",
-        "rejection_policy": "freeze-measured-q-and-v; no failed iterate consumed",
-        "scale_equation": "J*(v-v_baseline)=s*(gain*error-J*v_baseline)",
-        "scale_group": "shared",
-        "scale_progress_weight": 1.0,
-        "secondary_link4": true,
-        "secondary_posture": true,
-        "secondary_tasks": false,
-        "secondary_weight": 1.0,
-        "stall_threshold_mps": 0.0001,
-        "state_mode": "snapshot",
-        "steps": 1,
-        "swap_priorities": false,
-        "target_budget_ms": 3.0,
-        "target_iterations": 20,
-        "target_min_orientation_improvement_rad": 0.0001,
-        "target_min_position_improvement_m": 1e-05,
-        "target_min_posture_improvement_rad": 1e-05,
-        "terminal_policy": "disabled",
-        "warm_start": true
+        "algorithm": {},
+        "backend": "eiquadprog",
+        "rate_hz": 1000.0,
+        "solver": "placo",
+        "target_space": "tcp",
+        "task_layout": "dual-arm-hard-pose",
+        "urdf_path": "/workspace/models/r1.cos.urdf"
       },
+      "execution": {
+        "cold_calls": 1,
+        "measured_calls": 0,
+        "state_mode": "snapshot",
+        "warmup_calls": 0
+      },
+      "execution_structure": "servo_step",
       "input": "/workspace/labs/motion-control-lab/experiments/E06_solver_semantic_parity/inputs/generated/representation.descriptor.json",
-      "method_id": "placo-controlled",
+      "input_preparation": {
+        "status": "ready"
+      },
+      "method_id": "step-placo-app-v1",
+      "migration": {
+        "differences": {
+          "comparison_admission": "requires-new-equation-and-acceptance-audit",
+          "new_configuration": {
+            "algorithm": {},
+            "backend": "eiquadprog",
+            "rate_hz": 1000.0,
+            "solver": "placo",
+            "target_space": "tcp",
+            "task_layout": "dual-arm-hard-pose",
+            "urdf_path": "/workspace/models/r1.cos.urdf"
+          },
+          "new_execution": {
+            "cold_calls": 1,
+            "measured_calls": 0,
+            "state_mode": "snapshot",
+            "warmup_calls": 0
+          },
+          "old_configuration": {
+            "acceleration_limit": 4.0,
+            "causal_parity_artifact": null,
+            "causal_parity_status": "unavailable-until-E06-audit",
+            "derivative_policy": "solver-commanded-velocity; TargetSolve derivative unavailable",
+            "enforcement": "soft",
+            "feedback_model": "ideal-kinematic-accepted-state; rejected attempt freezes measured q and v",
+            "gain_per_s": 1.0,
+            "geometry_policy": "model-only",
+            "hard_position_margin": 0.0,
+            "hard_tolerance": 1e-07,
+            "maximum_iterations_policy": "reject",
+            "mode": "ServoStep",
+            "native_acceleration": false,
+            "normalization": "identity",
+            "orientation_tolerance_rad": 0.01,
+            "orientation_weight": 1.0,
+            "period_s": 0.001,
+            "placo_rewrite_equalities": true,
+            "placo_use_sparsity": false,
+            "position_tolerance_m": 0.001,
+            "preservation_tolerance": 1e-07,
+            "primary_only": false,
+            "qp_absolute_tolerance": 1e-07,
+            "qp_iterations": 100,
+            "qp_relative_tolerance": 0.0,
+            "recovery_dwell_s": 0.1,
+            "recovery_orientation_threshold_rad": 0.01,
+            "recovery_position_threshold_m": 0.001,
+            "recovery_release_s": 4.0,
+            "regularization": 1e-08,
+            "rejected_derivative_limit": "frozen measured velocity is not a physical zero-velocity stopped plant",
+            "rejection_policy": "freeze-measured-q-and-v; no failed iterate consumed",
+            "scale_equation": "J*(v-v_baseline)=s*(gain*error-J*v_baseline)",
+            "scale_group": "shared",
+            "scale_progress_weight": 1.0,
+            "secondary_link4": true,
+            "secondary_posture": true,
+            "secondary_tasks": false,
+            "secondary_weight": 1.0,
+            "stall_threshold_mps": 0.0001,
+            "state_mode": "snapshot",
+            "steps": 1,
+            "swap_priorities": false,
+            "target_budget_ms": 3.0,
+            "target_iterations": 20,
+            "target_min_orientation_improvement_rad": 0.0001,
+            "target_min_position_improvement_m": 1e-05,
+            "target_min_posture_improvement_rad": 1e-05,
+            "terminal_policy": "disabled",
+            "warm_start": true
+          },
+          "policy": "Actual app task construction and failure policy take precedence. Input bytes retained; input interpretation explicitly app-owned. No prior causal or timing admission.",
+          "production_static_changed": false,
+          "task_change": "Dual-arm hard pose app tasks replace study soft pose/posture/workload variants; regularization, constraints, acceptance use existing app defaults."
+        },
+        "legacy_definition": {
+          "path": "/workspace/labs/motion-control-lab/experiments/E06_solver_semantic_parity/declarations/study_legacy.v2.json",
+          "sha256": "d55e1e7051032e377d28c5dca7299d2ca8db239a117afe5e9afca5526d72dc3b",
+          "size_bytes": 59920
+        },
+        "old_arm_id": "placo-controlled-full",
+        "old_config_sha256": "90b36563edbd3bb5ecb41917ccd9ece0602a3cebfb988305199cffae073d52aa",
+        "old_method_id": "placo-controlled",
+        "reason": "New app-owned method; historical mathematical and acceptance admission not inherited.",
+        "status": "mapped"
+      },
+      "observation": {
+        "mode": "full"
+      },
       "repeats": {
         "confirmatory": 10,
         "development": 1,
@@ -298,73 +624,168 @@
       },
       "required": true,
       "smoke_config": {
-        "steps": 1
-      },
-      "validation_command": [
-        "/usr/bin/python3",
-        "/workspace/labs/motion-control-lab/experiments/E06_solver_semantic_parity/verify.py",
-        "--request",
-        "{request}"
-      ]
+        "maximum_calls": 3,
+        "maximum_duration_s": 0.03
+      }
     },
     {
+      "app": "mcl_step",
       "arm_id": "mcc-weighted-full",
-      "binary": "mcl_study_e06",
+      "available": true,
+      "binary": "mcl_step",
+      "capability_binding": {
+        "app_id": "mcl_step",
+        "app_version": "2",
+        "document": {
+          "acceptance_contract": "existing-app-native-v1",
+          "app_id": "mcl_step",
+          "app_version": "2",
+          "execution_structures": [
+            "servo_step"
+          ],
+          "input_formats": [
+            "json"
+          ],
+          "native_pose_enforcement": "hard",
+          "observation_modes": [
+            "full",
+            "minimal",
+            "cpp-new"
+          ],
+          "schema_version": "app_capabilities.v1",
+          "solvers": {
+            "mcc": {
+              "backends": [
+                "proxqp",
+                "eiquadprog"
+              ]
+            },
+            "placo": {
+              "backends": [
+                "eiquadprog"
+              ]
+            }
+          },
+          "state_modes": [
+            "snapshot",
+            "evolving"
+          ],
+          "task_layouts": [
+            "dual-arm-hard-pose"
+          ]
+        },
+        "sha256": "64094320c27a4ee0e4dd586ee16777815cad165d861032ffb05ce5a618630f0c"
+      },
       "case_id": "representation",
       "config": {
-        "acceleration_limit": 4.0,
-        "causal_parity_artifact": null,
-        "causal_parity_status": "unavailable-until-E06-audit",
-        "derivative_policy": "solver-commanded-velocity; TargetSolve derivative unavailable",
-        "enforcement": "soft",
-        "feedback_model": "ideal-kinematic-accepted-state; rejected attempt freezes measured q and v",
-        "gain_per_s": 1.0,
-        "geometry_policy": "model-only",
-        "hard_position_margin": 0.0,
-        "hard_tolerance": 1e-07,
-        "maximum_iterations_policy": "reject",
-        "mode": "ServoStep",
-        "native_acceleration": false,
-        "normalization": "identity",
-        "orientation_tolerance_rad": 0.01,
-        "orientation_weight": 1.0,
-        "period_s": 0.001,
-        "placo_rewrite_equalities": true,
-        "placo_use_sparsity": false,
-        "position_tolerance_m": 0.001,
-        "preservation_tolerance": 1e-07,
-        "primary_only": false,
-        "qp_absolute_tolerance": 1e-07,
-        "qp_iterations": 100,
-        "qp_relative_tolerance": 0.0,
-        "recovery_dwell_s": 0.1,
-        "recovery_orientation_threshold_rad": 0.01,
-        "recovery_position_threshold_m": 0.001,
-        "recovery_release_s": 4.0,
-        "regularization": 1e-08,
-        "rejected_derivative_limit": "frozen measured velocity is not a physical zero-velocity stopped plant",
-        "rejection_policy": "freeze-measured-q-and-v; no failed iterate consumed",
-        "scale_equation": "J*(v-v_baseline)=s*(gain*error-J*v_baseline)",
-        "scale_group": "shared",
-        "scale_progress_weight": 1.0,
-        "secondary_link4": true,
-        "secondary_posture": true,
-        "secondary_tasks": false,
-        "secondary_weight": 1.0,
-        "stall_threshold_mps": 0.0001,
-        "state_mode": "snapshot",
-        "steps": 1,
-        "swap_priorities": false,
-        "target_budget_ms": 3.0,
-        "target_iterations": 20,
-        "target_min_orientation_improvement_rad": 0.0001,
-        "target_min_position_improvement_m": 1e-05,
-        "target_min_posture_improvement_rad": 1e-05,
-        "terminal_policy": "disabled",
-        "warm_start": true
+        "algorithm": {},
+        "backend": "proxqp",
+        "rate_hz": 1000.0,
+        "solver": "mcc",
+        "target_space": "tcp",
+        "task_layout": "dual-arm-hard-pose",
+        "urdf_path": "/workspace/models/r1.cos.urdf"
       },
+      "execution": {
+        "cold_calls": 1,
+        "measured_calls": 0,
+        "state_mode": "snapshot",
+        "warmup_calls": 0
+      },
+      "execution_structure": "servo_step",
       "input": "/workspace/labs/motion-control-lab/experiments/E06_solver_semantic_parity/inputs/generated/representation.descriptor.json",
-      "method_id": "mcc-weighted",
+      "input_preparation": {
+        "status": "ready"
+      },
+      "method_id": "step-mcc-app-v1",
+      "migration": {
+        "differences": {
+          "comparison_admission": "requires-new-equation-and-acceptance-audit",
+          "new_configuration": {
+            "algorithm": {},
+            "backend": "proxqp",
+            "rate_hz": 1000.0,
+            "solver": "mcc",
+            "target_space": "tcp",
+            "task_layout": "dual-arm-hard-pose",
+            "urdf_path": "/workspace/models/r1.cos.urdf"
+          },
+          "new_execution": {
+            "cold_calls": 1,
+            "measured_calls": 0,
+            "state_mode": "snapshot",
+            "warmup_calls": 0
+          },
+          "old_configuration": {
+            "acceleration_limit": 4.0,
+            "causal_parity_artifact": null,
+            "causal_parity_status": "unavailable-until-E06-audit",
+            "derivative_policy": "solver-commanded-velocity; TargetSolve derivative unavailable",
+            "enforcement": "soft",
+            "feedback_model": "ideal-kinematic-accepted-state; rejected attempt freezes measured q and v",
+            "gain_per_s": 1.0,
+            "geometry_policy": "model-only",
+            "hard_position_margin": 0.0,
+            "hard_tolerance": 1e-07,
+            "maximum_iterations_policy": "reject",
+            "mode": "ServoStep",
+            "native_acceleration": false,
+            "normalization": "identity",
+            "orientation_tolerance_rad": 0.01,
+            "orientation_weight": 1.0,
+            "period_s": 0.001,
+            "placo_rewrite_equalities": true,
+            "placo_use_sparsity": false,
+            "position_tolerance_m": 0.001,
+            "preservation_tolerance": 1e-07,
+            "primary_only": false,
+            "qp_absolute_tolerance": 1e-07,
+            "qp_iterations": 100,
+            "qp_relative_tolerance": 0.0,
+            "recovery_dwell_s": 0.1,
+            "recovery_orientation_threshold_rad": 0.01,
+            "recovery_position_threshold_m": 0.001,
+            "recovery_release_s": 4.0,
+            "regularization": 1e-08,
+            "rejected_derivative_limit": "frozen measured velocity is not a physical zero-velocity stopped plant",
+            "rejection_policy": "freeze-measured-q-and-v; no failed iterate consumed",
+            "scale_equation": "J*(v-v_baseline)=s*(gain*error-J*v_baseline)",
+            "scale_group": "shared",
+            "scale_progress_weight": 1.0,
+            "secondary_link4": true,
+            "secondary_posture": true,
+            "secondary_tasks": false,
+            "secondary_weight": 1.0,
+            "stall_threshold_mps": 0.0001,
+            "state_mode": "snapshot",
+            "steps": 1,
+            "swap_priorities": false,
+            "target_budget_ms": 3.0,
+            "target_iterations": 20,
+            "target_min_orientation_improvement_rad": 0.0001,
+            "target_min_position_improvement_m": 1e-05,
+            "target_min_posture_improvement_rad": 1e-05,
+            "terminal_policy": "disabled",
+            "warm_start": true
+          },
+          "policy": "Actual app task construction and failure policy take precedence. Input bytes retained; input interpretation explicitly app-owned. No prior causal or timing admission.",
+          "production_static_changed": false,
+          "task_change": "Dual-arm hard pose app tasks replace study soft pose/posture/workload variants; regularization, constraints, acceptance use existing app defaults."
+        },
+        "legacy_definition": {
+          "path": "/workspace/labs/motion-control-lab/experiments/E06_solver_semantic_parity/declarations/study_legacy.v2.json",
+          "sha256": "d55e1e7051032e377d28c5dca7299d2ca8db239a117afe5e9afca5526d72dc3b",
+          "size_bytes": 59920
+        },
+        "old_arm_id": "mcc-weighted-full",
+        "old_config_sha256": "90b36563edbd3bb5ecb41917ccd9ece0602a3cebfb988305199cffae073d52aa",
+        "old_method_id": "mcc-weighted",
+        "reason": "New app-owned method; historical mathematical and acceptance admission not inherited.",
+        "status": "mapped"
+      },
+      "observation": {
+        "mode": "full"
+      },
       "repeats": {
         "confirmatory": 10,
         "development": 1,
@@ -372,73 +793,168 @@
       },
       "required": true,
       "smoke_config": {
-        "steps": 1
-      },
-      "validation_command": [
-        "/usr/bin/python3",
-        "/workspace/labs/motion-control-lab/experiments/E06_solver_semantic_parity/verify.py",
-        "--request",
-        "{request}"
-      ]
+        "maximum_calls": 3,
+        "maximum_duration_s": 0.03
+      }
     },
     {
+      "app": "mcl_target",
       "arm_id": "placo-controlled-full",
-      "binary": "mcl_study_e06",
+      "available": true,
+      "binary": "mcl_target",
+      "capability_binding": {
+        "app_id": "mcl_target",
+        "app_version": "2",
+        "document": {
+          "acceptance_contract": "existing-app-native-v1",
+          "app_id": "mcl_target",
+          "app_version": "2",
+          "execution_structures": [
+            "target_solve"
+          ],
+          "input_formats": [
+            "json"
+          ],
+          "native_pose_enforcement": "hard",
+          "observation_modes": [
+            "full",
+            "minimal",
+            "cpp-new"
+          ],
+          "schema_version": "app_capabilities.v1",
+          "solvers": {
+            "mcc": {
+              "backends": [
+                "proxqp",
+                "eiquadprog"
+              ]
+            },
+            "placo": {
+              "backends": [
+                "eiquadprog"
+              ]
+            }
+          },
+          "state_modes": [
+            "snapshot",
+            "evolving"
+          ],
+          "task_layouts": [
+            "dual-arm-hard-pose"
+          ]
+        },
+        "sha256": "e9b5a82536ff65eb0a19f8d2ace31ad33617048efa9b3dd069523be4ec08d4c1"
+      },
       "case_id": "target_pose_zero",
       "config": {
-        "acceleration_limit": 4.0,
-        "causal_parity_artifact": null,
-        "causal_parity_status": "unavailable-until-E06-audit",
-        "derivative_policy": "solver-commanded-velocity; TargetSolve derivative unavailable",
-        "enforcement": "soft",
-        "feedback_model": "ideal-kinematic-accepted-state; rejected attempt freezes measured q and v",
-        "gain_per_s": 1.0,
-        "geometry_policy": "model-only",
-        "hard_position_margin": 0.0,
-        "hard_tolerance": 1e-07,
-        "maximum_iterations_policy": "reject",
-        "mode": "TargetSolve",
-        "native_acceleration": false,
-        "normalization": "identity",
-        "orientation_tolerance_rad": 0.01,
-        "orientation_weight": 1.0,
-        "period_s": 0.001,
-        "placo_rewrite_equalities": true,
-        "placo_use_sparsity": false,
-        "position_tolerance_m": 0.001,
-        "preservation_tolerance": 1e-07,
-        "primary_only": false,
-        "qp_absolute_tolerance": 1e-07,
-        "qp_iterations": 100,
-        "qp_relative_tolerance": 0.0,
-        "recovery_dwell_s": 0.1,
-        "recovery_orientation_threshold_rad": 0.01,
-        "recovery_position_threshold_m": 0.001,
-        "recovery_release_s": 4.0,
-        "regularization": 1e-08,
-        "rejected_derivative_limit": "frozen measured velocity is not a physical zero-velocity stopped plant",
-        "rejection_policy": "freeze-measured-q-and-v; no failed iterate consumed",
-        "scale_equation": "J*(v-v_baseline)=s*(gain*error-J*v_baseline)",
-        "scale_group": "shared",
-        "scale_progress_weight": 1.0,
-        "secondary_link4": true,
-        "secondary_posture": true,
-        "secondary_tasks": false,
-        "secondary_weight": 1.0,
-        "stall_threshold_mps": 0.0001,
-        "state_mode": "snapshot",
-        "steps": 1,
-        "swap_priorities": false,
-        "target_budget_ms": 3.0,
-        "target_iterations": 20,
-        "target_min_orientation_improvement_rad": 0.0001,
-        "target_min_position_improvement_m": 1e-05,
-        "target_min_posture_improvement_rad": 1e-05,
-        "terminal_policy": "disabled",
-        "warm_start": true
+        "algorithm": {},
+        "backend": "eiquadprog",
+        "rate_hz": 1000.0,
+        "solver": "placo",
+        "target_space": "tcp",
+        "task_layout": "dual-arm-hard-pose",
+        "urdf_path": "/workspace/models/r1.cos.urdf"
       },
+      "execution": {
+        "cold_calls": 1,
+        "measured_calls": 0,
+        "state_mode": "snapshot",
+        "warmup_calls": 0
+      },
+      "execution_structure": "target_solve",
       "input": "/workspace/labs/motion-control-lab/experiments/E06_solver_semantic_parity/inputs/generated/target_pose_zero.descriptor.json",
-      "method_id": "placo-controlled",
+      "input_preparation": {
+        "status": "ready"
+      },
+      "method_id": "target-placo-app-v1",
+      "migration": {
+        "differences": {
+          "comparison_admission": "requires-new-equation-and-acceptance-audit",
+          "new_configuration": {
+            "algorithm": {},
+            "backend": "eiquadprog",
+            "rate_hz": 1000.0,
+            "solver": "placo",
+            "target_space": "tcp",
+            "task_layout": "dual-arm-hard-pose",
+            "urdf_path": "/workspace/models/r1.cos.urdf"
+          },
+          "new_execution": {
+            "cold_calls": 1,
+            "measured_calls": 0,
+            "state_mode": "snapshot",
+            "warmup_calls": 0
+          },
+          "old_configuration": {
+            "acceleration_limit": 4.0,
+            "causal_parity_artifact": null,
+            "causal_parity_status": "unavailable-until-E06-audit",
+            "derivative_policy": "solver-commanded-velocity; TargetSolve derivative unavailable",
+            "enforcement": "soft",
+            "feedback_model": "ideal-kinematic-accepted-state; rejected attempt freezes measured q and v",
+            "gain_per_s": 1.0,
+            "geometry_policy": "model-only",
+            "hard_position_margin": 0.0,
+            "hard_tolerance": 1e-07,
+            "maximum_iterations_policy": "reject",
+            "mode": "TargetSolve",
+            "native_acceleration": false,
+            "normalization": "identity",
+            "orientation_tolerance_rad": 0.01,
+            "orientation_weight": 1.0,
+            "period_s": 0.001,
+            "placo_rewrite_equalities": true,
+            "placo_use_sparsity": false,
+            "position_tolerance_m": 0.001,
+            "preservation_tolerance": 1e-07,
+            "primary_only": false,
+            "qp_absolute_tolerance": 1e-07,
+            "qp_iterations": 100,
+            "qp_relative_tolerance": 0.0,
+            "recovery_dwell_s": 0.1,
+            "recovery_orientation_threshold_rad": 0.01,
+            "recovery_position_threshold_m": 0.001,
+            "recovery_release_s": 4.0,
+            "regularization": 1e-08,
+            "rejected_derivative_limit": "frozen measured velocity is not a physical zero-velocity stopped plant",
+            "rejection_policy": "freeze-measured-q-and-v; no failed iterate consumed",
+            "scale_equation": "J*(v-v_baseline)=s*(gain*error-J*v_baseline)",
+            "scale_group": "shared",
+            "scale_progress_weight": 1.0,
+            "secondary_link4": true,
+            "secondary_posture": true,
+            "secondary_tasks": false,
+            "secondary_weight": 1.0,
+            "stall_threshold_mps": 0.0001,
+            "state_mode": "snapshot",
+            "steps": 1,
+            "swap_priorities": false,
+            "target_budget_ms": 3.0,
+            "target_iterations": 20,
+            "target_min_orientation_improvement_rad": 0.0001,
+            "target_min_position_improvement_m": 1e-05,
+            "target_min_posture_improvement_rad": 1e-05,
+            "terminal_policy": "disabled",
+            "warm_start": true
+          },
+          "policy": "Actual app task construction and failure policy take precedence. Input bytes retained; input interpretation explicitly app-owned. No prior causal or timing admission.",
+          "production_static_changed": false,
+          "task_change": "Dual-arm hard pose app tasks replace study soft pose/posture/workload variants; regularization, constraints, acceptance use existing app defaults."
+        },
+        "legacy_definition": {
+          "path": "/workspace/labs/motion-control-lab/experiments/E06_solver_semantic_parity/declarations/study_legacy.v2.json",
+          "sha256": "d55e1e7051032e377d28c5dca7299d2ca8db239a117afe5e9afca5526d72dc3b",
+          "size_bytes": 59920
+        },
+        "old_arm_id": "placo-controlled-full",
+        "old_config_sha256": "4c393c039be82f3a7b740f628e3a9f04c22961abccdf5c48448e03fa209c6bd8",
+        "old_method_id": "placo-controlled",
+        "reason": "New app-owned method; historical mathematical and acceptance admission not inherited.",
+        "status": "mapped"
+      },
+      "observation": {
+        "mode": "full"
+      },
       "repeats": {
         "confirmatory": 10,
         "development": 1,
@@ -446,73 +962,168 @@
       },
       "required": true,
       "smoke_config": {
-        "steps": 1
-      },
-      "validation_command": [
-        "/usr/bin/python3",
-        "/workspace/labs/motion-control-lab/experiments/E06_solver_semantic_parity/verify.py",
-        "--request",
-        "{request}"
-      ]
+        "maximum_calls": 3,
+        "maximum_duration_s": 0.03
+      }
     },
     {
+      "app": "mcl_target",
       "arm_id": "mcc-weighted-full",
-      "binary": "mcl_study_e06",
+      "available": true,
+      "binary": "mcl_target",
+      "capability_binding": {
+        "app_id": "mcl_target",
+        "app_version": "2",
+        "document": {
+          "acceptance_contract": "existing-app-native-v1",
+          "app_id": "mcl_target",
+          "app_version": "2",
+          "execution_structures": [
+            "target_solve"
+          ],
+          "input_formats": [
+            "json"
+          ],
+          "native_pose_enforcement": "hard",
+          "observation_modes": [
+            "full",
+            "minimal",
+            "cpp-new"
+          ],
+          "schema_version": "app_capabilities.v1",
+          "solvers": {
+            "mcc": {
+              "backends": [
+                "proxqp",
+                "eiquadprog"
+              ]
+            },
+            "placo": {
+              "backends": [
+                "eiquadprog"
+              ]
+            }
+          },
+          "state_modes": [
+            "snapshot",
+            "evolving"
+          ],
+          "task_layouts": [
+            "dual-arm-hard-pose"
+          ]
+        },
+        "sha256": "e9b5a82536ff65eb0a19f8d2ace31ad33617048efa9b3dd069523be4ec08d4c1"
+      },
       "case_id": "target_pose_zero",
       "config": {
-        "acceleration_limit": 4.0,
-        "causal_parity_artifact": null,
-        "causal_parity_status": "unavailable-until-E06-audit",
-        "derivative_policy": "solver-commanded-velocity; TargetSolve derivative unavailable",
-        "enforcement": "soft",
-        "feedback_model": "ideal-kinematic-accepted-state; rejected attempt freezes measured q and v",
-        "gain_per_s": 1.0,
-        "geometry_policy": "model-only",
-        "hard_position_margin": 0.0,
-        "hard_tolerance": 1e-07,
-        "maximum_iterations_policy": "reject",
-        "mode": "TargetSolve",
-        "native_acceleration": false,
-        "normalization": "identity",
-        "orientation_tolerance_rad": 0.01,
-        "orientation_weight": 1.0,
-        "period_s": 0.001,
-        "placo_rewrite_equalities": true,
-        "placo_use_sparsity": false,
-        "position_tolerance_m": 0.001,
-        "preservation_tolerance": 1e-07,
-        "primary_only": false,
-        "qp_absolute_tolerance": 1e-07,
-        "qp_iterations": 100,
-        "qp_relative_tolerance": 0.0,
-        "recovery_dwell_s": 0.1,
-        "recovery_orientation_threshold_rad": 0.01,
-        "recovery_position_threshold_m": 0.001,
-        "recovery_release_s": 4.0,
-        "regularization": 1e-08,
-        "rejected_derivative_limit": "frozen measured velocity is not a physical zero-velocity stopped plant",
-        "rejection_policy": "freeze-measured-q-and-v; no failed iterate consumed",
-        "scale_equation": "J*(v-v_baseline)=s*(gain*error-J*v_baseline)",
-        "scale_group": "shared",
-        "scale_progress_weight": 1.0,
-        "secondary_link4": true,
-        "secondary_posture": true,
-        "secondary_tasks": false,
-        "secondary_weight": 1.0,
-        "stall_threshold_mps": 0.0001,
-        "state_mode": "snapshot",
-        "steps": 1,
-        "swap_priorities": false,
-        "target_budget_ms": 3.0,
-        "target_iterations": 20,
-        "target_min_orientation_improvement_rad": 0.0001,
-        "target_min_position_improvement_m": 1e-05,
-        "target_min_posture_improvement_rad": 1e-05,
-        "terminal_policy": "disabled",
-        "warm_start": true
+        "algorithm": {},
+        "backend": "proxqp",
+        "rate_hz": 1000.0,
+        "solver": "mcc",
+        "target_space": "tcp",
+        "task_layout": "dual-arm-hard-pose",
+        "urdf_path": "/workspace/models/r1.cos.urdf"
       },
+      "execution": {
+        "cold_calls": 1,
+        "measured_calls": 0,
+        "state_mode": "snapshot",
+        "warmup_calls": 0
+      },
+      "execution_structure": "target_solve",
       "input": "/workspace/labs/motion-control-lab/experiments/E06_solver_semantic_parity/inputs/generated/target_pose_zero.descriptor.json",
-      "method_id": "mcc-weighted",
+      "input_preparation": {
+        "status": "ready"
+      },
+      "method_id": "target-mcc-app-v1",
+      "migration": {
+        "differences": {
+          "comparison_admission": "requires-new-equation-and-acceptance-audit",
+          "new_configuration": {
+            "algorithm": {},
+            "backend": "proxqp",
+            "rate_hz": 1000.0,
+            "solver": "mcc",
+            "target_space": "tcp",
+            "task_layout": "dual-arm-hard-pose",
+            "urdf_path": "/workspace/models/r1.cos.urdf"
+          },
+          "new_execution": {
+            "cold_calls": 1,
+            "measured_calls": 0,
+            "state_mode": "snapshot",
+            "warmup_calls": 0
+          },
+          "old_configuration": {
+            "acceleration_limit": 4.0,
+            "causal_parity_artifact": null,
+            "causal_parity_status": "unavailable-until-E06-audit",
+            "derivative_policy": "solver-commanded-velocity; TargetSolve derivative unavailable",
+            "enforcement": "soft",
+            "feedback_model": "ideal-kinematic-accepted-state; rejected attempt freezes measured q and v",
+            "gain_per_s": 1.0,
+            "geometry_policy": "model-only",
+            "hard_position_margin": 0.0,
+            "hard_tolerance": 1e-07,
+            "maximum_iterations_policy": "reject",
+            "mode": "TargetSolve",
+            "native_acceleration": false,
+            "normalization": "identity",
+            "orientation_tolerance_rad": 0.01,
+            "orientation_weight": 1.0,
+            "period_s": 0.001,
+            "placo_rewrite_equalities": true,
+            "placo_use_sparsity": false,
+            "position_tolerance_m": 0.001,
+            "preservation_tolerance": 1e-07,
+            "primary_only": false,
+            "qp_absolute_tolerance": 1e-07,
+            "qp_iterations": 100,
+            "qp_relative_tolerance": 0.0,
+            "recovery_dwell_s": 0.1,
+            "recovery_orientation_threshold_rad": 0.01,
+            "recovery_position_threshold_m": 0.001,
+            "recovery_release_s": 4.0,
+            "regularization": 1e-08,
+            "rejected_derivative_limit": "frozen measured velocity is not a physical zero-velocity stopped plant",
+            "rejection_policy": "freeze-measured-q-and-v; no failed iterate consumed",
+            "scale_equation": "J*(v-v_baseline)=s*(gain*error-J*v_baseline)",
+            "scale_group": "shared",
+            "scale_progress_weight": 1.0,
+            "secondary_link4": true,
+            "secondary_posture": true,
+            "secondary_tasks": false,
+            "secondary_weight": 1.0,
+            "stall_threshold_mps": 0.0001,
+            "state_mode": "snapshot",
+            "steps": 1,
+            "swap_priorities": false,
+            "target_budget_ms": 3.0,
+            "target_iterations": 20,
+            "target_min_orientation_improvement_rad": 0.0001,
+            "target_min_position_improvement_m": 1e-05,
+            "target_min_posture_improvement_rad": 1e-05,
+            "terminal_policy": "disabled",
+            "warm_start": true
+          },
+          "policy": "Actual app task construction and failure policy take precedence. Input bytes retained; input interpretation explicitly app-owned. No prior causal or timing admission.",
+          "production_static_changed": false,
+          "task_change": "Dual-arm hard pose app tasks replace study soft pose/posture/workload variants; regularization, constraints, acceptance use existing app defaults."
+        },
+        "legacy_definition": {
+          "path": "/workspace/labs/motion-control-lab/experiments/E06_solver_semantic_parity/declarations/study_legacy.v2.json",
+          "sha256": "d55e1e7051032e377d28c5dca7299d2ca8db239a117afe5e9afca5526d72dc3b",
+          "size_bytes": 59920
+        },
+        "old_arm_id": "mcc-weighted-full",
+        "old_config_sha256": "4c393c039be82f3a7b740f628e3a9f04c22961abccdf5c48448e03fa209c6bd8",
+        "old_method_id": "mcc-weighted",
+        "reason": "New app-owned method; historical mathematical and acceptance admission not inherited.",
+        "status": "mapped"
+      },
+      "observation": {
+        "mode": "full"
+      },
       "repeats": {
         "confirmatory": 10,
         "development": 1,
@@ -520,73 +1131,168 @@
       },
       "required": true,
       "smoke_config": {
-        "steps": 1
-      },
-      "validation_command": [
-        "/usr/bin/python3",
-        "/workspace/labs/motion-control-lab/experiments/E06_solver_semantic_parity/verify.py",
-        "--request",
-        "{request}"
-      ]
+        "maximum_calls": 3,
+        "maximum_duration_s": 0.03
+      }
     },
     {
+      "app": "mcl_target",
       "arm_id": "placo-controlled-full",
-      "binary": "mcl_study_e06",
+      "available": true,
+      "binary": "mcl_target",
+      "capability_binding": {
+        "app_id": "mcl_target",
+        "app_version": "2",
+        "document": {
+          "acceptance_contract": "existing-app-native-v1",
+          "app_id": "mcl_target",
+          "app_version": "2",
+          "execution_structures": [
+            "target_solve"
+          ],
+          "input_formats": [
+            "json"
+          ],
+          "native_pose_enforcement": "hard",
+          "observation_modes": [
+            "full",
+            "minimal",
+            "cpp-new"
+          ],
+          "schema_version": "app_capabilities.v1",
+          "solvers": {
+            "mcc": {
+              "backends": [
+                "proxqp",
+                "eiquadprog"
+              ]
+            },
+            "placo": {
+              "backends": [
+                "eiquadprog"
+              ]
+            }
+          },
+          "state_modes": [
+            "snapshot",
+            "evolving"
+          ],
+          "task_layouts": [
+            "dual-arm-hard-pose"
+          ]
+        },
+        "sha256": "e9b5a82536ff65eb0a19f8d2ace31ad33617048efa9b3dd069523be4ec08d4c1"
+      },
       "case_id": "target_pose_small",
       "config": {
-        "acceleration_limit": 4.0,
-        "causal_parity_artifact": null,
-        "causal_parity_status": "unavailable-until-E06-audit",
-        "derivative_policy": "solver-commanded-velocity; TargetSolve derivative unavailable",
-        "enforcement": "soft",
-        "feedback_model": "ideal-kinematic-accepted-state; rejected attempt freezes measured q and v",
-        "gain_per_s": 1.0,
-        "geometry_policy": "model-only",
-        "hard_position_margin": 0.0,
-        "hard_tolerance": 1e-07,
-        "maximum_iterations_policy": "reject",
-        "mode": "TargetSolve",
-        "native_acceleration": false,
-        "normalization": "identity",
-        "orientation_tolerance_rad": 0.01,
-        "orientation_weight": 1.0,
-        "period_s": 0.001,
-        "placo_rewrite_equalities": true,
-        "placo_use_sparsity": false,
-        "position_tolerance_m": 0.001,
-        "preservation_tolerance": 1e-07,
-        "primary_only": false,
-        "qp_absolute_tolerance": 1e-07,
-        "qp_iterations": 100,
-        "qp_relative_tolerance": 0.0,
-        "recovery_dwell_s": 0.1,
-        "recovery_orientation_threshold_rad": 0.01,
-        "recovery_position_threshold_m": 0.001,
-        "recovery_release_s": 4.0,
-        "regularization": 1e-08,
-        "rejected_derivative_limit": "frozen measured velocity is not a physical zero-velocity stopped plant",
-        "rejection_policy": "freeze-measured-q-and-v; no failed iterate consumed",
-        "scale_equation": "J*(v-v_baseline)=s*(gain*error-J*v_baseline)",
-        "scale_group": "shared",
-        "scale_progress_weight": 1.0,
-        "secondary_link4": true,
-        "secondary_posture": true,
-        "secondary_tasks": false,
-        "secondary_weight": 1.0,
-        "stall_threshold_mps": 0.0001,
-        "state_mode": "snapshot",
-        "steps": 1,
-        "swap_priorities": false,
-        "target_budget_ms": 3.0,
-        "target_iterations": 20,
-        "target_min_orientation_improvement_rad": 0.0001,
-        "target_min_position_improvement_m": 1e-05,
-        "target_min_posture_improvement_rad": 1e-05,
-        "terminal_policy": "disabled",
-        "warm_start": true
+        "algorithm": {},
+        "backend": "eiquadprog",
+        "rate_hz": 1000.0,
+        "solver": "placo",
+        "target_space": "tcp",
+        "task_layout": "dual-arm-hard-pose",
+        "urdf_path": "/workspace/models/r1.cos.urdf"
       },
+      "execution": {
+        "cold_calls": 1,
+        "measured_calls": 0,
+        "state_mode": "snapshot",
+        "warmup_calls": 0
+      },
+      "execution_structure": "target_solve",
       "input": "/workspace/labs/motion-control-lab/experiments/E06_solver_semantic_parity/inputs/generated/target_pose_small.descriptor.json",
-      "method_id": "placo-controlled",
+      "input_preparation": {
+        "status": "ready"
+      },
+      "method_id": "target-placo-app-v1",
+      "migration": {
+        "differences": {
+          "comparison_admission": "requires-new-equation-and-acceptance-audit",
+          "new_configuration": {
+            "algorithm": {},
+            "backend": "eiquadprog",
+            "rate_hz": 1000.0,
+            "solver": "placo",
+            "target_space": "tcp",
+            "task_layout": "dual-arm-hard-pose",
+            "urdf_path": "/workspace/models/r1.cos.urdf"
+          },
+          "new_execution": {
+            "cold_calls": 1,
+            "measured_calls": 0,
+            "state_mode": "snapshot",
+            "warmup_calls": 0
+          },
+          "old_configuration": {
+            "acceleration_limit": 4.0,
+            "causal_parity_artifact": null,
+            "causal_parity_status": "unavailable-until-E06-audit",
+            "derivative_policy": "solver-commanded-velocity; TargetSolve derivative unavailable",
+            "enforcement": "soft",
+            "feedback_model": "ideal-kinematic-accepted-state; rejected attempt freezes measured q and v",
+            "gain_per_s": 1.0,
+            "geometry_policy": "model-only",
+            "hard_position_margin": 0.0,
+            "hard_tolerance": 1e-07,
+            "maximum_iterations_policy": "reject",
+            "mode": "TargetSolve",
+            "native_acceleration": false,
+            "normalization": "identity",
+            "orientation_tolerance_rad": 0.01,
+            "orientation_weight": 1.0,
+            "period_s": 0.001,
+            "placo_rewrite_equalities": true,
+            "placo_use_sparsity": false,
+            "position_tolerance_m": 0.001,
+            "preservation_tolerance": 1e-07,
+            "primary_only": false,
+            "qp_absolute_tolerance": 1e-07,
+            "qp_iterations": 100,
+            "qp_relative_tolerance": 0.0,
+            "recovery_dwell_s": 0.1,
+            "recovery_orientation_threshold_rad": 0.01,
+            "recovery_position_threshold_m": 0.001,
+            "recovery_release_s": 4.0,
+            "regularization": 1e-08,
+            "rejected_derivative_limit": "frozen measured velocity is not a physical zero-velocity stopped plant",
+            "rejection_policy": "freeze-measured-q-and-v; no failed iterate consumed",
+            "scale_equation": "J*(v-v_baseline)=s*(gain*error-J*v_baseline)",
+            "scale_group": "shared",
+            "scale_progress_weight": 1.0,
+            "secondary_link4": true,
+            "secondary_posture": true,
+            "secondary_tasks": false,
+            "secondary_weight": 1.0,
+            "stall_threshold_mps": 0.0001,
+            "state_mode": "snapshot",
+            "steps": 1,
+            "swap_priorities": false,
+            "target_budget_ms": 3.0,
+            "target_iterations": 20,
+            "target_min_orientation_improvement_rad": 0.0001,
+            "target_min_position_improvement_m": 1e-05,
+            "target_min_posture_improvement_rad": 1e-05,
+            "terminal_policy": "disabled",
+            "warm_start": true
+          },
+          "policy": "Actual app task construction and failure policy take precedence. Input bytes retained; input interpretation explicitly app-owned. No prior causal or timing admission.",
+          "production_static_changed": false,
+          "task_change": "Dual-arm hard pose app tasks replace study soft pose/posture/workload variants; regularization, constraints, acceptance use existing app defaults."
+        },
+        "legacy_definition": {
+          "path": "/workspace/labs/motion-control-lab/experiments/E06_solver_semantic_parity/declarations/study_legacy.v2.json",
+          "sha256": "d55e1e7051032e377d28c5dca7299d2ca8db239a117afe5e9afca5526d72dc3b",
+          "size_bytes": 59920
+        },
+        "old_arm_id": "placo-controlled-full",
+        "old_config_sha256": "4c393c039be82f3a7b740f628e3a9f04c22961abccdf5c48448e03fa209c6bd8",
+        "old_method_id": "placo-controlled",
+        "reason": "New app-owned method; historical mathematical and acceptance admission not inherited.",
+        "status": "mapped"
+      },
+      "observation": {
+        "mode": "full"
+      },
       "repeats": {
         "confirmatory": 10,
         "development": 1,
@@ -594,73 +1300,168 @@
       },
       "required": true,
       "smoke_config": {
-        "steps": 1
-      },
-      "validation_command": [
-        "/usr/bin/python3",
-        "/workspace/labs/motion-control-lab/experiments/E06_solver_semantic_parity/verify.py",
-        "--request",
-        "{request}"
-      ]
+        "maximum_calls": 3,
+        "maximum_duration_s": 0.03
+      }
     },
     {
+      "app": "mcl_target",
       "arm_id": "mcc-weighted-full",
-      "binary": "mcl_study_e06",
+      "available": true,
+      "binary": "mcl_target",
+      "capability_binding": {
+        "app_id": "mcl_target",
+        "app_version": "2",
+        "document": {
+          "acceptance_contract": "existing-app-native-v1",
+          "app_id": "mcl_target",
+          "app_version": "2",
+          "execution_structures": [
+            "target_solve"
+          ],
+          "input_formats": [
+            "json"
+          ],
+          "native_pose_enforcement": "hard",
+          "observation_modes": [
+            "full",
+            "minimal",
+            "cpp-new"
+          ],
+          "schema_version": "app_capabilities.v1",
+          "solvers": {
+            "mcc": {
+              "backends": [
+                "proxqp",
+                "eiquadprog"
+              ]
+            },
+            "placo": {
+              "backends": [
+                "eiquadprog"
+              ]
+            }
+          },
+          "state_modes": [
+            "snapshot",
+            "evolving"
+          ],
+          "task_layouts": [
+            "dual-arm-hard-pose"
+          ]
+        },
+        "sha256": "e9b5a82536ff65eb0a19f8d2ace31ad33617048efa9b3dd069523be4ec08d4c1"
+      },
       "case_id": "target_pose_small",
       "config": {
-        "acceleration_limit": 4.0,
-        "causal_parity_artifact": null,
-        "causal_parity_status": "unavailable-until-E06-audit",
-        "derivative_policy": "solver-commanded-velocity; TargetSolve derivative unavailable",
-        "enforcement": "soft",
-        "feedback_model": "ideal-kinematic-accepted-state; rejected attempt freezes measured q and v",
-        "gain_per_s": 1.0,
-        "geometry_policy": "model-only",
-        "hard_position_margin": 0.0,
-        "hard_tolerance": 1e-07,
-        "maximum_iterations_policy": "reject",
-        "mode": "TargetSolve",
-        "native_acceleration": false,
-        "normalization": "identity",
-        "orientation_tolerance_rad": 0.01,
-        "orientation_weight": 1.0,
-        "period_s": 0.001,
-        "placo_rewrite_equalities": true,
-        "placo_use_sparsity": false,
-        "position_tolerance_m": 0.001,
-        "preservation_tolerance": 1e-07,
-        "primary_only": false,
-        "qp_absolute_tolerance": 1e-07,
-        "qp_iterations": 100,
-        "qp_relative_tolerance": 0.0,
-        "recovery_dwell_s": 0.1,
-        "recovery_orientation_threshold_rad": 0.01,
-        "recovery_position_threshold_m": 0.001,
-        "recovery_release_s": 4.0,
-        "regularization": 1e-08,
-        "rejected_derivative_limit": "frozen measured velocity is not a physical zero-velocity stopped plant",
-        "rejection_policy": "freeze-measured-q-and-v; no failed iterate consumed",
-        "scale_equation": "J*(v-v_baseline)=s*(gain*error-J*v_baseline)",
-        "scale_group": "shared",
-        "scale_progress_weight": 1.0,
-        "secondary_link4": true,
-        "secondary_posture": true,
-        "secondary_tasks": false,
-        "secondary_weight": 1.0,
-        "stall_threshold_mps": 0.0001,
-        "state_mode": "snapshot",
-        "steps": 1,
-        "swap_priorities": false,
-        "target_budget_ms": 3.0,
-        "target_iterations": 20,
-        "target_min_orientation_improvement_rad": 0.0001,
-        "target_min_position_improvement_m": 1e-05,
-        "target_min_posture_improvement_rad": 1e-05,
-        "terminal_policy": "disabled",
-        "warm_start": true
+        "algorithm": {},
+        "backend": "proxqp",
+        "rate_hz": 1000.0,
+        "solver": "mcc",
+        "target_space": "tcp",
+        "task_layout": "dual-arm-hard-pose",
+        "urdf_path": "/workspace/models/r1.cos.urdf"
       },
+      "execution": {
+        "cold_calls": 1,
+        "measured_calls": 0,
+        "state_mode": "snapshot",
+        "warmup_calls": 0
+      },
+      "execution_structure": "target_solve",
       "input": "/workspace/labs/motion-control-lab/experiments/E06_solver_semantic_parity/inputs/generated/target_pose_small.descriptor.json",
-      "method_id": "mcc-weighted",
+      "input_preparation": {
+        "status": "ready"
+      },
+      "method_id": "target-mcc-app-v1",
+      "migration": {
+        "differences": {
+          "comparison_admission": "requires-new-equation-and-acceptance-audit",
+          "new_configuration": {
+            "algorithm": {},
+            "backend": "proxqp",
+            "rate_hz": 1000.0,
+            "solver": "mcc",
+            "target_space": "tcp",
+            "task_layout": "dual-arm-hard-pose",
+            "urdf_path": "/workspace/models/r1.cos.urdf"
+          },
+          "new_execution": {
+            "cold_calls": 1,
+            "measured_calls": 0,
+            "state_mode": "snapshot",
+            "warmup_calls": 0
+          },
+          "old_configuration": {
+            "acceleration_limit": 4.0,
+            "causal_parity_artifact": null,
+            "causal_parity_status": "unavailable-until-E06-audit",
+            "derivative_policy": "solver-commanded-velocity; TargetSolve derivative unavailable",
+            "enforcement": "soft",
+            "feedback_model": "ideal-kinematic-accepted-state; rejected attempt freezes measured q and v",
+            "gain_per_s": 1.0,
+            "geometry_policy": "model-only",
+            "hard_position_margin": 0.0,
+            "hard_tolerance": 1e-07,
+            "maximum_iterations_policy": "reject",
+            "mode": "TargetSolve",
+            "native_acceleration": false,
+            "normalization": "identity",
+            "orientation_tolerance_rad": 0.01,
+            "orientation_weight": 1.0,
+            "period_s": 0.001,
+            "placo_rewrite_equalities": true,
+            "placo_use_sparsity": false,
+            "position_tolerance_m": 0.001,
+            "preservation_tolerance": 1e-07,
+            "primary_only": false,
+            "qp_absolute_tolerance": 1e-07,
+            "qp_iterations": 100,
+            "qp_relative_tolerance": 0.0,
+            "recovery_dwell_s": 0.1,
+            "recovery_orientation_threshold_rad": 0.01,
+            "recovery_position_threshold_m": 0.001,
+            "recovery_release_s": 4.0,
+            "regularization": 1e-08,
+            "rejected_derivative_limit": "frozen measured velocity is not a physical zero-velocity stopped plant",
+            "rejection_policy": "freeze-measured-q-and-v; no failed iterate consumed",
+            "scale_equation": "J*(v-v_baseline)=s*(gain*error-J*v_baseline)",
+            "scale_group": "shared",
+            "scale_progress_weight": 1.0,
+            "secondary_link4": true,
+            "secondary_posture": true,
+            "secondary_tasks": false,
+            "secondary_weight": 1.0,
+            "stall_threshold_mps": 0.0001,
+            "state_mode": "snapshot",
+            "steps": 1,
+            "swap_priorities": false,
+            "target_budget_ms": 3.0,
+            "target_iterations": 20,
+            "target_min_orientation_improvement_rad": 0.0001,
+            "target_min_position_improvement_m": 1e-05,
+            "target_min_posture_improvement_rad": 1e-05,
+            "terminal_policy": "disabled",
+            "warm_start": true
+          },
+          "policy": "Actual app task construction and failure policy take precedence. Input bytes retained; input interpretation explicitly app-owned. No prior causal or timing admission.",
+          "production_static_changed": false,
+          "task_change": "Dual-arm hard pose app tasks replace study soft pose/posture/workload variants; regularization, constraints, acceptance use existing app defaults."
+        },
+        "legacy_definition": {
+          "path": "/workspace/labs/motion-control-lab/experiments/E06_solver_semantic_parity/declarations/study_legacy.v2.json",
+          "sha256": "d55e1e7051032e377d28c5dca7299d2ca8db239a117afe5e9afca5526d72dc3b",
+          "size_bytes": 59920
+        },
+        "old_arm_id": "mcc-weighted-full",
+        "old_config_sha256": "4c393c039be82f3a7b740f628e3a9f04c22961abccdf5c48448e03fa209c6bd8",
+        "old_method_id": "mcc-weighted",
+        "reason": "New app-owned method; historical mathematical and acceptance admission not inherited.",
+        "status": "mapped"
+      },
+      "observation": {
+        "mode": "full"
+      },
       "repeats": {
         "confirmatory": 10,
         "development": 1,
@@ -668,73 +1469,168 @@
       },
       "required": true,
       "smoke_config": {
-        "steps": 1
-      },
-      "validation_command": [
-        "/usr/bin/python3",
-        "/workspace/labs/motion-control-lab/experiments/E06_solver_semantic_parity/verify.py",
-        "--request",
-        "{request}"
-      ]
+        "maximum_calls": 3,
+        "maximum_duration_s": 0.03
+      }
     },
     {
+      "app": "mcl_target",
       "arm_id": "placo-controlled-full",
-      "binary": "mcl_study_e06",
+      "available": true,
+      "binary": "mcl_target",
+      "capability_binding": {
+        "app_id": "mcl_target",
+        "app_version": "2",
+        "document": {
+          "acceptance_contract": "existing-app-native-v1",
+          "app_id": "mcl_target",
+          "app_version": "2",
+          "execution_structures": [
+            "target_solve"
+          ],
+          "input_formats": [
+            "json"
+          ],
+          "native_pose_enforcement": "hard",
+          "observation_modes": [
+            "full",
+            "minimal",
+            "cpp-new"
+          ],
+          "schema_version": "app_capabilities.v1",
+          "solvers": {
+            "mcc": {
+              "backends": [
+                "proxqp",
+                "eiquadprog"
+              ]
+            },
+            "placo": {
+              "backends": [
+                "eiquadprog"
+              ]
+            }
+          },
+          "state_modes": [
+            "snapshot",
+            "evolving"
+          ],
+          "task_layouts": [
+            "dual-arm-hard-pose"
+          ]
+        },
+        "sha256": "e9b5a82536ff65eb0a19f8d2ace31ad33617048efa9b3dd069523be4ec08d4c1"
+      },
       "case_id": "target_pose_medium",
       "config": {
-        "acceleration_limit": 4.0,
-        "causal_parity_artifact": null,
-        "causal_parity_status": "unavailable-until-E06-audit",
-        "derivative_policy": "solver-commanded-velocity; TargetSolve derivative unavailable",
-        "enforcement": "soft",
-        "feedback_model": "ideal-kinematic-accepted-state; rejected attempt freezes measured q and v",
-        "gain_per_s": 1.0,
-        "geometry_policy": "model-only",
-        "hard_position_margin": 0.0,
-        "hard_tolerance": 1e-07,
-        "maximum_iterations_policy": "reject",
-        "mode": "TargetSolve",
-        "native_acceleration": false,
-        "normalization": "identity",
-        "orientation_tolerance_rad": 0.01,
-        "orientation_weight": 1.0,
-        "period_s": 0.001,
-        "placo_rewrite_equalities": true,
-        "placo_use_sparsity": false,
-        "position_tolerance_m": 0.001,
-        "preservation_tolerance": 1e-07,
-        "primary_only": false,
-        "qp_absolute_tolerance": 1e-07,
-        "qp_iterations": 100,
-        "qp_relative_tolerance": 0.0,
-        "recovery_dwell_s": 0.1,
-        "recovery_orientation_threshold_rad": 0.01,
-        "recovery_position_threshold_m": 0.001,
-        "recovery_release_s": 4.0,
-        "regularization": 1e-08,
-        "rejected_derivative_limit": "frozen measured velocity is not a physical zero-velocity stopped plant",
-        "rejection_policy": "freeze-measured-q-and-v; no failed iterate consumed",
-        "scale_equation": "J*(v-v_baseline)=s*(gain*error-J*v_baseline)",
-        "scale_group": "shared",
-        "scale_progress_weight": 1.0,
-        "secondary_link4": true,
-        "secondary_posture": true,
-        "secondary_tasks": false,
-        "secondary_weight": 1.0,
-        "stall_threshold_mps": 0.0001,
-        "state_mode": "snapshot",
-        "steps": 1,
-        "swap_priorities": false,
-        "target_budget_ms": 3.0,
-        "target_iterations": 20,
-        "target_min_orientation_improvement_rad": 0.0001,
-        "target_min_position_improvement_m": 1e-05,
-        "target_min_posture_improvement_rad": 1e-05,
-        "terminal_policy": "disabled",
-        "warm_start": true
+        "algorithm": {},
+        "backend": "eiquadprog",
+        "rate_hz": 1000.0,
+        "solver": "placo",
+        "target_space": "tcp",
+        "task_layout": "dual-arm-hard-pose",
+        "urdf_path": "/workspace/models/r1.cos.urdf"
       },
+      "execution": {
+        "cold_calls": 1,
+        "measured_calls": 0,
+        "state_mode": "snapshot",
+        "warmup_calls": 0
+      },
+      "execution_structure": "target_solve",
       "input": "/workspace/labs/motion-control-lab/experiments/E06_solver_semantic_parity/inputs/generated/target_pose_medium.descriptor.json",
-      "method_id": "placo-controlled",
+      "input_preparation": {
+        "status": "ready"
+      },
+      "method_id": "target-placo-app-v1",
+      "migration": {
+        "differences": {
+          "comparison_admission": "requires-new-equation-and-acceptance-audit",
+          "new_configuration": {
+            "algorithm": {},
+            "backend": "eiquadprog",
+            "rate_hz": 1000.0,
+            "solver": "placo",
+            "target_space": "tcp",
+            "task_layout": "dual-arm-hard-pose",
+            "urdf_path": "/workspace/models/r1.cos.urdf"
+          },
+          "new_execution": {
+            "cold_calls": 1,
+            "measured_calls": 0,
+            "state_mode": "snapshot",
+            "warmup_calls": 0
+          },
+          "old_configuration": {
+            "acceleration_limit": 4.0,
+            "causal_parity_artifact": null,
+            "causal_parity_status": "unavailable-until-E06-audit",
+            "derivative_policy": "solver-commanded-velocity; TargetSolve derivative unavailable",
+            "enforcement": "soft",
+            "feedback_model": "ideal-kinematic-accepted-state; rejected attempt freezes measured q and v",
+            "gain_per_s": 1.0,
+            "geometry_policy": "model-only",
+            "hard_position_margin": 0.0,
+            "hard_tolerance": 1e-07,
+            "maximum_iterations_policy": "reject",
+            "mode": "TargetSolve",
+            "native_acceleration": false,
+            "normalization": "identity",
+            "orientation_tolerance_rad": 0.01,
+            "orientation_weight": 1.0,
+            "period_s": 0.001,
+            "placo_rewrite_equalities": true,
+            "placo_use_sparsity": false,
+            "position_tolerance_m": 0.001,
+            "preservation_tolerance": 1e-07,
+            "primary_only": false,
+            "qp_absolute_tolerance": 1e-07,
+            "qp_iterations": 100,
+            "qp_relative_tolerance": 0.0,
+            "recovery_dwell_s": 0.1,
+            "recovery_orientation_threshold_rad": 0.01,
+            "recovery_position_threshold_m": 0.001,
+            "recovery_release_s": 4.0,
+            "regularization": 1e-08,
+            "rejected_derivative_limit": "frozen measured velocity is not a physical zero-velocity stopped plant",
+            "rejection_policy": "freeze-measured-q-and-v; no failed iterate consumed",
+            "scale_equation": "J*(v-v_baseline)=s*(gain*error-J*v_baseline)",
+            "scale_group": "shared",
+            "scale_progress_weight": 1.0,
+            "secondary_link4": true,
+            "secondary_posture": true,
+            "secondary_tasks": false,
+            "secondary_weight": 1.0,
+            "stall_threshold_mps": 0.0001,
+            "state_mode": "snapshot",
+            "steps": 1,
+            "swap_priorities": false,
+            "target_budget_ms": 3.0,
+            "target_iterations": 20,
+            "target_min_orientation_improvement_rad": 0.0001,
+            "target_min_position_improvement_m": 1e-05,
+            "target_min_posture_improvement_rad": 1e-05,
+            "terminal_policy": "disabled",
+            "warm_start": true
+          },
+          "policy": "Actual app task construction and failure policy take precedence. Input bytes retained; input interpretation explicitly app-owned. No prior causal or timing admission.",
+          "production_static_changed": false,
+          "task_change": "Dual-arm hard pose app tasks replace study soft pose/posture/workload variants; regularization, constraints, acceptance use existing app defaults."
+        },
+        "legacy_definition": {
+          "path": "/workspace/labs/motion-control-lab/experiments/E06_solver_semantic_parity/declarations/study_legacy.v2.json",
+          "sha256": "d55e1e7051032e377d28c5dca7299d2ca8db239a117afe5e9afca5526d72dc3b",
+          "size_bytes": 59920
+        },
+        "old_arm_id": "placo-controlled-full",
+        "old_config_sha256": "4c393c039be82f3a7b740f628e3a9f04c22961abccdf5c48448e03fa209c6bd8",
+        "old_method_id": "placo-controlled",
+        "reason": "New app-owned method; historical mathematical and acceptance admission not inherited.",
+        "status": "mapped"
+      },
+      "observation": {
+        "mode": "full"
+      },
       "repeats": {
         "confirmatory": 10,
         "development": 1,
@@ -742,73 +1638,168 @@
       },
       "required": true,
       "smoke_config": {
-        "steps": 1
-      },
-      "validation_command": [
-        "/usr/bin/python3",
-        "/workspace/labs/motion-control-lab/experiments/E06_solver_semantic_parity/verify.py",
-        "--request",
-        "{request}"
-      ]
+        "maximum_calls": 3,
+        "maximum_duration_s": 0.03
+      }
     },
     {
+      "app": "mcl_target",
       "arm_id": "mcc-weighted-full",
-      "binary": "mcl_study_e06",
+      "available": true,
+      "binary": "mcl_target",
+      "capability_binding": {
+        "app_id": "mcl_target",
+        "app_version": "2",
+        "document": {
+          "acceptance_contract": "existing-app-native-v1",
+          "app_id": "mcl_target",
+          "app_version": "2",
+          "execution_structures": [
+            "target_solve"
+          ],
+          "input_formats": [
+            "json"
+          ],
+          "native_pose_enforcement": "hard",
+          "observation_modes": [
+            "full",
+            "minimal",
+            "cpp-new"
+          ],
+          "schema_version": "app_capabilities.v1",
+          "solvers": {
+            "mcc": {
+              "backends": [
+                "proxqp",
+                "eiquadprog"
+              ]
+            },
+            "placo": {
+              "backends": [
+                "eiquadprog"
+              ]
+            }
+          },
+          "state_modes": [
+            "snapshot",
+            "evolving"
+          ],
+          "task_layouts": [
+            "dual-arm-hard-pose"
+          ]
+        },
+        "sha256": "e9b5a82536ff65eb0a19f8d2ace31ad33617048efa9b3dd069523be4ec08d4c1"
+      },
       "case_id": "target_pose_medium",
       "config": {
-        "acceleration_limit": 4.0,
-        "causal_parity_artifact": null,
-        "causal_parity_status": "unavailable-until-E06-audit",
-        "derivative_policy": "solver-commanded-velocity; TargetSolve derivative unavailable",
-        "enforcement": "soft",
-        "feedback_model": "ideal-kinematic-accepted-state; rejected attempt freezes measured q and v",
-        "gain_per_s": 1.0,
-        "geometry_policy": "model-only",
-        "hard_position_margin": 0.0,
-        "hard_tolerance": 1e-07,
-        "maximum_iterations_policy": "reject",
-        "mode": "TargetSolve",
-        "native_acceleration": false,
-        "normalization": "identity",
-        "orientation_tolerance_rad": 0.01,
-        "orientation_weight": 1.0,
-        "period_s": 0.001,
-        "placo_rewrite_equalities": true,
-        "placo_use_sparsity": false,
-        "position_tolerance_m": 0.001,
-        "preservation_tolerance": 1e-07,
-        "primary_only": false,
-        "qp_absolute_tolerance": 1e-07,
-        "qp_iterations": 100,
-        "qp_relative_tolerance": 0.0,
-        "recovery_dwell_s": 0.1,
-        "recovery_orientation_threshold_rad": 0.01,
-        "recovery_position_threshold_m": 0.001,
-        "recovery_release_s": 4.0,
-        "regularization": 1e-08,
-        "rejected_derivative_limit": "frozen measured velocity is not a physical zero-velocity stopped plant",
-        "rejection_policy": "freeze-measured-q-and-v; no failed iterate consumed",
-        "scale_equation": "J*(v-v_baseline)=s*(gain*error-J*v_baseline)",
-        "scale_group": "shared",
-        "scale_progress_weight": 1.0,
-        "secondary_link4": true,
-        "secondary_posture": true,
-        "secondary_tasks": false,
-        "secondary_weight": 1.0,
-        "stall_threshold_mps": 0.0001,
-        "state_mode": "snapshot",
-        "steps": 1,
-        "swap_priorities": false,
-        "target_budget_ms": 3.0,
-        "target_iterations": 20,
-        "target_min_orientation_improvement_rad": 0.0001,
-        "target_min_position_improvement_m": 1e-05,
-        "target_min_posture_improvement_rad": 1e-05,
-        "terminal_policy": "disabled",
-        "warm_start": true
+        "algorithm": {},
+        "backend": "proxqp",
+        "rate_hz": 1000.0,
+        "solver": "mcc",
+        "target_space": "tcp",
+        "task_layout": "dual-arm-hard-pose",
+        "urdf_path": "/workspace/models/r1.cos.urdf"
       },
+      "execution": {
+        "cold_calls": 1,
+        "measured_calls": 0,
+        "state_mode": "snapshot",
+        "warmup_calls": 0
+      },
+      "execution_structure": "target_solve",
       "input": "/workspace/labs/motion-control-lab/experiments/E06_solver_semantic_parity/inputs/generated/target_pose_medium.descriptor.json",
-      "method_id": "mcc-weighted",
+      "input_preparation": {
+        "status": "ready"
+      },
+      "method_id": "target-mcc-app-v1",
+      "migration": {
+        "differences": {
+          "comparison_admission": "requires-new-equation-and-acceptance-audit",
+          "new_configuration": {
+            "algorithm": {},
+            "backend": "proxqp",
+            "rate_hz": 1000.0,
+            "solver": "mcc",
+            "target_space": "tcp",
+            "task_layout": "dual-arm-hard-pose",
+            "urdf_path": "/workspace/models/r1.cos.urdf"
+          },
+          "new_execution": {
+            "cold_calls": 1,
+            "measured_calls": 0,
+            "state_mode": "snapshot",
+            "warmup_calls": 0
+          },
+          "old_configuration": {
+            "acceleration_limit": 4.0,
+            "causal_parity_artifact": null,
+            "causal_parity_status": "unavailable-until-E06-audit",
+            "derivative_policy": "solver-commanded-velocity; TargetSolve derivative unavailable",
+            "enforcement": "soft",
+            "feedback_model": "ideal-kinematic-accepted-state; rejected attempt freezes measured q and v",
+            "gain_per_s": 1.0,
+            "geometry_policy": "model-only",
+            "hard_position_margin": 0.0,
+            "hard_tolerance": 1e-07,
+            "maximum_iterations_policy": "reject",
+            "mode": "TargetSolve",
+            "native_acceleration": false,
+            "normalization": "identity",
+            "orientation_tolerance_rad": 0.01,
+            "orientation_weight": 1.0,
+            "period_s": 0.001,
+            "placo_rewrite_equalities": true,
+            "placo_use_sparsity": false,
+            "position_tolerance_m": 0.001,
+            "preservation_tolerance": 1e-07,
+            "primary_only": false,
+            "qp_absolute_tolerance": 1e-07,
+            "qp_iterations": 100,
+            "qp_relative_tolerance": 0.0,
+            "recovery_dwell_s": 0.1,
+            "recovery_orientation_threshold_rad": 0.01,
+            "recovery_position_threshold_m": 0.001,
+            "recovery_release_s": 4.0,
+            "regularization": 1e-08,
+            "rejected_derivative_limit": "frozen measured velocity is not a physical zero-velocity stopped plant",
+            "rejection_policy": "freeze-measured-q-and-v; no failed iterate consumed",
+            "scale_equation": "J*(v-v_baseline)=s*(gain*error-J*v_baseline)",
+            "scale_group": "shared",
+            "scale_progress_weight": 1.0,
+            "secondary_link4": true,
+            "secondary_posture": true,
+            "secondary_tasks": false,
+            "secondary_weight": 1.0,
+            "stall_threshold_mps": 0.0001,
+            "state_mode": "snapshot",
+            "steps": 1,
+            "swap_priorities": false,
+            "target_budget_ms": 3.0,
+            "target_iterations": 20,
+            "target_min_orientation_improvement_rad": 0.0001,
+            "target_min_position_improvement_m": 1e-05,
+            "target_min_posture_improvement_rad": 1e-05,
+            "terminal_policy": "disabled",
+            "warm_start": true
+          },
+          "policy": "Actual app task construction and failure policy take precedence. Input bytes retained; input interpretation explicitly app-owned. No prior causal or timing admission.",
+          "production_static_changed": false,
+          "task_change": "Dual-arm hard pose app tasks replace study soft pose/posture/workload variants; regularization, constraints, acceptance use existing app defaults."
+        },
+        "legacy_definition": {
+          "path": "/workspace/labs/motion-control-lab/experiments/E06_solver_semantic_parity/declarations/study_legacy.v2.json",
+          "sha256": "d55e1e7051032e377d28c5dca7299d2ca8db239a117afe5e9afca5526d72dc3b",
+          "size_bytes": 59920
+        },
+        "old_arm_id": "mcc-weighted-full",
+        "old_config_sha256": "4c393c039be82f3a7b740f628e3a9f04c22961abccdf5c48448e03fa209c6bd8",
+        "old_method_id": "mcc-weighted",
+        "reason": "New app-owned method; historical mathematical and acceptance admission not inherited.",
+        "status": "mapped"
+      },
+      "observation": {
+        "mode": "full"
+      },
       "repeats": {
         "confirmatory": 10,
         "development": 1,
@@ -816,73 +1807,168 @@
       },
       "required": true,
       "smoke_config": {
-        "steps": 1
-      },
-      "validation_command": [
-        "/usr/bin/python3",
-        "/workspace/labs/motion-control-lab/experiments/E06_solver_semantic_parity/verify.py",
-        "--request",
-        "{request}"
-      ]
+        "maximum_calls": 3,
+        "maximum_duration_s": 0.03
+      }
     },
     {
+      "app": "mcl_step",
       "arm_id": "placo-controlled-full",
-      "binary": "mcl_study_e06",
+      "available": true,
+      "binary": "mcl_step",
+      "capability_binding": {
+        "app_id": "mcl_step",
+        "app_version": "2",
+        "document": {
+          "acceptance_contract": "existing-app-native-v1",
+          "app_id": "mcl_step",
+          "app_version": "2",
+          "execution_structures": [
+            "servo_step"
+          ],
+          "input_formats": [
+            "json"
+          ],
+          "native_pose_enforcement": "hard",
+          "observation_modes": [
+            "full",
+            "minimal",
+            "cpp-new"
+          ],
+          "schema_version": "app_capabilities.v1",
+          "solvers": {
+            "mcc": {
+              "backends": [
+                "proxqp",
+                "eiquadprog"
+              ]
+            },
+            "placo": {
+              "backends": [
+                "eiquadprog"
+              ]
+            }
+          },
+          "state_modes": [
+            "snapshot",
+            "evolving"
+          ],
+          "task_layouts": [
+            "dual-arm-hard-pose"
+          ]
+        },
+        "sha256": "64094320c27a4ee0e4dd586ee16777815cad165d861032ffb05ce5a618630f0c"
+      },
       "case_id": "servo_snapshot_velocity_0.0",
       "config": {
-        "acceleration_limit": 4.0,
-        "causal_parity_artifact": null,
-        "causal_parity_status": "unavailable-until-E06-audit",
-        "derivative_policy": "solver-commanded-velocity; TargetSolve derivative unavailable",
-        "enforcement": "soft",
-        "feedback_model": "ideal-kinematic-accepted-state; rejected attempt freezes measured q and v",
-        "gain_per_s": 1.0,
-        "geometry_policy": "model-only",
-        "hard_position_margin": 0.0,
-        "hard_tolerance": 1e-07,
-        "maximum_iterations_policy": "reject",
-        "mode": "ServoStep",
-        "native_acceleration": false,
-        "normalization": "identity",
-        "orientation_tolerance_rad": 0.01,
-        "orientation_weight": 1.0,
-        "period_s": 0.001,
-        "placo_rewrite_equalities": true,
-        "placo_use_sparsity": false,
-        "position_tolerance_m": 0.001,
-        "preservation_tolerance": 1e-07,
-        "primary_only": false,
-        "qp_absolute_tolerance": 1e-07,
-        "qp_iterations": 100,
-        "qp_relative_tolerance": 0.0,
-        "recovery_dwell_s": 0.1,
-        "recovery_orientation_threshold_rad": 0.01,
-        "recovery_position_threshold_m": 0.001,
-        "recovery_release_s": 4.0,
-        "regularization": 1e-08,
-        "rejected_derivative_limit": "frozen measured velocity is not a physical zero-velocity stopped plant",
-        "rejection_policy": "freeze-measured-q-and-v; no failed iterate consumed",
-        "scale_equation": "J*(v-v_baseline)=s*(gain*error-J*v_baseline)",
-        "scale_group": "shared",
-        "scale_progress_weight": 1.0,
-        "secondary_link4": true,
-        "secondary_posture": true,
-        "secondary_tasks": false,
-        "secondary_weight": 1.0,
-        "stall_threshold_mps": 0.0001,
-        "state_mode": "snapshot",
-        "steps": 1,
-        "swap_priorities": false,
-        "target_budget_ms": 3.0,
-        "target_iterations": 20,
-        "target_min_orientation_improvement_rad": 0.0001,
-        "target_min_position_improvement_m": 1e-05,
-        "target_min_posture_improvement_rad": 1e-05,
-        "terminal_policy": "disabled",
-        "warm_start": true
+        "algorithm": {},
+        "backend": "eiquadprog",
+        "rate_hz": 1000.0,
+        "solver": "placo",
+        "target_space": "tcp",
+        "task_layout": "dual-arm-hard-pose",
+        "urdf_path": "/workspace/models/r1.cos.urdf"
       },
+      "execution": {
+        "cold_calls": 1,
+        "measured_calls": 0,
+        "state_mode": "snapshot",
+        "warmup_calls": 0
+      },
+      "execution_structure": "servo_step",
       "input": "/workspace/labs/motion-control-lab/experiments/E06_solver_semantic_parity/inputs/generated/servo_snapshot_velocity_0.0.descriptor.json",
-      "method_id": "placo-controlled",
+      "input_preparation": {
+        "status": "ready"
+      },
+      "method_id": "step-placo-app-v1",
+      "migration": {
+        "differences": {
+          "comparison_admission": "requires-new-equation-and-acceptance-audit",
+          "new_configuration": {
+            "algorithm": {},
+            "backend": "eiquadprog",
+            "rate_hz": 1000.0,
+            "solver": "placo",
+            "target_space": "tcp",
+            "task_layout": "dual-arm-hard-pose",
+            "urdf_path": "/workspace/models/r1.cos.urdf"
+          },
+          "new_execution": {
+            "cold_calls": 1,
+            "measured_calls": 0,
+            "state_mode": "snapshot",
+            "warmup_calls": 0
+          },
+          "old_configuration": {
+            "acceleration_limit": 4.0,
+            "causal_parity_artifact": null,
+            "causal_parity_status": "unavailable-until-E06-audit",
+            "derivative_policy": "solver-commanded-velocity; TargetSolve derivative unavailable",
+            "enforcement": "soft",
+            "feedback_model": "ideal-kinematic-accepted-state; rejected attempt freezes measured q and v",
+            "gain_per_s": 1.0,
+            "geometry_policy": "model-only",
+            "hard_position_margin": 0.0,
+            "hard_tolerance": 1e-07,
+            "maximum_iterations_policy": "reject",
+            "mode": "ServoStep",
+            "native_acceleration": false,
+            "normalization": "identity",
+            "orientation_tolerance_rad": 0.01,
+            "orientation_weight": 1.0,
+            "period_s": 0.001,
+            "placo_rewrite_equalities": true,
+            "placo_use_sparsity": false,
+            "position_tolerance_m": 0.001,
+            "preservation_tolerance": 1e-07,
+            "primary_only": false,
+            "qp_absolute_tolerance": 1e-07,
+            "qp_iterations": 100,
+            "qp_relative_tolerance": 0.0,
+            "recovery_dwell_s": 0.1,
+            "recovery_orientation_threshold_rad": 0.01,
+            "recovery_position_threshold_m": 0.001,
+            "recovery_release_s": 4.0,
+            "regularization": 1e-08,
+            "rejected_derivative_limit": "frozen measured velocity is not a physical zero-velocity stopped plant",
+            "rejection_policy": "freeze-measured-q-and-v; no failed iterate consumed",
+            "scale_equation": "J*(v-v_baseline)=s*(gain*error-J*v_baseline)",
+            "scale_group": "shared",
+            "scale_progress_weight": 1.0,
+            "secondary_link4": true,
+            "secondary_posture": true,
+            "secondary_tasks": false,
+            "secondary_weight": 1.0,
+            "stall_threshold_mps": 0.0001,
+            "state_mode": "snapshot",
+            "steps": 1,
+            "swap_priorities": false,
+            "target_budget_ms": 3.0,
+            "target_iterations": 20,
+            "target_min_orientation_improvement_rad": 0.0001,
+            "target_min_position_improvement_m": 1e-05,
+            "target_min_posture_improvement_rad": 1e-05,
+            "terminal_policy": "disabled",
+            "warm_start": true
+          },
+          "policy": "Actual app task construction and failure policy take precedence. Input bytes retained; input interpretation explicitly app-owned. No prior causal or timing admission.",
+          "production_static_changed": false,
+          "task_change": "Dual-arm hard pose app tasks replace study soft pose/posture/workload variants; regularization, constraints, acceptance use existing app defaults."
+        },
+        "legacy_definition": {
+          "path": "/workspace/labs/motion-control-lab/experiments/E06_solver_semantic_parity/declarations/study_legacy.v2.json",
+          "sha256": "d55e1e7051032e377d28c5dca7299d2ca8db239a117afe5e9afca5526d72dc3b",
+          "size_bytes": 59920
+        },
+        "old_arm_id": "placo-controlled-full",
+        "old_config_sha256": "90b36563edbd3bb5ecb41917ccd9ece0602a3cebfb988305199cffae073d52aa",
+        "old_method_id": "placo-controlled",
+        "reason": "New app-owned method; historical mathematical and acceptance admission not inherited.",
+        "status": "mapped"
+      },
+      "observation": {
+        "mode": "full"
+      },
       "repeats": {
         "confirmatory": 10,
         "development": 1,
@@ -890,73 +1976,168 @@
       },
       "required": true,
       "smoke_config": {
-        "steps": 1
-      },
-      "validation_command": [
-        "/usr/bin/python3",
-        "/workspace/labs/motion-control-lab/experiments/E06_solver_semantic_parity/verify.py",
-        "--request",
-        "{request}"
-      ]
+        "maximum_calls": 3,
+        "maximum_duration_s": 0.03
+      }
     },
     {
+      "app": "mcl_step",
       "arm_id": "mcc-weighted-full",
-      "binary": "mcl_study_e06",
+      "available": true,
+      "binary": "mcl_step",
+      "capability_binding": {
+        "app_id": "mcl_step",
+        "app_version": "2",
+        "document": {
+          "acceptance_contract": "existing-app-native-v1",
+          "app_id": "mcl_step",
+          "app_version": "2",
+          "execution_structures": [
+            "servo_step"
+          ],
+          "input_formats": [
+            "json"
+          ],
+          "native_pose_enforcement": "hard",
+          "observation_modes": [
+            "full",
+            "minimal",
+            "cpp-new"
+          ],
+          "schema_version": "app_capabilities.v1",
+          "solvers": {
+            "mcc": {
+              "backends": [
+                "proxqp",
+                "eiquadprog"
+              ]
+            },
+            "placo": {
+              "backends": [
+                "eiquadprog"
+              ]
+            }
+          },
+          "state_modes": [
+            "snapshot",
+            "evolving"
+          ],
+          "task_layouts": [
+            "dual-arm-hard-pose"
+          ]
+        },
+        "sha256": "64094320c27a4ee0e4dd586ee16777815cad165d861032ffb05ce5a618630f0c"
+      },
       "case_id": "servo_snapshot_velocity_0.0",
       "config": {
-        "acceleration_limit": 4.0,
-        "causal_parity_artifact": null,
-        "causal_parity_status": "unavailable-until-E06-audit",
-        "derivative_policy": "solver-commanded-velocity; TargetSolve derivative unavailable",
-        "enforcement": "soft",
-        "feedback_model": "ideal-kinematic-accepted-state; rejected attempt freezes measured q and v",
-        "gain_per_s": 1.0,
-        "geometry_policy": "model-only",
-        "hard_position_margin": 0.0,
-        "hard_tolerance": 1e-07,
-        "maximum_iterations_policy": "reject",
-        "mode": "ServoStep",
-        "native_acceleration": false,
-        "normalization": "identity",
-        "orientation_tolerance_rad": 0.01,
-        "orientation_weight": 1.0,
-        "period_s": 0.001,
-        "placo_rewrite_equalities": true,
-        "placo_use_sparsity": false,
-        "position_tolerance_m": 0.001,
-        "preservation_tolerance": 1e-07,
-        "primary_only": false,
-        "qp_absolute_tolerance": 1e-07,
-        "qp_iterations": 100,
-        "qp_relative_tolerance": 0.0,
-        "recovery_dwell_s": 0.1,
-        "recovery_orientation_threshold_rad": 0.01,
-        "recovery_position_threshold_m": 0.001,
-        "recovery_release_s": 4.0,
-        "regularization": 1e-08,
-        "rejected_derivative_limit": "frozen measured velocity is not a physical zero-velocity stopped plant",
-        "rejection_policy": "freeze-measured-q-and-v; no failed iterate consumed",
-        "scale_equation": "J*(v-v_baseline)=s*(gain*error-J*v_baseline)",
-        "scale_group": "shared",
-        "scale_progress_weight": 1.0,
-        "secondary_link4": true,
-        "secondary_posture": true,
-        "secondary_tasks": false,
-        "secondary_weight": 1.0,
-        "stall_threshold_mps": 0.0001,
-        "state_mode": "snapshot",
-        "steps": 1,
-        "swap_priorities": false,
-        "target_budget_ms": 3.0,
-        "target_iterations": 20,
-        "target_min_orientation_improvement_rad": 0.0001,
-        "target_min_position_improvement_m": 1e-05,
-        "target_min_posture_improvement_rad": 1e-05,
-        "terminal_policy": "disabled",
-        "warm_start": true
+        "algorithm": {},
+        "backend": "proxqp",
+        "rate_hz": 1000.0,
+        "solver": "mcc",
+        "target_space": "tcp",
+        "task_layout": "dual-arm-hard-pose",
+        "urdf_path": "/workspace/models/r1.cos.urdf"
       },
+      "execution": {
+        "cold_calls": 1,
+        "measured_calls": 0,
+        "state_mode": "snapshot",
+        "warmup_calls": 0
+      },
+      "execution_structure": "servo_step",
       "input": "/workspace/labs/motion-control-lab/experiments/E06_solver_semantic_parity/inputs/generated/servo_snapshot_velocity_0.0.descriptor.json",
-      "method_id": "mcc-weighted",
+      "input_preparation": {
+        "status": "ready"
+      },
+      "method_id": "step-mcc-app-v1",
+      "migration": {
+        "differences": {
+          "comparison_admission": "requires-new-equation-and-acceptance-audit",
+          "new_configuration": {
+            "algorithm": {},
+            "backend": "proxqp",
+            "rate_hz": 1000.0,
+            "solver": "mcc",
+            "target_space": "tcp",
+            "task_layout": "dual-arm-hard-pose",
+            "urdf_path": "/workspace/models/r1.cos.urdf"
+          },
+          "new_execution": {
+            "cold_calls": 1,
+            "measured_calls": 0,
+            "state_mode": "snapshot",
+            "warmup_calls": 0
+          },
+          "old_configuration": {
+            "acceleration_limit": 4.0,
+            "causal_parity_artifact": null,
+            "causal_parity_status": "unavailable-until-E06-audit",
+            "derivative_policy": "solver-commanded-velocity; TargetSolve derivative unavailable",
+            "enforcement": "soft",
+            "feedback_model": "ideal-kinematic-accepted-state; rejected attempt freezes measured q and v",
+            "gain_per_s": 1.0,
+            "geometry_policy": "model-only",
+            "hard_position_margin": 0.0,
+            "hard_tolerance": 1e-07,
+            "maximum_iterations_policy": "reject",
+            "mode": "ServoStep",
+            "native_acceleration": false,
+            "normalization": "identity",
+            "orientation_tolerance_rad": 0.01,
+            "orientation_weight": 1.0,
+            "period_s": 0.001,
+            "placo_rewrite_equalities": true,
+            "placo_use_sparsity": false,
+            "position_tolerance_m": 0.001,
+            "preservation_tolerance": 1e-07,
+            "primary_only": false,
+            "qp_absolute_tolerance": 1e-07,
+            "qp_iterations": 100,
+            "qp_relative_tolerance": 0.0,
+            "recovery_dwell_s": 0.1,
+            "recovery_orientation_threshold_rad": 0.01,
+            "recovery_position_threshold_m": 0.001,
+            "recovery_release_s": 4.0,
+            "regularization": 1e-08,
+            "rejected_derivative_limit": "frozen measured velocity is not a physical zero-velocity stopped plant",
+            "rejection_policy": "freeze-measured-q-and-v; no failed iterate consumed",
+            "scale_equation": "J*(v-v_baseline)=s*(gain*error-J*v_baseline)",
+            "scale_group": "shared",
+            "scale_progress_weight": 1.0,
+            "secondary_link4": true,
+            "secondary_posture": true,
+            "secondary_tasks": false,
+            "secondary_weight": 1.0,
+            "stall_threshold_mps": 0.0001,
+            "state_mode": "snapshot",
+            "steps": 1,
+            "swap_priorities": false,
+            "target_budget_ms": 3.0,
+            "target_iterations": 20,
+            "target_min_orientation_improvement_rad": 0.0001,
+            "target_min_position_improvement_m": 1e-05,
+            "target_min_posture_improvement_rad": 1e-05,
+            "terminal_policy": "disabled",
+            "warm_start": true
+          },
+          "policy": "Actual app task construction and failure policy take precedence. Input bytes retained; input interpretation explicitly app-owned. No prior causal or timing admission.",
+          "production_static_changed": false,
+          "task_change": "Dual-arm hard pose app tasks replace study soft pose/posture/workload variants; regularization, constraints, acceptance use existing app defaults."
+        },
+        "legacy_definition": {
+          "path": "/workspace/labs/motion-control-lab/experiments/E06_solver_semantic_parity/declarations/study_legacy.v2.json",
+          "sha256": "d55e1e7051032e377d28c5dca7299d2ca8db239a117afe5e9afca5526d72dc3b",
+          "size_bytes": 59920
+        },
+        "old_arm_id": "mcc-weighted-full",
+        "old_config_sha256": "90b36563edbd3bb5ecb41917ccd9ece0602a3cebfb988305199cffae073d52aa",
+        "old_method_id": "mcc-weighted",
+        "reason": "New app-owned method; historical mathematical and acceptance admission not inherited.",
+        "status": "mapped"
+      },
+      "observation": {
+        "mode": "full"
+      },
       "repeats": {
         "confirmatory": 10,
         "development": 1,
@@ -964,73 +2145,168 @@
       },
       "required": true,
       "smoke_config": {
-        "steps": 1
-      },
-      "validation_command": [
-        "/usr/bin/python3",
-        "/workspace/labs/motion-control-lab/experiments/E06_solver_semantic_parity/verify.py",
-        "--request",
-        "{request}"
-      ]
+        "maximum_calls": 3,
+        "maximum_duration_s": 0.03
+      }
     },
     {
+      "app": "mcl_step",
       "arm_id": "placo-controlled-full",
-      "binary": "mcl_study_e06",
+      "available": true,
+      "binary": "mcl_step",
+      "capability_binding": {
+        "app_id": "mcl_step",
+        "app_version": "2",
+        "document": {
+          "acceptance_contract": "existing-app-native-v1",
+          "app_id": "mcl_step",
+          "app_version": "2",
+          "execution_structures": [
+            "servo_step"
+          ],
+          "input_formats": [
+            "json"
+          ],
+          "native_pose_enforcement": "hard",
+          "observation_modes": [
+            "full",
+            "minimal",
+            "cpp-new"
+          ],
+          "schema_version": "app_capabilities.v1",
+          "solvers": {
+            "mcc": {
+              "backends": [
+                "proxqp",
+                "eiquadprog"
+              ]
+            },
+            "placo": {
+              "backends": [
+                "eiquadprog"
+              ]
+            }
+          },
+          "state_modes": [
+            "snapshot",
+            "evolving"
+          ],
+          "task_layouts": [
+            "dual-arm-hard-pose"
+          ]
+        },
+        "sha256": "64094320c27a4ee0e4dd586ee16777815cad165d861032ffb05ce5a618630f0c"
+      },
       "case_id": "servo_snapshot_velocity_0.25",
       "config": {
-        "acceleration_limit": 4.0,
-        "causal_parity_artifact": null,
-        "causal_parity_status": "unavailable-until-E06-audit",
-        "derivative_policy": "solver-commanded-velocity; TargetSolve derivative unavailable",
-        "enforcement": "soft",
-        "feedback_model": "ideal-kinematic-accepted-state; rejected attempt freezes measured q and v",
-        "gain_per_s": 1.0,
-        "geometry_policy": "model-only",
-        "hard_position_margin": 0.0,
-        "hard_tolerance": 1e-07,
-        "maximum_iterations_policy": "reject",
-        "mode": "ServoStep",
-        "native_acceleration": false,
-        "normalization": "identity",
-        "orientation_tolerance_rad": 0.01,
-        "orientation_weight": 1.0,
-        "period_s": 0.001,
-        "placo_rewrite_equalities": true,
-        "placo_use_sparsity": false,
-        "position_tolerance_m": 0.001,
-        "preservation_tolerance": 1e-07,
-        "primary_only": false,
-        "qp_absolute_tolerance": 1e-07,
-        "qp_iterations": 100,
-        "qp_relative_tolerance": 0.0,
-        "recovery_dwell_s": 0.1,
-        "recovery_orientation_threshold_rad": 0.01,
-        "recovery_position_threshold_m": 0.001,
-        "recovery_release_s": 4.0,
-        "regularization": 1e-08,
-        "rejected_derivative_limit": "frozen measured velocity is not a physical zero-velocity stopped plant",
-        "rejection_policy": "freeze-measured-q-and-v; no failed iterate consumed",
-        "scale_equation": "J*(v-v_baseline)=s*(gain*error-J*v_baseline)",
-        "scale_group": "shared",
-        "scale_progress_weight": 1.0,
-        "secondary_link4": true,
-        "secondary_posture": true,
-        "secondary_tasks": false,
-        "secondary_weight": 1.0,
-        "stall_threshold_mps": 0.0001,
-        "state_mode": "snapshot",
-        "steps": 1,
-        "swap_priorities": false,
-        "target_budget_ms": 3.0,
-        "target_iterations": 20,
-        "target_min_orientation_improvement_rad": 0.0001,
-        "target_min_position_improvement_m": 1e-05,
-        "target_min_posture_improvement_rad": 1e-05,
-        "terminal_policy": "disabled",
-        "warm_start": true
+        "algorithm": {},
+        "backend": "eiquadprog",
+        "rate_hz": 1000.0,
+        "solver": "placo",
+        "target_space": "tcp",
+        "task_layout": "dual-arm-hard-pose",
+        "urdf_path": "/workspace/models/r1.cos.urdf"
       },
+      "execution": {
+        "cold_calls": 1,
+        "measured_calls": 0,
+        "state_mode": "snapshot",
+        "warmup_calls": 0
+      },
+      "execution_structure": "servo_step",
       "input": "/workspace/labs/motion-control-lab/experiments/E06_solver_semantic_parity/inputs/generated/servo_snapshot_velocity_0.25.descriptor.json",
-      "method_id": "placo-controlled",
+      "input_preparation": {
+        "status": "ready"
+      },
+      "method_id": "step-placo-app-v1",
+      "migration": {
+        "differences": {
+          "comparison_admission": "requires-new-equation-and-acceptance-audit",
+          "new_configuration": {
+            "algorithm": {},
+            "backend": "eiquadprog",
+            "rate_hz": 1000.0,
+            "solver": "placo",
+            "target_space": "tcp",
+            "task_layout": "dual-arm-hard-pose",
+            "urdf_path": "/workspace/models/r1.cos.urdf"
+          },
+          "new_execution": {
+            "cold_calls": 1,
+            "measured_calls": 0,
+            "state_mode": "snapshot",
+            "warmup_calls": 0
+          },
+          "old_configuration": {
+            "acceleration_limit": 4.0,
+            "causal_parity_artifact": null,
+            "causal_parity_status": "unavailable-until-E06-audit",
+            "derivative_policy": "solver-commanded-velocity; TargetSolve derivative unavailable",
+            "enforcement": "soft",
+            "feedback_model": "ideal-kinematic-accepted-state; rejected attempt freezes measured q and v",
+            "gain_per_s": 1.0,
+            "geometry_policy": "model-only",
+            "hard_position_margin": 0.0,
+            "hard_tolerance": 1e-07,
+            "maximum_iterations_policy": "reject",
+            "mode": "ServoStep",
+            "native_acceleration": false,
+            "normalization": "identity",
+            "orientation_tolerance_rad": 0.01,
+            "orientation_weight": 1.0,
+            "period_s": 0.001,
+            "placo_rewrite_equalities": true,
+            "placo_use_sparsity": false,
+            "position_tolerance_m": 0.001,
+            "preservation_tolerance": 1e-07,
+            "primary_only": false,
+            "qp_absolute_tolerance": 1e-07,
+            "qp_iterations": 100,
+            "qp_relative_tolerance": 0.0,
+            "recovery_dwell_s": 0.1,
+            "recovery_orientation_threshold_rad": 0.01,
+            "recovery_position_threshold_m": 0.001,
+            "recovery_release_s": 4.0,
+            "regularization": 1e-08,
+            "rejected_derivative_limit": "frozen measured velocity is not a physical zero-velocity stopped plant",
+            "rejection_policy": "freeze-measured-q-and-v; no failed iterate consumed",
+            "scale_equation": "J*(v-v_baseline)=s*(gain*error-J*v_baseline)",
+            "scale_group": "shared",
+            "scale_progress_weight": 1.0,
+            "secondary_link4": true,
+            "secondary_posture": true,
+            "secondary_tasks": false,
+            "secondary_weight": 1.0,
+            "stall_threshold_mps": 0.0001,
+            "state_mode": "snapshot",
+            "steps": 1,
+            "swap_priorities": false,
+            "target_budget_ms": 3.0,
+            "target_iterations": 20,
+            "target_min_orientation_improvement_rad": 0.0001,
+            "target_min_position_improvement_m": 1e-05,
+            "target_min_posture_improvement_rad": 1e-05,
+            "terminal_policy": "disabled",
+            "warm_start": true
+          },
+          "policy": "Actual app task construction and failure policy take precedence. Input bytes retained; input interpretation explicitly app-owned. No prior causal or timing admission.",
+          "production_static_changed": false,
+          "task_change": "Dual-arm hard pose app tasks replace study soft pose/posture/workload variants; regularization, constraints, acceptance use existing app defaults."
+        },
+        "legacy_definition": {
+          "path": "/workspace/labs/motion-control-lab/experiments/E06_solver_semantic_parity/declarations/study_legacy.v2.json",
+          "sha256": "d55e1e7051032e377d28c5dca7299d2ca8db239a117afe5e9afca5526d72dc3b",
+          "size_bytes": 59920
+        },
+        "old_arm_id": "placo-controlled-full",
+        "old_config_sha256": "90b36563edbd3bb5ecb41917ccd9ece0602a3cebfb988305199cffae073d52aa",
+        "old_method_id": "placo-controlled",
+        "reason": "New app-owned method; historical mathematical and acceptance admission not inherited.",
+        "status": "mapped"
+      },
+      "observation": {
+        "mode": "full"
+      },
       "repeats": {
         "confirmatory": 10,
         "development": 1,
@@ -1038,73 +2314,168 @@
       },
       "required": true,
       "smoke_config": {
-        "steps": 1
-      },
-      "validation_command": [
-        "/usr/bin/python3",
-        "/workspace/labs/motion-control-lab/experiments/E06_solver_semantic_parity/verify.py",
-        "--request",
-        "{request}"
-      ]
+        "maximum_calls": 3,
+        "maximum_duration_s": 0.03
+      }
     },
     {
+      "app": "mcl_step",
       "arm_id": "mcc-weighted-full",
-      "binary": "mcl_study_e06",
+      "available": true,
+      "binary": "mcl_step",
+      "capability_binding": {
+        "app_id": "mcl_step",
+        "app_version": "2",
+        "document": {
+          "acceptance_contract": "existing-app-native-v1",
+          "app_id": "mcl_step",
+          "app_version": "2",
+          "execution_structures": [
+            "servo_step"
+          ],
+          "input_formats": [
+            "json"
+          ],
+          "native_pose_enforcement": "hard",
+          "observation_modes": [
+            "full",
+            "minimal",
+            "cpp-new"
+          ],
+          "schema_version": "app_capabilities.v1",
+          "solvers": {
+            "mcc": {
+              "backends": [
+                "proxqp",
+                "eiquadprog"
+              ]
+            },
+            "placo": {
+              "backends": [
+                "eiquadprog"
+              ]
+            }
+          },
+          "state_modes": [
+            "snapshot",
+            "evolving"
+          ],
+          "task_layouts": [
+            "dual-arm-hard-pose"
+          ]
+        },
+        "sha256": "64094320c27a4ee0e4dd586ee16777815cad165d861032ffb05ce5a618630f0c"
+      },
       "case_id": "servo_snapshot_velocity_0.25",
       "config": {
-        "acceleration_limit": 4.0,
-        "causal_parity_artifact": null,
-        "causal_parity_status": "unavailable-until-E06-audit",
-        "derivative_policy": "solver-commanded-velocity; TargetSolve derivative unavailable",
-        "enforcement": "soft",
-        "feedback_model": "ideal-kinematic-accepted-state; rejected attempt freezes measured q and v",
-        "gain_per_s": 1.0,
-        "geometry_policy": "model-only",
-        "hard_position_margin": 0.0,
-        "hard_tolerance": 1e-07,
-        "maximum_iterations_policy": "reject",
-        "mode": "ServoStep",
-        "native_acceleration": false,
-        "normalization": "identity",
-        "orientation_tolerance_rad": 0.01,
-        "orientation_weight": 1.0,
-        "period_s": 0.001,
-        "placo_rewrite_equalities": true,
-        "placo_use_sparsity": false,
-        "position_tolerance_m": 0.001,
-        "preservation_tolerance": 1e-07,
-        "primary_only": false,
-        "qp_absolute_tolerance": 1e-07,
-        "qp_iterations": 100,
-        "qp_relative_tolerance": 0.0,
-        "recovery_dwell_s": 0.1,
-        "recovery_orientation_threshold_rad": 0.01,
-        "recovery_position_threshold_m": 0.001,
-        "recovery_release_s": 4.0,
-        "regularization": 1e-08,
-        "rejected_derivative_limit": "frozen measured velocity is not a physical zero-velocity stopped plant",
-        "rejection_policy": "freeze-measured-q-and-v; no failed iterate consumed",
-        "scale_equation": "J*(v-v_baseline)=s*(gain*error-J*v_baseline)",
-        "scale_group": "shared",
-        "scale_progress_weight": 1.0,
-        "secondary_link4": true,
-        "secondary_posture": true,
-        "secondary_tasks": false,
-        "secondary_weight": 1.0,
-        "stall_threshold_mps": 0.0001,
-        "state_mode": "snapshot",
-        "steps": 1,
-        "swap_priorities": false,
-        "target_budget_ms": 3.0,
-        "target_iterations": 20,
-        "target_min_orientation_improvement_rad": 0.0001,
-        "target_min_position_improvement_m": 1e-05,
-        "target_min_posture_improvement_rad": 1e-05,
-        "terminal_policy": "disabled",
-        "warm_start": true
+        "algorithm": {},
+        "backend": "proxqp",
+        "rate_hz": 1000.0,
+        "solver": "mcc",
+        "target_space": "tcp",
+        "task_layout": "dual-arm-hard-pose",
+        "urdf_path": "/workspace/models/r1.cos.urdf"
       },
+      "execution": {
+        "cold_calls": 1,
+        "measured_calls": 0,
+        "state_mode": "snapshot",
+        "warmup_calls": 0
+      },
+      "execution_structure": "servo_step",
       "input": "/workspace/labs/motion-control-lab/experiments/E06_solver_semantic_parity/inputs/generated/servo_snapshot_velocity_0.25.descriptor.json",
-      "method_id": "mcc-weighted",
+      "input_preparation": {
+        "status": "ready"
+      },
+      "method_id": "step-mcc-app-v1",
+      "migration": {
+        "differences": {
+          "comparison_admission": "requires-new-equation-and-acceptance-audit",
+          "new_configuration": {
+            "algorithm": {},
+            "backend": "proxqp",
+            "rate_hz": 1000.0,
+            "solver": "mcc",
+            "target_space": "tcp",
+            "task_layout": "dual-arm-hard-pose",
+            "urdf_path": "/workspace/models/r1.cos.urdf"
+          },
+          "new_execution": {
+            "cold_calls": 1,
+            "measured_calls": 0,
+            "state_mode": "snapshot",
+            "warmup_calls": 0
+          },
+          "old_configuration": {
+            "acceleration_limit": 4.0,
+            "causal_parity_artifact": null,
+            "causal_parity_status": "unavailable-until-E06-audit",
+            "derivative_policy": "solver-commanded-velocity; TargetSolve derivative unavailable",
+            "enforcement": "soft",
+            "feedback_model": "ideal-kinematic-accepted-state; rejected attempt freezes measured q and v",
+            "gain_per_s": 1.0,
+            "geometry_policy": "model-only",
+            "hard_position_margin": 0.0,
+            "hard_tolerance": 1e-07,
+            "maximum_iterations_policy": "reject",
+            "mode": "ServoStep",
+            "native_acceleration": false,
+            "normalization": "identity",
+            "orientation_tolerance_rad": 0.01,
+            "orientation_weight": 1.0,
+            "period_s": 0.001,
+            "placo_rewrite_equalities": true,
+            "placo_use_sparsity": false,
+            "position_tolerance_m": 0.001,
+            "preservation_tolerance": 1e-07,
+            "primary_only": false,
+            "qp_absolute_tolerance": 1e-07,
+            "qp_iterations": 100,
+            "qp_relative_tolerance": 0.0,
+            "recovery_dwell_s": 0.1,
+            "recovery_orientation_threshold_rad": 0.01,
+            "recovery_position_threshold_m": 0.001,
+            "recovery_release_s": 4.0,
+            "regularization": 1e-08,
+            "rejected_derivative_limit": "frozen measured velocity is not a physical zero-velocity stopped plant",
+            "rejection_policy": "freeze-measured-q-and-v; no failed iterate consumed",
+            "scale_equation": "J*(v-v_baseline)=s*(gain*error-J*v_baseline)",
+            "scale_group": "shared",
+            "scale_progress_weight": 1.0,
+            "secondary_link4": true,
+            "secondary_posture": true,
+            "secondary_tasks": false,
+            "secondary_weight": 1.0,
+            "stall_threshold_mps": 0.0001,
+            "state_mode": "snapshot",
+            "steps": 1,
+            "swap_priorities": false,
+            "target_budget_ms": 3.0,
+            "target_iterations": 20,
+            "target_min_orientation_improvement_rad": 0.0001,
+            "target_min_position_improvement_m": 1e-05,
+            "target_min_posture_improvement_rad": 1e-05,
+            "terminal_policy": "disabled",
+            "warm_start": true
+          },
+          "policy": "Actual app task construction and failure policy take precedence. Input bytes retained; input interpretation explicitly app-owned. No prior causal or timing admission.",
+          "production_static_changed": false,
+          "task_change": "Dual-arm hard pose app tasks replace study soft pose/posture/workload variants; regularization, constraints, acceptance use existing app defaults."
+        },
+        "legacy_definition": {
+          "path": "/workspace/labs/motion-control-lab/experiments/E06_solver_semantic_parity/declarations/study_legacy.v2.json",
+          "sha256": "d55e1e7051032e377d28c5dca7299d2ca8db239a117afe5e9afca5526d72dc3b",
+          "size_bytes": 59920
+        },
+        "old_arm_id": "mcc-weighted-full",
+        "old_config_sha256": "90b36563edbd3bb5ecb41917ccd9ece0602a3cebfb988305199cffae073d52aa",
+        "old_method_id": "mcc-weighted",
+        "reason": "New app-owned method; historical mathematical and acceptance admission not inherited.",
+        "status": "mapped"
+      },
+      "observation": {
+        "mode": "full"
+      },
       "repeats": {
         "confirmatory": 10,
         "development": 1,
@@ -1112,73 +2483,168 @@
       },
       "required": true,
       "smoke_config": {
-        "steps": 1
-      },
-      "validation_command": [
-        "/usr/bin/python3",
-        "/workspace/labs/motion-control-lab/experiments/E06_solver_semantic_parity/verify.py",
-        "--request",
-        "{request}"
-      ]
+        "maximum_calls": 3,
+        "maximum_duration_s": 0.03
+      }
     },
     {
+      "app": "mcl_step",
       "arm_id": "placo-controlled-full",
-      "binary": "mcl_study_e06",
+      "available": true,
+      "binary": "mcl_step",
+      "capability_binding": {
+        "app_id": "mcl_step",
+        "app_version": "2",
+        "document": {
+          "acceptance_contract": "existing-app-native-v1",
+          "app_id": "mcl_step",
+          "app_version": "2",
+          "execution_structures": [
+            "servo_step"
+          ],
+          "input_formats": [
+            "json"
+          ],
+          "native_pose_enforcement": "hard",
+          "observation_modes": [
+            "full",
+            "minimal",
+            "cpp-new"
+          ],
+          "schema_version": "app_capabilities.v1",
+          "solvers": {
+            "mcc": {
+              "backends": [
+                "proxqp",
+                "eiquadprog"
+              ]
+            },
+            "placo": {
+              "backends": [
+                "eiquadprog"
+              ]
+            }
+          },
+          "state_modes": [
+            "snapshot",
+            "evolving"
+          ],
+          "task_layouts": [
+            "dual-arm-hard-pose"
+          ]
+        },
+        "sha256": "64094320c27a4ee0e4dd586ee16777815cad165d861032ffb05ce5a618630f0c"
+      },
       "case_id": "enforcement_hard",
       "config": {
-        "acceleration_limit": 4.0,
-        "causal_parity_artifact": null,
-        "causal_parity_status": "unavailable-until-E06-audit",
-        "derivative_policy": "solver-commanded-velocity; TargetSolve derivative unavailable",
-        "enforcement": "hard",
-        "feedback_model": "ideal-kinematic-accepted-state; rejected attempt freezes measured q and v",
-        "gain_per_s": 1.0,
-        "geometry_policy": "model-only",
-        "hard_position_margin": 0.0,
-        "hard_tolerance": 1e-07,
-        "maximum_iterations_policy": "reject",
-        "mode": "ServoStep",
-        "native_acceleration": false,
-        "normalization": "identity",
-        "orientation_tolerance_rad": 0.01,
-        "orientation_weight": 1.0,
-        "period_s": 0.001,
-        "placo_rewrite_equalities": true,
-        "placo_use_sparsity": false,
-        "position_tolerance_m": 0.001,
-        "preservation_tolerance": 1e-07,
-        "primary_only": false,
-        "qp_absolute_tolerance": 1e-07,
-        "qp_iterations": 100,
-        "qp_relative_tolerance": 0.0,
-        "recovery_dwell_s": 0.1,
-        "recovery_orientation_threshold_rad": 0.01,
-        "recovery_position_threshold_m": 0.001,
-        "recovery_release_s": 4.0,
-        "regularization": 1e-08,
-        "rejected_derivative_limit": "frozen measured velocity is not a physical zero-velocity stopped plant",
-        "rejection_policy": "freeze-measured-q-and-v; no failed iterate consumed",
-        "scale_equation": "J*(v-v_baseline)=s*(gain*error-J*v_baseline)",
-        "scale_group": "shared",
-        "scale_progress_weight": 1.0,
-        "secondary_link4": true,
-        "secondary_posture": true,
-        "secondary_tasks": false,
-        "secondary_weight": 1.0,
-        "stall_threshold_mps": 0.0001,
-        "state_mode": "snapshot",
-        "steps": 1,
-        "swap_priorities": false,
-        "target_budget_ms": 3.0,
-        "target_iterations": 20,
-        "target_min_orientation_improvement_rad": 0.0001,
-        "target_min_position_improvement_m": 1e-05,
-        "target_min_posture_improvement_rad": 1e-05,
-        "terminal_policy": "disabled",
-        "warm_start": true
+        "algorithm": {},
+        "backend": "eiquadprog",
+        "rate_hz": 1000.0,
+        "solver": "placo",
+        "target_space": "tcp",
+        "task_layout": "dual-arm-hard-pose",
+        "urdf_path": "/workspace/models/r1.cos.urdf"
       },
+      "execution": {
+        "cold_calls": 1,
+        "measured_calls": 0,
+        "state_mode": "snapshot",
+        "warmup_calls": 0
+      },
+      "execution_structure": "servo_step",
       "input": "/workspace/labs/motion-control-lab/experiments/E06_solver_semantic_parity/inputs/generated/enforcement_hard.descriptor.json",
-      "method_id": "placo-controlled",
+      "input_preparation": {
+        "status": "ready"
+      },
+      "method_id": "step-placo-app-v1",
+      "migration": {
+        "differences": {
+          "comparison_admission": "requires-new-equation-and-acceptance-audit",
+          "new_configuration": {
+            "algorithm": {},
+            "backend": "eiquadprog",
+            "rate_hz": 1000.0,
+            "solver": "placo",
+            "target_space": "tcp",
+            "task_layout": "dual-arm-hard-pose",
+            "urdf_path": "/workspace/models/r1.cos.urdf"
+          },
+          "new_execution": {
+            "cold_calls": 1,
+            "measured_calls": 0,
+            "state_mode": "snapshot",
+            "warmup_calls": 0
+          },
+          "old_configuration": {
+            "acceleration_limit": 4.0,
+            "causal_parity_artifact": null,
+            "causal_parity_status": "unavailable-until-E06-audit",
+            "derivative_policy": "solver-commanded-velocity; TargetSolve derivative unavailable",
+            "enforcement": "hard",
+            "feedback_model": "ideal-kinematic-accepted-state; rejected attempt freezes measured q and v",
+            "gain_per_s": 1.0,
+            "geometry_policy": "model-only",
+            "hard_position_margin": 0.0,
+            "hard_tolerance": 1e-07,
+            "maximum_iterations_policy": "reject",
+            "mode": "ServoStep",
+            "native_acceleration": false,
+            "normalization": "identity",
+            "orientation_tolerance_rad": 0.01,
+            "orientation_weight": 1.0,
+            "period_s": 0.001,
+            "placo_rewrite_equalities": true,
+            "placo_use_sparsity": false,
+            "position_tolerance_m": 0.001,
+            "preservation_tolerance": 1e-07,
+            "primary_only": false,
+            "qp_absolute_tolerance": 1e-07,
+            "qp_iterations": 100,
+            "qp_relative_tolerance": 0.0,
+            "recovery_dwell_s": 0.1,
+            "recovery_orientation_threshold_rad": 0.01,
+            "recovery_position_threshold_m": 0.001,
+            "recovery_release_s": 4.0,
+            "regularization": 1e-08,
+            "rejected_derivative_limit": "frozen measured velocity is not a physical zero-velocity stopped plant",
+            "rejection_policy": "freeze-measured-q-and-v; no failed iterate consumed",
+            "scale_equation": "J*(v-v_baseline)=s*(gain*error-J*v_baseline)",
+            "scale_group": "shared",
+            "scale_progress_weight": 1.0,
+            "secondary_link4": true,
+            "secondary_posture": true,
+            "secondary_tasks": false,
+            "secondary_weight": 1.0,
+            "stall_threshold_mps": 0.0001,
+            "state_mode": "snapshot",
+            "steps": 1,
+            "swap_priorities": false,
+            "target_budget_ms": 3.0,
+            "target_iterations": 20,
+            "target_min_orientation_improvement_rad": 0.0001,
+            "target_min_position_improvement_m": 1e-05,
+            "target_min_posture_improvement_rad": 1e-05,
+            "terminal_policy": "disabled",
+            "warm_start": true
+          },
+          "policy": "Actual app task construction and failure policy take precedence. Input bytes retained; input interpretation explicitly app-owned. No prior causal or timing admission.",
+          "production_static_changed": false,
+          "task_change": "Dual-arm hard pose app tasks replace study soft pose/posture/workload variants; regularization, constraints, acceptance use existing app defaults."
+        },
+        "legacy_definition": {
+          "path": "/workspace/labs/motion-control-lab/experiments/E06_solver_semantic_parity/declarations/study_legacy.v2.json",
+          "sha256": "d55e1e7051032e377d28c5dca7299d2ca8db239a117afe5e9afca5526d72dc3b",
+          "size_bytes": 59920
+        },
+        "old_arm_id": "placo-controlled-full",
+        "old_config_sha256": "aeededc28cb855df695cc623c31f173dff0356d8cd0d5f3d1b5f72f59408e760",
+        "old_method_id": "placo-controlled",
+        "reason": "New app-owned method; historical mathematical and acceptance admission not inherited.",
+        "status": "mapped"
+      },
+      "observation": {
+        "mode": "full"
+      },
       "repeats": {
         "confirmatory": 10,
         "development": 1,
@@ -1186,73 +2652,168 @@
       },
       "required": true,
       "smoke_config": {
-        "steps": 1
-      },
-      "validation_command": [
-        "/usr/bin/python3",
-        "/workspace/labs/motion-control-lab/experiments/E06_solver_semantic_parity/verify.py",
-        "--request",
-        "{request}"
-      ]
+        "maximum_calls": 3,
+        "maximum_duration_s": 0.03
+      }
     },
     {
+      "app": "mcl_step",
       "arm_id": "mcc-weighted-full",
-      "binary": "mcl_study_e06",
+      "available": true,
+      "binary": "mcl_step",
+      "capability_binding": {
+        "app_id": "mcl_step",
+        "app_version": "2",
+        "document": {
+          "acceptance_contract": "existing-app-native-v1",
+          "app_id": "mcl_step",
+          "app_version": "2",
+          "execution_structures": [
+            "servo_step"
+          ],
+          "input_formats": [
+            "json"
+          ],
+          "native_pose_enforcement": "hard",
+          "observation_modes": [
+            "full",
+            "minimal",
+            "cpp-new"
+          ],
+          "schema_version": "app_capabilities.v1",
+          "solvers": {
+            "mcc": {
+              "backends": [
+                "proxqp",
+                "eiquadprog"
+              ]
+            },
+            "placo": {
+              "backends": [
+                "eiquadprog"
+              ]
+            }
+          },
+          "state_modes": [
+            "snapshot",
+            "evolving"
+          ],
+          "task_layouts": [
+            "dual-arm-hard-pose"
+          ]
+        },
+        "sha256": "64094320c27a4ee0e4dd586ee16777815cad165d861032ffb05ce5a618630f0c"
+      },
       "case_id": "enforcement_hard",
       "config": {
-        "acceleration_limit": 4.0,
-        "causal_parity_artifact": null,
-        "causal_parity_status": "unavailable-until-E06-audit",
-        "derivative_policy": "solver-commanded-velocity; TargetSolve derivative unavailable",
-        "enforcement": "hard",
-        "feedback_model": "ideal-kinematic-accepted-state; rejected attempt freezes measured q and v",
-        "gain_per_s": 1.0,
-        "geometry_policy": "model-only",
-        "hard_position_margin": 0.0,
-        "hard_tolerance": 1e-07,
-        "maximum_iterations_policy": "reject",
-        "mode": "ServoStep",
-        "native_acceleration": false,
-        "normalization": "identity",
-        "orientation_tolerance_rad": 0.01,
-        "orientation_weight": 1.0,
-        "period_s": 0.001,
-        "placo_rewrite_equalities": true,
-        "placo_use_sparsity": false,
-        "position_tolerance_m": 0.001,
-        "preservation_tolerance": 1e-07,
-        "primary_only": false,
-        "qp_absolute_tolerance": 1e-07,
-        "qp_iterations": 100,
-        "qp_relative_tolerance": 0.0,
-        "recovery_dwell_s": 0.1,
-        "recovery_orientation_threshold_rad": 0.01,
-        "recovery_position_threshold_m": 0.001,
-        "recovery_release_s": 4.0,
-        "regularization": 1e-08,
-        "rejected_derivative_limit": "frozen measured velocity is not a physical zero-velocity stopped plant",
-        "rejection_policy": "freeze-measured-q-and-v; no failed iterate consumed",
-        "scale_equation": "J*(v-v_baseline)=s*(gain*error-J*v_baseline)",
-        "scale_group": "shared",
-        "scale_progress_weight": 1.0,
-        "secondary_link4": true,
-        "secondary_posture": true,
-        "secondary_tasks": false,
-        "secondary_weight": 1.0,
-        "stall_threshold_mps": 0.0001,
-        "state_mode": "snapshot",
-        "steps": 1,
-        "swap_priorities": false,
-        "target_budget_ms": 3.0,
-        "target_iterations": 20,
-        "target_min_orientation_improvement_rad": 0.0001,
-        "target_min_position_improvement_m": 1e-05,
-        "target_min_posture_improvement_rad": 1e-05,
-        "terminal_policy": "disabled",
-        "warm_start": true
+        "algorithm": {},
+        "backend": "proxqp",
+        "rate_hz": 1000.0,
+        "solver": "mcc",
+        "target_space": "tcp",
+        "task_layout": "dual-arm-hard-pose",
+        "urdf_path": "/workspace/models/r1.cos.urdf"
       },
+      "execution": {
+        "cold_calls": 1,
+        "measured_calls": 0,
+        "state_mode": "snapshot",
+        "warmup_calls": 0
+      },
+      "execution_structure": "servo_step",
       "input": "/workspace/labs/motion-control-lab/experiments/E06_solver_semantic_parity/inputs/generated/enforcement_hard.descriptor.json",
-      "method_id": "mcc-weighted",
+      "input_preparation": {
+        "status": "ready"
+      },
+      "method_id": "step-mcc-app-v1",
+      "migration": {
+        "differences": {
+          "comparison_admission": "requires-new-equation-and-acceptance-audit",
+          "new_configuration": {
+            "algorithm": {},
+            "backend": "proxqp",
+            "rate_hz": 1000.0,
+            "solver": "mcc",
+            "target_space": "tcp",
+            "task_layout": "dual-arm-hard-pose",
+            "urdf_path": "/workspace/models/r1.cos.urdf"
+          },
+          "new_execution": {
+            "cold_calls": 1,
+            "measured_calls": 0,
+            "state_mode": "snapshot",
+            "warmup_calls": 0
+          },
+          "old_configuration": {
+            "acceleration_limit": 4.0,
+            "causal_parity_artifact": null,
+            "causal_parity_status": "unavailable-until-E06-audit",
+            "derivative_policy": "solver-commanded-velocity; TargetSolve derivative unavailable",
+            "enforcement": "hard",
+            "feedback_model": "ideal-kinematic-accepted-state; rejected attempt freezes measured q and v",
+            "gain_per_s": 1.0,
+            "geometry_policy": "model-only",
+            "hard_position_margin": 0.0,
+            "hard_tolerance": 1e-07,
+            "maximum_iterations_policy": "reject",
+            "mode": "ServoStep",
+            "native_acceleration": false,
+            "normalization": "identity",
+            "orientation_tolerance_rad": 0.01,
+            "orientation_weight": 1.0,
+            "period_s": 0.001,
+            "placo_rewrite_equalities": true,
+            "placo_use_sparsity": false,
+            "position_tolerance_m": 0.001,
+            "preservation_tolerance": 1e-07,
+            "primary_only": false,
+            "qp_absolute_tolerance": 1e-07,
+            "qp_iterations": 100,
+            "qp_relative_tolerance": 0.0,
+            "recovery_dwell_s": 0.1,
+            "recovery_orientation_threshold_rad": 0.01,
+            "recovery_position_threshold_m": 0.001,
+            "recovery_release_s": 4.0,
+            "regularization": 1e-08,
+            "rejected_derivative_limit": "frozen measured velocity is not a physical zero-velocity stopped plant",
+            "rejection_policy": "freeze-measured-q-and-v; no failed iterate consumed",
+            "scale_equation": "J*(v-v_baseline)=s*(gain*error-J*v_baseline)",
+            "scale_group": "shared",
+            "scale_progress_weight": 1.0,
+            "secondary_link4": true,
+            "secondary_posture": true,
+            "secondary_tasks": false,
+            "secondary_weight": 1.0,
+            "stall_threshold_mps": 0.0001,
+            "state_mode": "snapshot",
+            "steps": 1,
+            "swap_priorities": false,
+            "target_budget_ms": 3.0,
+            "target_iterations": 20,
+            "target_min_orientation_improvement_rad": 0.0001,
+            "target_min_position_improvement_m": 1e-05,
+            "target_min_posture_improvement_rad": 1e-05,
+            "terminal_policy": "disabled",
+            "warm_start": true
+          },
+          "policy": "Actual app task construction and failure policy take precedence. Input bytes retained; input interpretation explicitly app-owned. No prior causal or timing admission.",
+          "production_static_changed": false,
+          "task_change": "Dual-arm hard pose app tasks replace study soft pose/posture/workload variants; regularization, constraints, acceptance use existing app defaults."
+        },
+        "legacy_definition": {
+          "path": "/workspace/labs/motion-control-lab/experiments/E06_solver_semantic_parity/declarations/study_legacy.v2.json",
+          "sha256": "d55e1e7051032e377d28c5dca7299d2ca8db239a117afe5e9afca5526d72dc3b",
+          "size_bytes": 59920
+        },
+        "old_arm_id": "mcc-weighted-full",
+        "old_config_sha256": "aeededc28cb855df695cc623c31f173dff0356d8cd0d5f3d1b5f72f59408e760",
+        "old_method_id": "mcc-weighted",
+        "reason": "New app-owned method; historical mathematical and acceptance admission not inherited.",
+        "status": "mapped"
+      },
+      "observation": {
+        "mode": "full"
+      },
       "repeats": {
         "confirmatory": 10,
         "development": 1,
@@ -1260,73 +2821,168 @@
       },
       "required": true,
       "smoke_config": {
-        "steps": 1
-      },
-      "validation_command": [
-        "/usr/bin/python3",
-        "/workspace/labs/motion-control-lab/experiments/E06_solver_semantic_parity/verify.py",
-        "--request",
-        "{request}"
-      ]
+        "maximum_calls": 3,
+        "maximum_duration_s": 0.03
+      }
     },
     {
+      "app": "mcl_step",
       "arm_id": "placo-controlled-full",
-      "binary": "mcl_study_e06",
+      "available": true,
+      "binary": "mcl_step",
+      "capability_binding": {
+        "app_id": "mcl_step",
+        "app_version": "2",
+        "document": {
+          "acceptance_contract": "existing-app-native-v1",
+          "app_id": "mcl_step",
+          "app_version": "2",
+          "execution_structures": [
+            "servo_step"
+          ],
+          "input_formats": [
+            "json"
+          ],
+          "native_pose_enforcement": "hard",
+          "observation_modes": [
+            "full",
+            "minimal",
+            "cpp-new"
+          ],
+          "schema_version": "app_capabilities.v1",
+          "solvers": {
+            "mcc": {
+              "backends": [
+                "proxqp",
+                "eiquadprog"
+              ]
+            },
+            "placo": {
+              "backends": [
+                "eiquadprog"
+              ]
+            }
+          },
+          "state_modes": [
+            "snapshot",
+            "evolving"
+          ],
+          "task_layouts": [
+            "dual-arm-hard-pose"
+          ]
+        },
+        "sha256": "64094320c27a4ee0e4dd586ee16777815cad165d861032ffb05ce5a618630f0c"
+      },
       "case_id": "enforcement_soft",
       "config": {
-        "acceleration_limit": 4.0,
-        "causal_parity_artifact": null,
-        "causal_parity_status": "unavailable-until-E06-audit",
-        "derivative_policy": "solver-commanded-velocity; TargetSolve derivative unavailable",
-        "enforcement": "soft",
-        "feedback_model": "ideal-kinematic-accepted-state; rejected attempt freezes measured q and v",
-        "gain_per_s": 1.0,
-        "geometry_policy": "model-only",
-        "hard_position_margin": 0.0,
-        "hard_tolerance": 1e-07,
-        "maximum_iterations_policy": "reject",
-        "mode": "ServoStep",
-        "native_acceleration": false,
-        "normalization": "identity",
-        "orientation_tolerance_rad": 0.01,
-        "orientation_weight": 1.0,
-        "period_s": 0.001,
-        "placo_rewrite_equalities": true,
-        "placo_use_sparsity": false,
-        "position_tolerance_m": 0.001,
-        "preservation_tolerance": 1e-07,
-        "primary_only": false,
-        "qp_absolute_tolerance": 1e-07,
-        "qp_iterations": 100,
-        "qp_relative_tolerance": 0.0,
-        "recovery_dwell_s": 0.1,
-        "recovery_orientation_threshold_rad": 0.01,
-        "recovery_position_threshold_m": 0.001,
-        "recovery_release_s": 4.0,
-        "regularization": 1e-08,
-        "rejected_derivative_limit": "frozen measured velocity is not a physical zero-velocity stopped plant",
-        "rejection_policy": "freeze-measured-q-and-v; no failed iterate consumed",
-        "scale_equation": "J*(v-v_baseline)=s*(gain*error-J*v_baseline)",
-        "scale_group": "shared",
-        "scale_progress_weight": 1.0,
-        "secondary_link4": true,
-        "secondary_posture": true,
-        "secondary_tasks": false,
-        "secondary_weight": 1.0,
-        "stall_threshold_mps": 0.0001,
-        "state_mode": "snapshot",
-        "steps": 1,
-        "swap_priorities": false,
-        "target_budget_ms": 3.0,
-        "target_iterations": 20,
-        "target_min_orientation_improvement_rad": 0.0001,
-        "target_min_position_improvement_m": 1e-05,
-        "target_min_posture_improvement_rad": 1e-05,
-        "terminal_policy": "disabled",
-        "warm_start": true
+        "algorithm": {},
+        "backend": "eiquadprog",
+        "rate_hz": 1000.0,
+        "solver": "placo",
+        "target_space": "tcp",
+        "task_layout": "dual-arm-hard-pose",
+        "urdf_path": "/workspace/models/r1.cos.urdf"
       },
+      "execution": {
+        "cold_calls": 1,
+        "measured_calls": 0,
+        "state_mode": "snapshot",
+        "warmup_calls": 0
+      },
+      "execution_structure": "servo_step",
       "input": "/workspace/labs/motion-control-lab/experiments/E06_solver_semantic_parity/inputs/generated/enforcement_soft.descriptor.json",
-      "method_id": "placo-controlled",
+      "input_preparation": {
+        "status": "ready"
+      },
+      "method_id": "step-placo-app-v1",
+      "migration": {
+        "differences": {
+          "comparison_admission": "requires-new-equation-and-acceptance-audit",
+          "new_configuration": {
+            "algorithm": {},
+            "backend": "eiquadprog",
+            "rate_hz": 1000.0,
+            "solver": "placo",
+            "target_space": "tcp",
+            "task_layout": "dual-arm-hard-pose",
+            "urdf_path": "/workspace/models/r1.cos.urdf"
+          },
+          "new_execution": {
+            "cold_calls": 1,
+            "measured_calls": 0,
+            "state_mode": "snapshot",
+            "warmup_calls": 0
+          },
+          "old_configuration": {
+            "acceleration_limit": 4.0,
+            "causal_parity_artifact": null,
+            "causal_parity_status": "unavailable-until-E06-audit",
+            "derivative_policy": "solver-commanded-velocity; TargetSolve derivative unavailable",
+            "enforcement": "soft",
+            "feedback_model": "ideal-kinematic-accepted-state; rejected attempt freezes measured q and v",
+            "gain_per_s": 1.0,
+            "geometry_policy": "model-only",
+            "hard_position_margin": 0.0,
+            "hard_tolerance": 1e-07,
+            "maximum_iterations_policy": "reject",
+            "mode": "ServoStep",
+            "native_acceleration": false,
+            "normalization": "identity",
+            "orientation_tolerance_rad": 0.01,
+            "orientation_weight": 1.0,
+            "period_s": 0.001,
+            "placo_rewrite_equalities": true,
+            "placo_use_sparsity": false,
+            "position_tolerance_m": 0.001,
+            "preservation_tolerance": 1e-07,
+            "primary_only": false,
+            "qp_absolute_tolerance": 1e-07,
+            "qp_iterations": 100,
+            "qp_relative_tolerance": 0.0,
+            "recovery_dwell_s": 0.1,
+            "recovery_orientation_threshold_rad": 0.01,
+            "recovery_position_threshold_m": 0.001,
+            "recovery_release_s": 4.0,
+            "regularization": 1e-08,
+            "rejected_derivative_limit": "frozen measured velocity is not a physical zero-velocity stopped plant",
+            "rejection_policy": "freeze-measured-q-and-v; no failed iterate consumed",
+            "scale_equation": "J*(v-v_baseline)=s*(gain*error-J*v_baseline)",
+            "scale_group": "shared",
+            "scale_progress_weight": 1.0,
+            "secondary_link4": true,
+            "secondary_posture": true,
+            "secondary_tasks": false,
+            "secondary_weight": 1.0,
+            "stall_threshold_mps": 0.0001,
+            "state_mode": "snapshot",
+            "steps": 1,
+            "swap_priorities": false,
+            "target_budget_ms": 3.0,
+            "target_iterations": 20,
+            "target_min_orientation_improvement_rad": 0.0001,
+            "target_min_position_improvement_m": 1e-05,
+            "target_min_posture_improvement_rad": 1e-05,
+            "terminal_policy": "disabled",
+            "warm_start": true
+          },
+          "policy": "Actual app task construction and failure policy take precedence. Input bytes retained; input interpretation explicitly app-owned. No prior causal or timing admission.",
+          "production_static_changed": false,
+          "task_change": "Dual-arm hard pose app tasks replace study soft pose/posture/workload variants; regularization, constraints, acceptance use existing app defaults."
+        },
+        "legacy_definition": {
+          "path": "/workspace/labs/motion-control-lab/experiments/E06_solver_semantic_parity/declarations/study_legacy.v2.json",
+          "sha256": "d55e1e7051032e377d28c5dca7299d2ca8db239a117afe5e9afca5526d72dc3b",
+          "size_bytes": 59920
+        },
+        "old_arm_id": "placo-controlled-full",
+        "old_config_sha256": "90b36563edbd3bb5ecb41917ccd9ece0602a3cebfb988305199cffae073d52aa",
+        "old_method_id": "placo-controlled",
+        "reason": "New app-owned method; historical mathematical and acceptance admission not inherited.",
+        "status": "mapped"
+      },
+      "observation": {
+        "mode": "full"
+      },
       "repeats": {
         "confirmatory": 10,
         "development": 1,
@@ -1334,73 +2990,168 @@
       },
       "required": true,
       "smoke_config": {
-        "steps": 1
-      },
-      "validation_command": [
-        "/usr/bin/python3",
-        "/workspace/labs/motion-control-lab/experiments/E06_solver_semantic_parity/verify.py",
-        "--request",
-        "{request}"
-      ]
+        "maximum_calls": 3,
+        "maximum_duration_s": 0.03
+      }
     },
     {
+      "app": "mcl_step",
       "arm_id": "mcc-weighted-full",
-      "binary": "mcl_study_e06",
+      "available": true,
+      "binary": "mcl_step",
+      "capability_binding": {
+        "app_id": "mcl_step",
+        "app_version": "2",
+        "document": {
+          "acceptance_contract": "existing-app-native-v1",
+          "app_id": "mcl_step",
+          "app_version": "2",
+          "execution_structures": [
+            "servo_step"
+          ],
+          "input_formats": [
+            "json"
+          ],
+          "native_pose_enforcement": "hard",
+          "observation_modes": [
+            "full",
+            "minimal",
+            "cpp-new"
+          ],
+          "schema_version": "app_capabilities.v1",
+          "solvers": {
+            "mcc": {
+              "backends": [
+                "proxqp",
+                "eiquadprog"
+              ]
+            },
+            "placo": {
+              "backends": [
+                "eiquadprog"
+              ]
+            }
+          },
+          "state_modes": [
+            "snapshot",
+            "evolving"
+          ],
+          "task_layouts": [
+            "dual-arm-hard-pose"
+          ]
+        },
+        "sha256": "64094320c27a4ee0e4dd586ee16777815cad165d861032ffb05ce5a618630f0c"
+      },
       "case_id": "enforcement_soft",
       "config": {
-        "acceleration_limit": 4.0,
-        "causal_parity_artifact": null,
-        "causal_parity_status": "unavailable-until-E06-audit",
-        "derivative_policy": "solver-commanded-velocity; TargetSolve derivative unavailable",
-        "enforcement": "soft",
-        "feedback_model": "ideal-kinematic-accepted-state; rejected attempt freezes measured q and v",
-        "gain_per_s": 1.0,
-        "geometry_policy": "model-only",
-        "hard_position_margin": 0.0,
-        "hard_tolerance": 1e-07,
-        "maximum_iterations_policy": "reject",
-        "mode": "ServoStep",
-        "native_acceleration": false,
-        "normalization": "identity",
-        "orientation_tolerance_rad": 0.01,
-        "orientation_weight": 1.0,
-        "period_s": 0.001,
-        "placo_rewrite_equalities": true,
-        "placo_use_sparsity": false,
-        "position_tolerance_m": 0.001,
-        "preservation_tolerance": 1e-07,
-        "primary_only": false,
-        "qp_absolute_tolerance": 1e-07,
-        "qp_iterations": 100,
-        "qp_relative_tolerance": 0.0,
-        "recovery_dwell_s": 0.1,
-        "recovery_orientation_threshold_rad": 0.01,
-        "recovery_position_threshold_m": 0.001,
-        "recovery_release_s": 4.0,
-        "regularization": 1e-08,
-        "rejected_derivative_limit": "frozen measured velocity is not a physical zero-velocity stopped plant",
-        "rejection_policy": "freeze-measured-q-and-v; no failed iterate consumed",
-        "scale_equation": "J*(v-v_baseline)=s*(gain*error-J*v_baseline)",
-        "scale_group": "shared",
-        "scale_progress_weight": 1.0,
-        "secondary_link4": true,
-        "secondary_posture": true,
-        "secondary_tasks": false,
-        "secondary_weight": 1.0,
-        "stall_threshold_mps": 0.0001,
-        "state_mode": "snapshot",
-        "steps": 1,
-        "swap_priorities": false,
-        "target_budget_ms": 3.0,
-        "target_iterations": 20,
-        "target_min_orientation_improvement_rad": 0.0001,
-        "target_min_position_improvement_m": 1e-05,
-        "target_min_posture_improvement_rad": 1e-05,
-        "terminal_policy": "disabled",
-        "warm_start": true
+        "algorithm": {},
+        "backend": "proxqp",
+        "rate_hz": 1000.0,
+        "solver": "mcc",
+        "target_space": "tcp",
+        "task_layout": "dual-arm-hard-pose",
+        "urdf_path": "/workspace/models/r1.cos.urdf"
       },
+      "execution": {
+        "cold_calls": 1,
+        "measured_calls": 0,
+        "state_mode": "snapshot",
+        "warmup_calls": 0
+      },
+      "execution_structure": "servo_step",
       "input": "/workspace/labs/motion-control-lab/experiments/E06_solver_semantic_parity/inputs/generated/enforcement_soft.descriptor.json",
-      "method_id": "mcc-weighted",
+      "input_preparation": {
+        "status": "ready"
+      },
+      "method_id": "step-mcc-app-v1",
+      "migration": {
+        "differences": {
+          "comparison_admission": "requires-new-equation-and-acceptance-audit",
+          "new_configuration": {
+            "algorithm": {},
+            "backend": "proxqp",
+            "rate_hz": 1000.0,
+            "solver": "mcc",
+            "target_space": "tcp",
+            "task_layout": "dual-arm-hard-pose",
+            "urdf_path": "/workspace/models/r1.cos.urdf"
+          },
+          "new_execution": {
+            "cold_calls": 1,
+            "measured_calls": 0,
+            "state_mode": "snapshot",
+            "warmup_calls": 0
+          },
+          "old_configuration": {
+            "acceleration_limit": 4.0,
+            "causal_parity_artifact": null,
+            "causal_parity_status": "unavailable-until-E06-audit",
+            "derivative_policy": "solver-commanded-velocity; TargetSolve derivative unavailable",
+            "enforcement": "soft",
+            "feedback_model": "ideal-kinematic-accepted-state; rejected attempt freezes measured q and v",
+            "gain_per_s": 1.0,
+            "geometry_policy": "model-only",
+            "hard_position_margin": 0.0,
+            "hard_tolerance": 1e-07,
+            "maximum_iterations_policy": "reject",
+            "mode": "ServoStep",
+            "native_acceleration": false,
+            "normalization": "identity",
+            "orientation_tolerance_rad": 0.01,
+            "orientation_weight": 1.0,
+            "period_s": 0.001,
+            "placo_rewrite_equalities": true,
+            "placo_use_sparsity": false,
+            "position_tolerance_m": 0.001,
+            "preservation_tolerance": 1e-07,
+            "primary_only": false,
+            "qp_absolute_tolerance": 1e-07,
+            "qp_iterations": 100,
+            "qp_relative_tolerance": 0.0,
+            "recovery_dwell_s": 0.1,
+            "recovery_orientation_threshold_rad": 0.01,
+            "recovery_position_threshold_m": 0.001,
+            "recovery_release_s": 4.0,
+            "regularization": 1e-08,
+            "rejected_derivative_limit": "frozen measured velocity is not a physical zero-velocity stopped plant",
+            "rejection_policy": "freeze-measured-q-and-v; no failed iterate consumed",
+            "scale_equation": "J*(v-v_baseline)=s*(gain*error-J*v_baseline)",
+            "scale_group": "shared",
+            "scale_progress_weight": 1.0,
+            "secondary_link4": true,
+            "secondary_posture": true,
+            "secondary_tasks": false,
+            "secondary_weight": 1.0,
+            "stall_threshold_mps": 0.0001,
+            "state_mode": "snapshot",
+            "steps": 1,
+            "swap_priorities": false,
+            "target_budget_ms": 3.0,
+            "target_iterations": 20,
+            "target_min_orientation_improvement_rad": 0.0001,
+            "target_min_position_improvement_m": 1e-05,
+            "target_min_posture_improvement_rad": 1e-05,
+            "terminal_policy": "disabled",
+            "warm_start": true
+          },
+          "policy": "Actual app task construction and failure policy take precedence. Input bytes retained; input interpretation explicitly app-owned. No prior causal or timing admission.",
+          "production_static_changed": false,
+          "task_change": "Dual-arm hard pose app tasks replace study soft pose/posture/workload variants; regularization, constraints, acceptance use existing app defaults."
+        },
+        "legacy_definition": {
+          "path": "/workspace/labs/motion-control-lab/experiments/E06_solver_semantic_parity/declarations/study_legacy.v2.json",
+          "sha256": "d55e1e7051032e377d28c5dca7299d2ca8db239a117afe5e9afca5526d72dc3b",
+          "size_bytes": 59920
+        },
+        "old_arm_id": "mcc-weighted-full",
+        "old_config_sha256": "90b36563edbd3bb5ecb41917ccd9ece0602a3cebfb988305199cffae073d52aa",
+        "old_method_id": "mcc-weighted",
+        "reason": "New app-owned method; historical mathematical and acceptance admission not inherited.",
+        "status": "mapped"
+      },
+      "observation": {
+        "mode": "full"
+      },
       "repeats": {
         "confirmatory": 10,
         "development": 1,
@@ -1408,74 +3159,172 @@
       },
       "required": true,
       "smoke_config": {
-        "steps": 1
-      },
-      "validation_command": [
-        "/usr/bin/python3",
-        "/workspace/labs/motion-control-lab/experiments/E06_solver_semantic_parity/verify.py",
-        "--request",
-        "{request}"
-      ]
+        "maximum_calls": 3,
+        "maximum_duration_s": 0.03
+      }
     },
     {
+      "app": "mcl_step",
       "arm_id": "placo-controlled-full",
-      "available": false,
-      "binary": "mcl_study_e06",
+      "available": true,
+      "binary": "mcl_step",
+      "capability_binding": {
+        "app_id": "mcl_step",
+        "app_version": "2",
+        "document": {
+          "acceptance_contract": "existing-app-native-v1",
+          "app_id": "mcl_step",
+          "app_version": "2",
+          "execution_structures": [
+            "servo_step"
+          ],
+          "input_formats": [
+            "json"
+          ],
+          "native_pose_enforcement": "hard",
+          "observation_modes": [
+            "full",
+            "minimal",
+            "cpp-new"
+          ],
+          "schema_version": "app_capabilities.v1",
+          "solvers": {
+            "mcc": {
+              "backends": [
+                "proxqp",
+                "eiquadprog"
+              ]
+            },
+            "placo": {
+              "backends": [
+                "eiquadprog"
+              ]
+            }
+          },
+          "state_modes": [
+            "snapshot",
+            "evolving"
+          ],
+          "task_layouts": [
+            "dual-arm-hard-pose"
+          ]
+        },
+        "sha256": "64094320c27a4ee0e4dd586ee16777815cad165d861032ffb05ce5a618630f0c"
+      },
       "case_id": "enforcement_scaled",
       "config": {
-        "acceleration_limit": 4.0,
-        "causal_parity_artifact": null,
-        "causal_parity_status": "unavailable-until-E06-audit",
-        "derivative_policy": "solver-commanded-velocity; TargetSolve derivative unavailable",
-        "enforcement": "scaled",
-        "feedback_model": "ideal-kinematic-accepted-state; rejected attempt freezes measured q and v",
-        "gain_per_s": 1.0,
-        "geometry_policy": "model-only",
-        "hard_position_margin": 0.0,
-        "hard_tolerance": 1e-07,
-        "maximum_iterations_policy": "reject",
-        "mode": "ServoStep",
-        "native_acceleration": false,
-        "normalization": "identity",
-        "orientation_tolerance_rad": 0.01,
-        "orientation_weight": 1.0,
-        "period_s": 0.001,
-        "placo_rewrite_equalities": true,
-        "placo_use_sparsity": false,
-        "position_tolerance_m": 0.001,
-        "preservation_tolerance": 1e-07,
-        "primary_only": false,
-        "qp_absolute_tolerance": 1e-07,
-        "qp_iterations": 100,
-        "qp_relative_tolerance": 0.0,
-        "recovery_dwell_s": 0.1,
-        "recovery_orientation_threshold_rad": 0.01,
-        "recovery_position_threshold_m": 0.001,
-        "recovery_release_s": 4.0,
-        "regularization": 1e-08,
-        "rejected_derivative_limit": "frozen measured velocity is not a physical zero-velocity stopped plant",
-        "rejection_policy": "freeze-measured-q-and-v; no failed iterate consumed",
-        "scale_equation": "J*(v-v_baseline)=s*(gain*error-J*v_baseline)",
-        "scale_group": "shared",
-        "scale_progress_weight": 1.0,
-        "secondary_link4": true,
-        "secondary_posture": true,
-        "secondary_tasks": false,
-        "secondary_weight": 1.0,
-        "stall_threshold_mps": 0.0001,
-        "state_mode": "snapshot",
-        "steps": 1,
-        "swap_priorities": false,
-        "target_budget_ms": 3.0,
-        "target_iterations": 20,
-        "target_min_orientation_improvement_rad": 0.0001,
-        "target_min_position_improvement_m": 1e-05,
-        "target_min_posture_improvement_rad": 1e-05,
-        "terminal_policy": "disabled",
-        "warm_start": true
+        "algorithm": {},
+        "backend": "eiquadprog",
+        "rate_hz": 1000.0,
+        "solver": "placo",
+        "target_space": "tcp",
+        "task_layout": "dual-arm-hard-pose",
+        "urdf_path": "/workspace/models/r1.cos.urdf"
       },
+      "execution": {
+        "cold_calls": 1,
+        "measured_calls": 0,
+        "state_mode": "snapshot",
+        "warmup_calls": 0
+      },
+      "execution_structure": "servo_step",
       "input": "/workspace/labs/motion-control-lab/experiments/E06_solver_semantic_parity/inputs/generated/enforcement_scaled.descriptor.json",
-      "method_id": "placo-controlled",
+      "input_preparation": {
+        "status": "ready"
+      },
+      "legacy_availability": {
+        "available": false,
+        "reason": "PlaCo kinematics scaled rows do not expose common feasible-velocity baseline/shared versus per-arm scale contract"
+      },
+      "method_id": "step-placo-app-v1",
+      "migration": {
+        "differences": {
+          "comparison_admission": "requires-new-equation-and-acceptance-audit",
+          "new_configuration": {
+            "algorithm": {},
+            "backend": "eiquadprog",
+            "rate_hz": 1000.0,
+            "solver": "placo",
+            "target_space": "tcp",
+            "task_layout": "dual-arm-hard-pose",
+            "urdf_path": "/workspace/models/r1.cos.urdf"
+          },
+          "new_execution": {
+            "cold_calls": 1,
+            "measured_calls": 0,
+            "state_mode": "snapshot",
+            "warmup_calls": 0
+          },
+          "old_configuration": {
+            "acceleration_limit": 4.0,
+            "causal_parity_artifact": null,
+            "causal_parity_status": "unavailable-until-E06-audit",
+            "derivative_policy": "solver-commanded-velocity; TargetSolve derivative unavailable",
+            "enforcement": "scaled",
+            "feedback_model": "ideal-kinematic-accepted-state; rejected attempt freezes measured q and v",
+            "gain_per_s": 1.0,
+            "geometry_policy": "model-only",
+            "hard_position_margin": 0.0,
+            "hard_tolerance": 1e-07,
+            "maximum_iterations_policy": "reject",
+            "mode": "ServoStep",
+            "native_acceleration": false,
+            "normalization": "identity",
+            "orientation_tolerance_rad": 0.01,
+            "orientation_weight": 1.0,
+            "period_s": 0.001,
+            "placo_rewrite_equalities": true,
+            "placo_use_sparsity": false,
+            "position_tolerance_m": 0.001,
+            "preservation_tolerance": 1e-07,
+            "primary_only": false,
+            "qp_absolute_tolerance": 1e-07,
+            "qp_iterations": 100,
+            "qp_relative_tolerance": 0.0,
+            "recovery_dwell_s": 0.1,
+            "recovery_orientation_threshold_rad": 0.01,
+            "recovery_position_threshold_m": 0.001,
+            "recovery_release_s": 4.0,
+            "regularization": 1e-08,
+            "rejected_derivative_limit": "frozen measured velocity is not a physical zero-velocity stopped plant",
+            "rejection_policy": "freeze-measured-q-and-v; no failed iterate consumed",
+            "scale_equation": "J*(v-v_baseline)=s*(gain*error-J*v_baseline)",
+            "scale_group": "shared",
+            "scale_progress_weight": 1.0,
+            "secondary_link4": true,
+            "secondary_posture": true,
+            "secondary_tasks": false,
+            "secondary_weight": 1.0,
+            "stall_threshold_mps": 0.0001,
+            "state_mode": "snapshot",
+            "steps": 1,
+            "swap_priorities": false,
+            "target_budget_ms": 3.0,
+            "target_iterations": 20,
+            "target_min_orientation_improvement_rad": 0.0001,
+            "target_min_position_improvement_m": 1e-05,
+            "target_min_posture_improvement_rad": 1e-05,
+            "terminal_policy": "disabled",
+            "warm_start": true
+          },
+          "policy": "Actual app task construction and failure policy take precedence. Input bytes retained; input interpretation explicitly app-owned. No prior causal or timing admission.",
+          "production_static_changed": false,
+          "task_change": "Dual-arm hard pose app tasks replace study soft pose/posture/workload variants; regularization, constraints, acceptance use existing app defaults."
+        },
+        "legacy_definition": {
+          "path": "/workspace/labs/motion-control-lab/experiments/E06_solver_semantic_parity/declarations/study_legacy.v2.json",
+          "sha256": "d55e1e7051032e377d28c5dca7299d2ca8db239a117afe5e9afca5526d72dc3b",
+          "size_bytes": 59920
+        },
+        "old_arm_id": "placo-controlled-full",
+        "old_config_sha256": "a0eb0624fc46060c9cdda087480806e63a454c36c1833b24e14da5bf120a4609",
+        "old_method_id": "placo-controlled",
+        "reason": "PlaCo kinematics scaled rows do not expose common feasible-velocity baseline/shared versus per-arm scale contract",
+        "status": "mapped"
+      },
+      "observation": {
+        "mode": "full"
+      },
       "repeats": {
         "confirmatory": 10,
         "development": 1,
@@ -1483,74 +3332,168 @@
       },
       "required": true,
       "smoke_config": {
-        "steps": 1
-      },
-      "unavailable_reason": "PlaCo kinematics scaled rows do not expose common feasible-velocity baseline/shared versus per-arm scale contract",
-      "validation_command": [
-        "/usr/bin/python3",
-        "/workspace/labs/motion-control-lab/experiments/E06_solver_semantic_parity/verify.py",
-        "--request",
-        "{request}"
-      ]
+        "maximum_calls": 3,
+        "maximum_duration_s": 0.03
+      }
     },
     {
+      "app": "mcl_step",
       "arm_id": "mcc-weighted-full",
-      "binary": "mcl_study_e06",
+      "available": true,
+      "binary": "mcl_step",
+      "capability_binding": {
+        "app_id": "mcl_step",
+        "app_version": "2",
+        "document": {
+          "acceptance_contract": "existing-app-native-v1",
+          "app_id": "mcl_step",
+          "app_version": "2",
+          "execution_structures": [
+            "servo_step"
+          ],
+          "input_formats": [
+            "json"
+          ],
+          "native_pose_enforcement": "hard",
+          "observation_modes": [
+            "full",
+            "minimal",
+            "cpp-new"
+          ],
+          "schema_version": "app_capabilities.v1",
+          "solvers": {
+            "mcc": {
+              "backends": [
+                "proxqp",
+                "eiquadprog"
+              ]
+            },
+            "placo": {
+              "backends": [
+                "eiquadprog"
+              ]
+            }
+          },
+          "state_modes": [
+            "snapshot",
+            "evolving"
+          ],
+          "task_layouts": [
+            "dual-arm-hard-pose"
+          ]
+        },
+        "sha256": "64094320c27a4ee0e4dd586ee16777815cad165d861032ffb05ce5a618630f0c"
+      },
       "case_id": "enforcement_scaled",
       "config": {
-        "acceleration_limit": 4.0,
-        "causal_parity_artifact": null,
-        "causal_parity_status": "unavailable-until-E06-audit",
-        "derivative_policy": "solver-commanded-velocity; TargetSolve derivative unavailable",
-        "enforcement": "scaled",
-        "feedback_model": "ideal-kinematic-accepted-state; rejected attempt freezes measured q and v",
-        "gain_per_s": 1.0,
-        "geometry_policy": "model-only",
-        "hard_position_margin": 0.0,
-        "hard_tolerance": 1e-07,
-        "maximum_iterations_policy": "reject",
-        "mode": "ServoStep",
-        "native_acceleration": false,
-        "normalization": "identity",
-        "orientation_tolerance_rad": 0.01,
-        "orientation_weight": 1.0,
-        "period_s": 0.001,
-        "placo_rewrite_equalities": true,
-        "placo_use_sparsity": false,
-        "position_tolerance_m": 0.001,
-        "preservation_tolerance": 1e-07,
-        "primary_only": false,
-        "qp_absolute_tolerance": 1e-07,
-        "qp_iterations": 100,
-        "qp_relative_tolerance": 0.0,
-        "recovery_dwell_s": 0.1,
-        "recovery_orientation_threshold_rad": 0.01,
-        "recovery_position_threshold_m": 0.001,
-        "recovery_release_s": 4.0,
-        "regularization": 1e-08,
-        "rejected_derivative_limit": "frozen measured velocity is not a physical zero-velocity stopped plant",
-        "rejection_policy": "freeze-measured-q-and-v; no failed iterate consumed",
-        "scale_equation": "J*(v-v_baseline)=s*(gain*error-J*v_baseline)",
-        "scale_group": "shared",
-        "scale_progress_weight": 1.0,
-        "secondary_link4": true,
-        "secondary_posture": true,
-        "secondary_tasks": false,
-        "secondary_weight": 1.0,
-        "stall_threshold_mps": 0.0001,
-        "state_mode": "snapshot",
-        "steps": 1,
-        "swap_priorities": false,
-        "target_budget_ms": 3.0,
-        "target_iterations": 20,
-        "target_min_orientation_improvement_rad": 0.0001,
-        "target_min_position_improvement_m": 1e-05,
-        "target_min_posture_improvement_rad": 1e-05,
-        "terminal_policy": "disabled",
-        "warm_start": true
+        "algorithm": {},
+        "backend": "proxqp",
+        "rate_hz": 1000.0,
+        "solver": "mcc",
+        "target_space": "tcp",
+        "task_layout": "dual-arm-hard-pose",
+        "urdf_path": "/workspace/models/r1.cos.urdf"
       },
+      "execution": {
+        "cold_calls": 1,
+        "measured_calls": 0,
+        "state_mode": "snapshot",
+        "warmup_calls": 0
+      },
+      "execution_structure": "servo_step",
       "input": "/workspace/labs/motion-control-lab/experiments/E06_solver_semantic_parity/inputs/generated/enforcement_scaled.descriptor.json",
-      "method_id": "mcc-weighted",
+      "input_preparation": {
+        "status": "ready"
+      },
+      "method_id": "step-mcc-app-v1",
+      "migration": {
+        "differences": {
+          "comparison_admission": "requires-new-equation-and-acceptance-audit",
+          "new_configuration": {
+            "algorithm": {},
+            "backend": "proxqp",
+            "rate_hz": 1000.0,
+            "solver": "mcc",
+            "target_space": "tcp",
+            "task_layout": "dual-arm-hard-pose",
+            "urdf_path": "/workspace/models/r1.cos.urdf"
+          },
+          "new_execution": {
+            "cold_calls": 1,
+            "measured_calls": 0,
+            "state_mode": "snapshot",
+            "warmup_calls": 0
+          },
+          "old_configuration": {
+            "acceleration_limit": 4.0,
+            "causal_parity_artifact": null,
+            "causal_parity_status": "unavailable-until-E06-audit",
+            "derivative_policy": "solver-commanded-velocity; TargetSolve derivative unavailable",
+            "enforcement": "scaled",
+            "feedback_model": "ideal-kinematic-accepted-state; rejected attempt freezes measured q and v",
+            "gain_per_s": 1.0,
+            "geometry_policy": "model-only",
+            "hard_position_margin": 0.0,
+            "hard_tolerance": 1e-07,
+            "maximum_iterations_policy": "reject",
+            "mode": "ServoStep",
+            "native_acceleration": false,
+            "normalization": "identity",
+            "orientation_tolerance_rad": 0.01,
+            "orientation_weight": 1.0,
+            "period_s": 0.001,
+            "placo_rewrite_equalities": true,
+            "placo_use_sparsity": false,
+            "position_tolerance_m": 0.001,
+            "preservation_tolerance": 1e-07,
+            "primary_only": false,
+            "qp_absolute_tolerance": 1e-07,
+            "qp_iterations": 100,
+            "qp_relative_tolerance": 0.0,
+            "recovery_dwell_s": 0.1,
+            "recovery_orientation_threshold_rad": 0.01,
+            "recovery_position_threshold_m": 0.001,
+            "recovery_release_s": 4.0,
+            "regularization": 1e-08,
+            "rejected_derivative_limit": "frozen measured velocity is not a physical zero-velocity stopped plant",
+            "rejection_policy": "freeze-measured-q-and-v; no failed iterate consumed",
+            "scale_equation": "J*(v-v_baseline)=s*(gain*error-J*v_baseline)",
+            "scale_group": "shared",
+            "scale_progress_weight": 1.0,
+            "secondary_link4": true,
+            "secondary_posture": true,
+            "secondary_tasks": false,
+            "secondary_weight": 1.0,
+            "stall_threshold_mps": 0.0001,
+            "state_mode": "snapshot",
+            "steps": 1,
+            "swap_priorities": false,
+            "target_budget_ms": 3.0,
+            "target_iterations": 20,
+            "target_min_orientation_improvement_rad": 0.0001,
+            "target_min_position_improvement_m": 1e-05,
+            "target_min_posture_improvement_rad": 1e-05,
+            "terminal_policy": "disabled",
+            "warm_start": true
+          },
+          "policy": "Actual app task construction and failure policy take precedence. Input bytes retained; input interpretation explicitly app-owned. No prior causal or timing admission.",
+          "production_static_changed": false,
+          "task_change": "Dual-arm hard pose app tasks replace study soft pose/posture/workload variants; regularization, constraints, acceptance use existing app defaults."
+        },
+        "legacy_definition": {
+          "path": "/workspace/labs/motion-control-lab/experiments/E06_solver_semantic_parity/declarations/study_legacy.v2.json",
+          "sha256": "d55e1e7051032e377d28c5dca7299d2ca8db239a117afe5e9afca5526d72dc3b",
+          "size_bytes": 59920
+        },
+        "old_arm_id": "mcc-weighted-full",
+        "old_config_sha256": "a0eb0624fc46060c9cdda087480806e63a454c36c1833b24e14da5bf120a4609",
+        "old_method_id": "mcc-weighted",
+        "reason": "New app-owned method; historical mathematical and acceptance admission not inherited.",
+        "status": "mapped"
+      },
+      "observation": {
+        "mode": "full"
+      },
       "repeats": {
         "confirmatory": 10,
         "development": 1,
@@ -1558,14 +3501,9 @@
       },
       "required": true,
       "smoke_config": {
-        "steps": 1
-      },
-      "validation_command": [
-        "/usr/bin/python3",
-        "/workspace/labs/motion-control-lab/experiments/E06_solver_semantic_parity/verify.py",
-        "--request",
-        "{request}"
-      ]
+        "maximum_calls": 3,
+        "maximum_duration_s": 0.03
+      }
     }
   ]
 }

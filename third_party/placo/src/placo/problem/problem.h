@@ -122,6 +122,12 @@ public:
 
   void dump_status();
 
+  /** Read-only, opt-in native row view for offline study audits. Allocates only on call. */
+  std::vector<const ProblemConstraint*> constraint_diagnostics() const
+  {
+    return {constraints.begin(), constraints.end()};
+  }
+
 protected:
   /**
    * @brief Internal object to store the QR decomposition

@@ -1,5 +1,5 @@
 """Canonical input and independent URDF FK. Does not import candidate solvers."""
-import math, pathlib, xml.etree.ElementTree as ET
+import functools, math, pathlib, xml.etree.ElementTree as ET
 import numpy as np
 from evidence import artifact, stable_hash, write_json
 JOINTS=['head_yaw_joint','head_pitch_joint','torso_yaw_joint','torso_pitch_joint','knee_pitch_joint','ankle_pitch_joint']+[f'{s}_arm_joint{i}' for s in ('left','right') for i in range(1,8)]
@@ -18,28 +18,52 @@ class UrdfFk:
         self.path=pathlib.Path(path); self.root=ET.parse(path).getroot(); self.joints=list(self.root.findall('joint'))
         children={j.find('child').get('link') for j in self.joints}
         self.base=next(l.get('name') for l in self.root.findall('link') if l.get('name') not in children)
-    def transforms(self,names,q):
-        positions={j.get('name'):0. for j in self.joints}; positions.update(zip(names,q)); frames={self.base:np.eye(4)}; pending=list(self.joints)
+        # Compile immutable model data once, preserving the original traversal and
+        # floating-point operation order. This is independent XML FK, not candidate FK.
+        self._compiled=[];pending=list(self.joints);seen={self.base}
         while pending:
             progressed=False
             for j in pending[:]:
                 parent=j.find('parent').get('link')
-                if parent not in frames: continue
-                t=np.eye(4); origin=j.find('origin')
+                if parent not in seen:continue
+                t=np.eye(4);origin=j.find('origin')
                 if origin is not None:
-                    t[:3,3]=xyz(origin.get('xyz','0 0 0')); r,p,y=xyz(origin.get('rpy','0 0 0'))
+                    t[:3,3]=xyz(origin.get('xyz','0 0 0'));r,p,y=xyz(origin.get('rpy','0 0 0'))
                     t[:3,:3]=rotation([0,0,1],y)@rotation([0,1,0],p)@rotation([1,0,0],r)
-                v=positions.get(j.get('name'),0.); mimic=j.find('mimic')
-                if mimic is not None: v=positions[mimic.get('joint')]*float(mimic.get('multiplier','1'))+float(mimic.get('offset','0'))
-                m=np.eye(4); axis=j.find('axis'); a=xyz(axis.get('xyz','1 0 0')) if axis is not None else [1,0,0]
-                if j.get('type') in ('revolute','continuous'): m[:3,:3]=rotation(a,v)
-                elif j.get('type')=='prismatic': m[:3,3]=np.asarray(a)*v
-                elif j.get('type')!='fixed': raise ValueError('unsupported independent FK joint '+j.get('type'))
-                frames[j.find('child').get('link')]=frames[parent]@t@m; pending.remove(j); progressed=True
-            if not progressed: raise ValueError('disconnected URDF')
+                axis=j.find('axis');axis=xyz(axis.get('xyz','1 0 0')) if axis is not None else [1,0,0]
+                mimic=j.find('mimic')
+                mimic=None if mimic is None else (mimic.get('joint'),float(mimic.get('multiplier','1')),float(mimic.get('offset','0')))
+                child=j.find('child').get('link')
+                self._compiled.append((j.get('name'),parent,child,t,axis,j.get('type'),mimic))
+                seen.add(child);pending.remove(j);progressed=True
+            if not progressed:raise ValueError('disconnected URDF')
+        self._cached=functools.lru_cache(maxsize=256)(self._evaluate)
+
+    def _evaluate(self,names,q_bytes):
+        positions={j.get('name'):0. for j in self.joints}
+        positions.update(zip(names,np.frombuffer(q_bytes,dtype=np.float64)))
+        frames={self.base:np.eye(4)}
+        for name,parent,child,t,axis,kind,mimic in self._compiled:
+            value=positions.get(name,0.)
+            if mimic is not None:value=positions[mimic[0]]*mimic[1]+mimic[2]
+            motion=np.eye(4)
+            if kind in ('revolute','continuous'):motion[:3,:3]=rotation(axis,value)
+            elif kind=='prismatic':motion[:3,3]=np.asarray(axis)*value
+            elif kind!='fixed':raise ValueError('unsupported independent FK joint '+kind)
+            frames[child]=frames[parent]@t@motion
+        for frame in frames.values():frame.setflags(write=False)
         return frames
+
+    def _frames(self,names,q):
+        # Exact bytes preserve signed zero; no rounding/quantization of states.
+        return self._cached(tuple(names),np.asarray(q,dtype=np.float64).tobytes())
+
+    def transforms(self,names,q):
+        # Preserve the public method's caller-owned mutable result contract.
+        return {name:frame.copy() for name,frame in self._frames(names,q).items()}
+
     def pose(self,names,q,frame,tcp=(0,0,.1),root='base_link'):
-        f=self.transforms(names,q); t=np.linalg.inv(f[root])@f[frame]; t[:3,3]+=t[:3,:3]@np.asarray(tcp)
+        f=self._frames(names,q);t=np.linalg.inv(f[root])@f[frame];t[:3,3]+=t[:3,:3]@np.asarray(tcp)
         return {'position':t[:3,3].tolist(),'rotation':t[:3,:3].tolist()}
     def limits(self,names):
         joints={j.get('name'):j for j in self.joints}
@@ -76,3 +100,22 @@ def save_input(path,data):
                 'split_id':data.get('split_id','unknown'),'model':data.get('model')}
     target=pathlib.Path(path).with_suffix('.descriptor.json');write_json(target,descriptor)
     return str(target.resolve())
+
+
+def resolve_input(ref, base):
+    """Read and verify an archived input descriptor for offline validation."""
+    path = pathlib.Path(ref)
+    if not path.is_absolute():
+        path = base / path
+    from evidence import read_json, verify_artifact
+    descriptor = read_json(path)
+    if descriptor['schema_version'] != 'input_descriptor.v1':
+        raise ValueError('input descriptor version')
+    if descriptor.get('canonical') is None:
+        raise ValueError(descriptor.get('reason', 'canonical input unavailable'))
+    if not verify_artifact(descriptor['canonical']):
+        raise ValueError('canonical hash mismatch or missing')
+    value = read_json(descriptor['canonical']['locator'])
+    if value.get('model') and not verify_artifact(value['model']):
+        raise ValueError('model hash mismatch or missing')
+    return descriptor, value

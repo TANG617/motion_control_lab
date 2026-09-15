@@ -1,0 +1,99 @@
+{
+  "configById": {
+    "3D!harp": {
+      "fixedFrame": "base_link",
+      "followTf": "base_link",
+      "topics": {
+        "/mcl/harp/left/scene": {
+          "visible": true
+        },
+        "/mcl/nullspace/elbow/scene": {
+          "visible": true
+        },
+        "/mcl/cartesian/ik/left": {
+          "visible": true
+        },
+        "/mcl/cartesian/ik/right": {
+          "visible": true
+        }
+      },
+      "cameraState": {
+        "distance": 2,
+        "perspective": true,
+        "phi": 70,
+        "thetaOffset": -45,
+        "targetOffset": [
+          0,
+          0,
+          1
+        ],
+        "near": 0.01,
+        "far": 100
+      },
+      "foxglovePanelTitle": "HARP left arm | reference direction"
+    },
+    "Plot!angle": {
+      "paths": [
+        {
+          "value": "/mcl/harp/left/angle.angle_unwrapped_deg",
+          "enabled": true,
+          "timestampMethod": "receiveTime",
+          "label": "Consumed HARP reference angle (deg)",
+          "color": "#26E650",
+          "showLine": true,
+          "lineSize": 1.5
+        }
+      ],
+      "xAxisVal": "timestamp",
+      "showLegend": true,
+      "isSynced": true,
+      "timeWindowMode": "sliding",
+      "followingViewWidth": 20,
+      "foxglovePanelTitle": "Consumed HARP reference angle (deg)"
+    },
+    "Plot!age": {
+      "paths": [
+        {
+          "value": "/mcl/harp/left/angle.reference_age_ms",
+          "enabled": true,
+          "timestampMethod": "receiveTime",
+          "label": "Active reference age (ms)",
+          "color": "#56B4E9",
+          "showLine": true,
+          "lineSize": 1.5
+        }
+      ],
+      "xAxisVal": "timestamp",
+      "showLegend": true,
+      "isSynced": true,
+      "timeWindowMode": "sliding",
+      "followingViewWidth": 20,
+      "foxglovePanelTitle": "Active reference age (ms)"
+    },
+    "RawMessages!harp": {
+      "topicPath": "/mcl/harp/left/angle",
+      "foxglovePanelTitle": "HARP reference and selected HQP level"
+    }
+  },
+  "globalVariables": {},
+  "userNodes": {},
+  "playbackConfig": {
+    "speed": 1
+  },
+  "layout": {
+    "direction": "row",
+    "first": "3D!harp",
+    "second": {
+      "direction": "column",
+      "first": "Plot!angle",
+      "second": {
+        "direction": "column",
+        "first": "Plot!age",
+        "second": "RawMessages!harp",
+        "splitPercentage": 45
+      },
+      "splitPercentage": 40
+    },
+    "splitPercentage": 55
+  }
+}

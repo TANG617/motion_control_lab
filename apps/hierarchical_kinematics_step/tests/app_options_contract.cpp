@@ -32,6 +32,34 @@ bool rejects(const std::function<void()> &call) {
 } // namespace
 
 int main() {
+  const auto mirrored = parse({"app", "--profile", "planned", "teleop",
+      "--hqp-layout", "pose-primary", "--side", "right", "--mirror-tcp-input"});
+  if (!mirrored.interactive.mirror_tcp_input || mirrored.interactive.tui.side != "left" ||
+      app::profileDefaults(app::Profile::Planned).interactive.mirror_tcp_input ||
+      app::resolvedOptionsJson(mirrored).find("\"mirror_tcp_input\" : true") == std::string::npos ||
+      parse({"app", "--profile", "planned", "teleop", "--mirror-tcp-input",
+             "--no-mirror-tcp-input"}).interactive.mirror_tcp_input ||
+      !rejects([] { (void)parse({"app", "--profile", "planned", "teleop", "--mirror-tcp-input"}); }) ||
+      !rejects([] { (void)parse({"app", "--profile", "planned", "replay", "--hqp-layout", "pose-primary",
+          "--input", "/tmp/input.csv", "--mirror-tcp-input"}); }))
+    throw std::runtime_error("mirror CLI contract");
+  const auto learned_planned = parse(
+      {"app", "--profile", "planned", "teleop", "--hqp-layout", "pose-primary",
+       "--elbow-reference", "harp", "--harp-model", "/tmp/model"});
+  const auto learned_capabilities = app::profileCapabilities(learned_planned);
+  if (!learned_capabilities.cartesian_planning ||
+      !learned_capabilities.nullspace || learned_capabilities.joint_otg ||
+      app::profileCapabilities(app::profileDefaults(app::Profile::Planned)).nullspace ||
+      !rejects([] {
+        (void)parse({"app", "--profile", "planned", "teleop", "--hqp-layout",
+                     "pose-primary", "--joint-target-mode", "future-o1-pv"});
+      }) ||
+      !rejects([] {
+        (void)parse({"app", "--profile", "planned", "teleop", "--elbow-reference",
+                     "harp", "--harp-model", "/tmp/model"});
+      })) {
+    return EXIT_FAILURE;
+  }
   const auto replay_fault_exit = parse(
       {"app", "--profile", "planned", "replay", "--input", "/tmp/input.mcap",
        "--urdf", "/tmp/r1.urdf",
@@ -177,11 +205,6 @@ int main() {
                      "/tmp/r1.urdf", "--joint-target-mode", "ik-pv"});
       }) ||
       !rejects([] {
-        (void)parse({"app", "--profile", "planned-otg", "teleop", "--urdf",
-                     "/tmp/r1.urdf",
-                     "--red-secondary-task-link4-position-weight", "5"});
-      }) ||
-      !rejects([] {
         (void)parse({"app", "--profile", "planned-otg-nullspace", "teleop",
                      "--urdf", "/tmp/r1.urdf", "--mujoco-model",
                      "/tmp/r1.xml"});
@@ -195,6 +218,24 @@ int main() {
                      "--yellow-maximum-iterations", "50"});
       })) {
     return EXIT_FAILURE;
+  }
+
+  // Link4 is registered by the actual solver in every profile. Its public
+  // configuration now remains available when the task moves to Tertiary;
+  // rejecting this consumed option was the retired profile gate contract.
+  for (const char *profile : {"hierarchical", "planned-otg"}) {
+    const auto link4 = parse({"app", "--profile", profile, "teleop",
+        "--hqp-layout", "position-orientation-posture",
+        "--red-secondary-task-link4-position-weight", "5",
+        "--red-secondary-task-link4-position-servo-gain-per-s", "2",
+        "--red-secondary-task-link4-position-preservation-tolerance-mps", "0.00001"});
+    const auto &solver = link4.interactive.solver;
+    if (solver.hqp_layout != "position-orientation-posture" ||
+        solver.red_secondary_task_link4_position_weight != 5.0 ||
+        solver.red_secondary_task_link4_position_servo_gain_per_s != 2.0 ||
+        solver.red_secondary_task_link4_position_preservation_tolerance_mps != 1e-5) {
+      throw std::runtime_error("public Link4 configuration was not preserved");
+    }
   }
 
   const auto default_planned =

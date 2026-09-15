@@ -22,7 +22,7 @@ def test_semantic_counterexamples():
   other={**base,key:value};assert any(x['status']=='semantic_mismatch' and x['field']==key for x in v.semantic_audit(base,other))
 def test_declared_matrix_and_event_fixture():
  import json
- root=pathlib.Path(__file__).parents[1];d=json.loads((root/'definition.json').read_text());units=d['units']
+ root=pathlib.Path(__file__).parents[1];d=json.loads((root/'declarations/study_legacy.v2.json').read_text());units=d['units']
  assert len([u for u in units if u['case_id'].startswith('joint_limit_')])==3*2*3*4
  assert len([u for u in units if u['case_id'].startswith('moving_state_')])==5*3*2*4
  assert len([u for u in units if u['case_id'].startswith('unreachable_one_arm_')])==2*4*2*4

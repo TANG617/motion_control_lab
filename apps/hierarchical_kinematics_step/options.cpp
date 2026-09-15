@@ -201,6 +201,44 @@ parsePlanningSynchronization(const std::string &argument,
                            " must be one of 'none', 'time', or 'phase'");
 }
 
+bool isReferenceOption(const std::string &argument) {
+  return optionIn(argument, {"--hqp-layout", "--elbow-reference",
+    "--harp-model", "--harp-device", "--elbow-recorded", "--elbow-record", "--elbow-sample-rate-hz",
+    "--elbow-maximum-age-ms",
+    "--red-primary-task-tcp-orientation-servo-gain-per-s",
+    "--red-primary-task-tcp-orientation-preservation-tolerance-radps",
+    "--red-primary-task-tcp-orientation-feasibility-tolerance-radps"});
+}
+
+void parseReferenceOption(const std::string &argument, const std::string &value,
+                          HierarchicalOptions &options) {
+  auto &ref = options.elbow_reference;
+  auto &solver = options.solver;
+  if (argument == "--hqp-layout") {
+    if (value != "position-first" && value != "pose-primary" && value != "position-orientation-posture" && value != "primary-only")
+      throw std::runtime_error("--hqp-layout expects position-first|pose-primary|position-orientation-posture|primary-only");
+    solver.hqp_layout = value;
+  } else if (argument == "--elbow-reference") {
+    if (value == "pim-ik") throw std::runtime_error("pim-ik was removed; use harp with an explicit installed MCC model; no automatic model migration");
+    if (value != "manual" && value != "recorded" && value != "harp")
+      throw std::runtime_error("--elbow-reference expects manual|recorded|harp");
+    ref.source = value;
+  } else if (argument == "--harp-model") ref.harp_model_directory = value;
+  else if (argument == "--harp-device") ref.harp_device = value;
+  else if (argument == "--elbow-recorded") ref.recorded_path = value;
+  else if (argument == "--elbow-record") ref.record_path = value;
+  else {
+    const double number = parsePositiveDouble(argument, value);
+    if (argument == "--elbow-sample-rate-hz") ref.sample_rate_hz = number;
+    else if (argument == "--elbow-maximum-age-ms") ref.maximum_age_ms = number;
+    else if (argument == "--red-primary-task-tcp-orientation-servo-gain-per-s")
+      solver.red_primary_task_tcp_orientation_servo_gain_per_s = number;
+    else if (argument == "--red-primary-task-tcp-orientation-preservation-tolerance-radps")
+      solver.red_primary_task_tcp_orientation_preservation_tolerance_radps = number;
+    else solver.red_primary_task_tcp_orientation_feasibility_tolerance_radps = number;
+  }
+}
+
 bool parseSolverOption(const std::string &argument, const std::string &value,
                        SolverOptions &options) {
   const bool nonnegative =
@@ -477,6 +515,15 @@ ProfileCapabilities profileCapabilities(Profile profile) {
   return result;
 }
 
+ProfileCapabilities profileCapabilities(const Options &options) {
+  auto result = profileCapabilities(options.profile);
+  if (options.profile == Profile::Planned &&
+      options.interactive.solver.hqp_layout == "pose-primary") {
+    result.nullspace = true;
+  }
+  return result;
+}
+
 Options profileDefaults(Profile profile) {
   Options result;
   result.profile = profile;
@@ -597,9 +644,13 @@ std::string resolvedOptionsJson(const Options &options) {
   Json::Value root;
   root["schema_version"] = "mcl.hierarchical_kinematics_step.options.v2";
   root["profile"] = profileName(options.profile);
+  root["observation_mode"]=options.observation_mode;
+  root["raw_journal_path"]=options.raw_journal_path;
+  root["target_space"]=options.target_space;
+  root["initial_state_path"]=options.initial_state_path;
   root["source_mode"] =
       options.source_mode == SourceMode::Teleop ? "teleop" : "replay";
-  const auto capabilities = profileCapabilities(options.profile);
+  const auto capabilities = profileCapabilities(options);
   root["capabilities"]["cartesian_planning"] = capabilities.cartesian_planning;
   root["capabilities"]["joint_otg"] = capabilities.joint_otg;
   root["capabilities"]["nullspace"] = capabilities.nullspace;
@@ -620,6 +671,7 @@ std::string resolvedOptionsJson(const Options &options) {
   runtime["duration_s"] = app.duration_s;
   runtime["presentation_enabled"] = app.presentation.enabled;
   runtime["teleop"]["side"] = app.tui.side;
+  runtime["teleop"]["mirror_tcp_input"] = app.mirror_tcp_input;
   runtime["teleop"]["step_m"] = app.tui.step_m;
   runtime["teleop"]["min_step_m"] = app.tui.min_step_m;
   runtime["teleop"]["max_step_m"] = app.tui.max_step_m;
@@ -633,6 +685,13 @@ std::string resolvedOptionsJson(const Options &options) {
   const auto &solver = app.solver;
   auto &solver_json = root["solver"];
 #define MCL_SOLVER_FIELD(name) solver_json[#name] = solver.name
+  MCL_SOLVER_FIELD(hqp_layout);
+  MCL_SOLVER_FIELD(red_primary_task_tcp_orientation_servo_gain_per_s);
+  MCL_SOLVER_FIELD(red_primary_task_tcp_orientation_preservation_tolerance_radps);
+  MCL_SOLVER_FIELD(red_primary_task_tcp_orientation_feasibility_tolerance_radps);
+  solver_json["orientation_enforcement"] = solver.hqp_layout == "pose-primary" ? "scaled" : "soft";
+  solver_json["orientation_priority"] = solver.hqp_layout == "pose-primary" ? "Primary" : "Secondary";
+  solver_json["orientation_soft_weight_used"] = solver.hqp_layout != "pose-primary";
   MCL_SOLVER_FIELD(maximum_accepted_hard_violation);
   MCL_SOLVER_FIELD(joint_position_margin_rad);
   MCL_SOLVER_FIELD(joint_position_braking_velocity_envelope_enabled);
@@ -706,6 +765,8 @@ std::string resolvedOptionsJson(const Options &options) {
   robot_json["base_frame"] = robot.base_frame;
   robot_json["left_end_effector_frame"] = robot.left_end_effector_frame;
   robot_json["right_end_effector_frame"] = robot.right_end_effector_frame;
+  robot_json["left_shoulder_frame"] = robot.left_shoulder_frame;
+  robot_json["left_wrist_frame"] = robot.left_wrist_frame;
   robot_json["left_link4_frame"] = robot.left_link4_frame;
   robot_json["right_link4_frame"] = robot.right_link4_frame;
   robot_json["left_tcp_offset"] = transform(robot.left_tcp_offset);
@@ -794,6 +855,16 @@ std::string resolvedOptionsJson(const Options &options) {
   root["simulation"]["mujoco_model_path"] = app.simulation.mujoco_model_path;
   root["simulation"]["viewer_enabled"] = app.simulation.viewer_enabled;
 
+  auto &elbow = root["elbow_reference"];
+  elbow["source"] = app.elbow_reference.source;
+  elbow["harp_model_directory"] = app.elbow_reference.harp_model_directory;
+  elbow["harp_device"] = app.elbow_reference.harp_device;
+  elbow["recorded_path"] = app.elbow_reference.recorded_path;
+  elbow["record_path"] = app.elbow_reference.record_path;
+  elbow["sample_rate_hz"] = app.elbow_reference.sample_rate_hz;
+  elbow["maximum_age_ms"] = app.elbow_reference.maximum_age_ms;
+  elbow["window_size"] = 30;
+  elbow["input_mapping"] = "R1 base-frame EE, upstream 9D encoding, no workspace scaling";
   root["replay_trace_enabled"] = options.replay_trace_enabled;
   root["replay_exit_on_fault"] = options.replay_exit_on_fault;
   root["replay_elbow_teleop_enabled"] = options.replay_elbow_teleop_enabled;
@@ -986,6 +1057,15 @@ void printHierarchicalUsage(const char *program) {
 
 void printPlannedUsage(const char *program, SourceMode source_mode) {
   printHierarchicalUsage(program);
+  std::cout << "  --mirror-tcp-input / --no-mirror-tcp-input (keyboard only)\n"
+            << "  --hqp-layout position-first|pose-primary\n"
+            << "  --elbow-reference manual|recorded|harp\n"
+            << "  --harp-model <directory> --harp-device cpu|cuda\n"
+            << "  --elbow-recorded <path> --elbow-record <path>\n"
+            << "  --elbow-sample-rate-hz 100 --elbow-maximum-age-ms 100\n"
+            << "  --red-primary-task-tcp-orientation-servo-gain-per-s 10\n"
+            << "  --red-primary-task-tcp-orientation-preservation-tolerance-radps 0.0005\n"
+            << "  --red-primary-task-tcp-orientation-feasibility-tolerance-radps 0.001\n";
   const Options defaults;
   std::cout << "\nOnline Cartesian replan limits (per "
                "reference-frame/rotation-vector axis):\n"
@@ -1039,9 +1119,15 @@ HierarchicalOptions parseHierarchicalOptions(int argc, char **argv,
   bool collision_pairs_overridden = false;
   for (int index = 1; index < argc; ++index) {
     const std::string argument{argv[index]};
+    if (argument.rfind("--pim-", 0) == 0 || argument == "--elbow-socket" || argument == "--elbow-communication-timeout-ms")
+      throw std::runtime_error("PiM Python/socket inference was removed; use --elbow-reference harp --harp-model <installed model> --harp-device cpu|cuda");
     if (argument == "--help" || argument == "-h") {
       printHierarchicalUsage(argv[0]);
       std::exit(EXIT_SUCCESS);
+    } else if (isReferenceOption(argument)) {
+      parseReferenceOption(argument, requireValue(index, argc, argv, argument), options);
+    } else if (argument == "--mirror-tcp-input" || argument == "--no-mirror-tcp-input") {
+      options.mirror_tcp_input = argument == "--mirror-tcp-input";
     } else if (argument == "--side") {
       options.tui.side = requireValue(index, argc, argv, argument);
     } else if (argument == "--urdf") {
@@ -1393,10 +1479,13 @@ Options parseOptions(int argc, char **argv) {
   bool planning_option_seen = false;
   bool joint_otg_option_seen = false;
   bool nullspace_option_seen = false;
+  bool reference_option_seen = false;
   bool legacy_topology_option_seen = false;
   bool admittance_or_simulation_option_seen = false;
   for (int index = 4; index < argc; ++index) {
     const std::string argument{argv[index]};
+    if (argument.rfind("--pim-", 0) == 0 || argument == "--elbow-socket" || argument == "--elbow-communication-timeout-ms")
+      throw std::runtime_error("PiM Python/socket inference was removed; use --elbow-reference harp --harp-model <installed model> --harp-device cpu|cuda");
     nullspace_option_seen =
         nullspace_option_seen ||
         optionIn(
@@ -1406,9 +1495,6 @@ Options parseOptions(int argc, char **argv) {
              "--red-primary-task-tcp-position-preservation-tolerance-mps",
              "--red-secondary-task-yellow-posture-coupling-preservation-"
              "tolerance",
-             "--red-secondary-task-link4-position-weight",
-             "--red-secondary-task-link4-position-servo-gain-per-s",
-             "--red-secondary-task-link4-position-preservation-tolerance-mps",
              "--red-secondary-task-yellow-posture-coupling-weight",
              "--red-secondary-task-yellow-posture-coupling-servo-gain-per-s",
              "--red-secondary-task-yellow-posture-coupling-joint-weight-"
@@ -1429,7 +1515,10 @@ Options parseOptions(int argc, char **argv) {
       destination = parsePositiveDouble(
           argument, requireValue(index, argc, argv, argument));
     };
-    if (argument == "--max-linear-velocity-mps") {
+    if (isReferenceOption(argument)) {
+      reference_option_seen = reference_option_seen || argument != "--hqp-layout";
+      parseReferenceOption(argument, requireValue(index, argc, argv, argument), result.interactive);
+    } else if (argument == "--max-linear-velocity-mps") {
       planning_option_seen = true;
       planningValue(result.planning.max_linear_velocity_mps);
     } else if (argument == "--max-linear-acceleration-mps2") {
@@ -1470,6 +1559,16 @@ Options parseOptions(int argc, char **argv) {
       joint_otg_option_seen = true;
       result.planning.joint_maximum_sample_count = parsePositiveSize(
           argument, requireValue(index, argc, argv, argument));
+    } else if (argument == "--observation-mode") {
+      result.observation_mode=requireValue(index,argc,argv,argument);
+      if(result.observation_mode!="full"&&result.observation_mode!="minimal"&&result.observation_mode!="cpp-new")throw std::runtime_error("unsupported observation mode");
+    } else if (argument == "--raw-journal") {
+      result.raw_journal_path=requireValue(index,argc,argv,argument);
+    } else if (argument == "--target-space") {
+      result.target_space=requireValue(index,argc,argv,argument);
+      if(result.target_space!="frame"&&result.target_space!="tcp")throw std::runtime_error("--target-space requires frame|tcp");
+    } else if (argument == "--initial-state") {
+      result.initial_state_path=requireValue(index,argc,argv,argument);
     } else if (argument == "--dump-resolved-options") {
       result.dump_resolved_options = true;
     } else if (argument == "--launcher-argv-json") {
@@ -1573,7 +1672,7 @@ Options parseOptions(int argc, char **argv) {
                     "--no-yellow-proxqp-warm-start",
                     "--red-accept-feasible-primary-max-iterations",
                     "--no-red-accept-feasible-primary-max-iterations",
-                    "--red-reject-primary-max-iterations"})) {
+                    "--red-reject-primary-max-iterations", "--mirror-tcp-input", "--no-mirror-tcp-input"})) {
         admittance_or_simulation_option_seen =
             admittance_or_simulation_option_seen ||
             optionIn(argument,
@@ -1724,7 +1823,21 @@ Options parseOptions(int argc, char **argv) {
       static_cast<int>(hierarchical_arguments.size()),
       hierarchical_arguments.data(), std::move(result.interactive), profile);
 
-  const auto capabilities = profileCapabilities(profile);
+  const auto capabilities = profileCapabilities(result);
+  if (result.interactive.mirror_tcp_input) {
+    if (result.source_mode != SourceMode::Teleop || !capabilities.nullspace)
+      throw std::runtime_error("--mirror-tcp-input requires keyboard input and a nullspace/pose-primary layout");
+    result.interactive.tui.side = "left";
+  }
+
+  if (reference_option_seen && !capabilities.nullspace && profile != Profile::Planned) {
+    throw std::runtime_error("elbow reference/layout options are not valid for this profile");
+  }
+  if (profile == Profile::Planned &&
+      result.interactive.elbow_reference.source != "manual" &&
+      !capabilities.nullspace) {
+    throw std::runtime_error("planned learning/recorded references require --hqp-layout pose-primary");
+  }
   if (planning_option_seen && !capabilities.cartesian_planning) {
     throw std::runtime_error(
         "Cartesian planning options are not valid for profile " +
@@ -1769,6 +1882,24 @@ Options parseOptions(int argc, char **argv) {
           "--replay-elbow-teleop on requires --execution-mode realtime");
     }
   }
+  const auto &ref = result.interactive.elbow_reference;
+  if (ref.source == "manual" && !ref.record_path.empty())
+    throw std::runtime_error("--elbow-record requires harp or recorded references");
+  if (ref.source == "harp" && (ref.harp_model_directory.empty() ||
+      (ref.harp_device != "cpu" && ref.harp_device != "cuda") || ref.sample_rate_hz != 100.0 || ref.maximum_age_ms != 100.0))
+    throw std::runtime_error("HARP requires --harp-model, --harp-device cpu|cuda and 100 Hz sampling / 100 ms maximum age");
+  if (ref.source == "harp" && (result.interactive.robot.base_frame != "base_link" ||
+      result.interactive.robot.left_end_effector_frame != "left_arm_ee_link"))
+    throw std::runtime_error("HARP phase-1 manifest requires base_link / left_arm_ee_link");
+  if (ref.source == "recorded" && ref.recorded_path.empty())
+    throw std::runtime_error("recorded requires --elbow-recorded");
+  if (ref.sample_rate_hz > result.interactive.red_rate_hz ||
+      std::abs(result.interactive.red_rate_hz / ref.sample_rate_hz -
+               std::round(result.interactive.red_rate_hz / ref.sample_rate_hz)) > 1e-9)
+    throw std::runtime_error("elbow sample rate must divide the Red rate");
+  if ((ref.source == "harp") && result.replay &&
+      result.replay->execution_mode != data::ExecutionMode::Realtime)
+    throw std::runtime_error("online learned reference requires realtime replay; batch uses recorded references");
   return result;
 }
 

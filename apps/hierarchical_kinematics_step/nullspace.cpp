@@ -73,7 +73,13 @@ std::vector<TuiSection> nullspacePanels(const NullspaceTuiDebug &debug) {
        {"Highest priority", debug.highest_completed_priority},
        {"Fallback", debug.fallback_priority},
        {"Left correction scale", fixed(debug.left_task_scale)},
-       {"Right correction scale", fixed(debug.right_task_scale)}},
+       {"Right correction scale", fixed(debug.right_task_scale)},
+       {"HQP layout", debug.pose_primary ? "pose-primary" : "position-first"},
+       {"Left elbow source", debug.elbow_source},
+       {"Reference age [ms]", debug.elbow_source == "manual" ? "-" : fixed(debug.reference_age_ms)},
+       {"Source inference [ms]", debug.elbow_source == "manual" ? "-" : fixed(debug.inference_ms)},
+       {"Mirror TCP input", debug.mirror_tcp_input ? "ON (left master)" : "OFF"},
+       {"Right elbow source", debug.link4_target.right_enabled ? "manual link4" : "Yellow posture"}},
       0U));
   sections.push_back(tableSection(
       "TCP hierarchy status",
@@ -88,7 +94,10 @@ std::vector<TuiSection> nullspacePanels(const NullspaceTuiDebug &debug) {
         "maximum across arms"},
        {"Preservation tolerance [m/s]",
         fixed(debug.primary_position_preservation_tolerance_mps),
-        "orientation soft"},
+        debug.pose_primary ? "orientation scaled in Primary" : "orientation soft"},
+       {"Orientation preservation [rad/s]",
+        fixed(debug.primary_maximum_orientation_preservation_drift_radps),
+        fixed(debug.primary_orientation_preservation_tolerance_radps)},
        {"Baseline xyz [m/s]", vectorText(debug.left_baseline_velocity),
         vectorText(debug.right_baseline_velocity)},
        {"Baseline projection max",
@@ -97,12 +106,12 @@ std::vector<TuiSection> nullspacePanels(const NullspaceTuiDebug &debug) {
        {"Correction s=0 / s=1", "baseline velocity", "target velocity"}},
       0U));
   sections.push_back(tableSection(
-      "Secondary objectives",
+      debug.pose_primary ? "Task objectives" : "Secondary objectives",
       {textColumn("Objective"), textColumn("Enabled"), numberColumn("Weight"),
        numberColumn("Target error")},
-      {{"left orientation", "soft", fixed(debug.orientation_weight, 2),
+      {{"left orientation", debug.pose_primary ? "Primary scaled" : "Secondary soft", debug.pose_primary ? "-" : fixed(debug.orientation_weight, 2),
         fixed(debug.left_tcp_orientation_error_rad)},
-       {"right orientation", "soft", fixed(debug.orientation_weight, 2),
+       {"right orientation", debug.pose_primary ? "Primary scaled" : "Secondary soft", debug.pose_primary ? "-" : fixed(debug.orientation_weight, 2),
         fixed(debug.right_tcp_orientation_error_rad)},
        {"left link4", yesNo(debug.link4_target.left_enabled),
         fixed(debug.link4_weight, 2),
@@ -176,6 +185,7 @@ NullspaceTargetSource::NullspaceTargetSource(
       executed_left_link4_(initial_left_link4),
       executed_right_link4_(initial_right_link4),
       replay_elbow_teleop_enabled_(replay_elbow_teleop_enabled) {
+  mirror_available_ = allow_side_switching && mode_ == KeyboardSourceMode::Teleop;
   link4_targets_.left = initial_left_link4;
   link4_targets_.right = initial_right_link4;
   input_status_.detail = cartesian_.status();
@@ -195,6 +205,23 @@ NullspaceTargetSourceUpdate NullspaceTargetSource::poll(double dt) {
 
 void NullspaceTargetSource::handleSourceEvent(const KeyEvent &event,
                                               double dt) {
+  if (mirror_available_ && !capturingText() && event.code == KeyCode::Character &&
+      (event.character == 'b' || event.character == 'B')) {
+    if (!motion_input_enabled_) { input_status_.detail = motion_input_disabled_status_; return; }
+    if (!paused_) { input_status_.detail = "Pause target publishing with Space before toggling mirror"; return; }
+    setMirrorTcpInput(!mirror_tcp_input_);
+    return;
+  }
+  if (mirror_tcp_input_ && event.code == KeyCode::Character && (event.character == 'c' || event.character == 'C') && !capturingText()) {
+    input_status_.detail = "Mirror controls TCP only; right elbow uses Yellow posture";
+    return;
+  }
+  if (left_elbow_owned_ && selectedSide() == ArmSide::Left &&
+      event.code == KeyCode::Character && (event.character == 'c' ||
+      control_point_ == ControlPoint::Link4)) {
+    input_status_.detail = "Left elbow is owned by the configured reference source";
+    return;
+  }
   if (mode_ == KeyboardSourceMode::Replay && replay_elbow_teleop_enabled_ &&
       handleReplayElbowEvent(event, dt)) {
     return;
@@ -331,8 +358,9 @@ void NullspaceTargetSource::apply(const KeyboardAction &action, double dt) {
     case SourceControl::TogglePause:
       paused_ = !paused_;
       input_status_.state = paused_ ? InputState::Paused : InputState::Running;
-      input_status_.detail =
-          paused_ ? "Replay timeline paused" : "Replay timeline resumed";
+      input_status_.detail = mode_ == KeyboardSourceMode::Replay
+          ? (paused_ ? "Replay timeline paused" : "Replay timeline resumed")
+          : (paused_ ? "Target publishing paused" : "Target publishing resumed");
       break;
     case SourceControl::Step:
       paused_ = true;
@@ -353,6 +381,11 @@ void NullspaceTargetSource::apply(const KeyboardAction &action, double dt) {
   }
 
   const auto &intent = *action.teleop;
+  if (mirror_tcp_input_ && intent.kind == TeleopIntentKind::SelectArm) {
+    input_status_.detail = "Mirror input: left TCP drives right TCP";
+    return;
+  }
+
   const bool modifies_link4 = control_point_ == ControlPoint::Link4 &&
       (intent.kind == TeleopIntentKind::SelectArm ||
        intent.kind == TeleopIntentKind::Translate ||
@@ -360,6 +393,10 @@ void NullspaceTargetSource::apply(const KeyboardAction &action, double dt) {
   const bool disabled_teleop_motion =
       mode_ == KeyboardSourceMode::Teleop &&
       intent.kind != TeleopIntentKind::SelectArm;
+  if (left_elbow_owned_ && selectedSide() == ArmSide::Left && modifies_link4) {
+    input_status_.detail = "Left elbow is owned by the configured reference source";
+    return;
+  }
   if (!motion_input_enabled_ && (disabled_teleop_motion || modifies_link4)) {
     input_status_.detail = motion_input_disabled_status_;
     return;
@@ -412,6 +449,9 @@ void NullspaceTargetSource::apply(const KeyboardAction &action, double dt) {
     if (const auto reset = cartesian_.apply(intent, dt)) {
       reset_request_ = reset;
     }
+    if (mirror_tcp_input_ && (intent.kind == TeleopIntentKind::Translate ||
+                             intent.kind == TeleopIntentKind::Rotate))
+      updateMirroredRightTarget();
     input_status_.detail = cartesian_.status();
   }
 }
@@ -511,7 +551,9 @@ std::string NullspaceTargetSource::headerContext() const {
   return "input " + input_mode + " · focus " +
          controlPointName(control_point_) + " · held " +
          (held.has_value() ? armSideName(*held) : "-") + " · step " +
-         fixed(stepMetres(), 4) + " m";
+         fixed(stepMetres(), 4) + " m" +
+         (mirror_available_ ? std::string{" · 左右臂镜像 "} + (mirror_tcp_input_ ? "ON" : "OFF") +
+          (mirror_tcp_input_ ? (" · L " + (elbow_reference_source_ == "harp" ? std::string("HARP") : elbow_reference_source_) + " / R Yellow") : "") : "");
 }
 
 std::string NullspaceTargetSource::footerHints() const {
@@ -531,7 +573,8 @@ std::string NullspaceTargetSource::footerHints() const {
     return "c TCP/link4 · wasd/qe move · r capture · x clear · Esc exit · ? "
            "help";
   }
-  return "c TCP/link4 · wasd/qe move · n/i/u rotate · Esc exit · ? help";
+  return std::string{mirror_available_ ? "Space pause · b mirror · " : ""} +
+      "c TCP/link4 · wasd/qe move · n/i/u rotate · Esc exit · ? help";
 }
 
 std::vector<std::string> NullspaceTargetSource::helpLines() const {
@@ -554,7 +597,9 @@ std::vector<std::string> NullspaceTargetSource::helpLines() const {
       "w/s: +/-x; a/d: +/-y; q/e: +/-z; Arrow Up/Down or m: step size",
       "TCP: n selects rotation axis, i/u rotate, r resets from executed FK",
       "link4: r captures executed link4; x clears held link4; Esc exits",
-      "A held link4 target stays active after returning to TCP focus"};
+      "A held link4 target stays active after returning to TCP focus",
+      "Nullspace keyboard: Space pauses target publishing; b toggles mirror while paused",
+      "Mirror: left TCP drives both goals; r resets both from FK and reanchors"};
 }
 
 void NullspaceTargetSource::setExecutedLink4Positions(
@@ -585,6 +630,55 @@ void NullspaceTargetSource::setTargetPose(ArmSide side, const Pose &pose,
   cartesian_.setTargetPose(side, pose);
   cartesian_.setStatus(status);
   input_status_.detail = std::move(status);
+}
+
+void NullspaceTargetSource::configureTcpMirror(const Pose &left_tcp_offset,
+                                              const Pose &right_tcp_offset,
+                                              bool enabled) {
+  left_tcp_offset_ = left_tcp_offset;
+  right_tcp_offset_ = right_tcp_offset;
+  if (enabled) setMirrorTcpInput(true);
+}
+
+void NullspaceTargetSource::captureMirrorAnchors() {
+  left_tcp_anchor_ = targets().at(0).target_pose * left_tcp_offset_;
+  right_tcp_anchor_ = targets().at(1).target_pose * right_tcp_offset_;
+}
+
+void NullspaceTargetSource::setMirrorTcpInput(bool enabled) {
+  mirror_tcp_input_ = enabled;
+  if (enabled) {
+    TeleopIntent select;
+    select.kind = TeleopIntentKind::SelectArm;
+    select.side = ArmSide::Left;
+    cartesian_.apply(select, 0.0);
+    control_point_ = ControlPoint::Tcp;
+    captureMirrorAnchors();
+    if (link4_targets_.right_enabled) {
+      link4_targets_.right_enabled = false;
+      ++link4_targets_.revision;
+    }
+  }
+  input_status_.detail = enabled ? "Mirror ON: left TCP drives right; anchors captured"
+                                : "Mirror OFF: both TCP goals retained";
+}
+
+void NullspaceTargetSource::updateMirroredRightTarget() {
+  const Pose left_tcp = targets().at(0).target_pose * left_tcp_offset_;
+  const Eigen::Matrix3d reflection = Eigen::Vector3d(1, -1, 1).asDiagonal();
+  Pose right_tcp = Pose::Identity();
+  right_tcp.translation() = right_tcp_anchor_.translation() + reflection *
+      (left_tcp.translation() - left_tcp_anchor_.translation());
+  right_tcp.linear() = reflection * left_tcp.linear() *
+      left_tcp_anchor_.linear().transpose() * reflection * right_tcp_anchor_.linear();
+  cartesian_.setTargetPose(ArmSide::Right, right_tcp * right_tcp_offset_.inverse());
+}
+
+void NullspaceTargetSource::resetMirroredTargets(const Pose &left, const Pose &right) {
+  cartesian_.setTargetPose(ArmSide::Left, left);
+  cartesian_.setTargetPose(ArmSide::Right, right);
+  captureMirrorAnchors();
+  input_status_.detail = "Mirror: both TCP targets reset from FK; anchors captured";
 }
 
 std::optional<ArmSide> NullspaceTargetSource::consumeResetRequest() {

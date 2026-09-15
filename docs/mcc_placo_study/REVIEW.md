@@ -1,6 +1,6 @@
 # 研究设计审阅与 gap 登记
 
-状态：`planned`。审阅日期：2026-09-10。本表的“修正”是约束，不表示已经通过实验验证。
+状态：持续维护的研究准入问题。原审阅日期：2026-09-10；工程状态更新：2026-09-14。本表的“修正”是约束，不表示已经通过实验验证。
 
 严重性：P0 会使主要结论无效；P1 会限制归因、复现或外部有效性。关闭分为 specification-closed 和 evidence-closed；目前只完成前者。
 
@@ -20,7 +20,7 @@
 | G12 | P0 | 手填数字、挑选正面图、证据漂移 | C/F/T 稳定 ID，固定 run/analysis/hash，图表读 artifact | 全部、paper | claim→table/figure→metric→source 校验 |
 | G13 | P1 | 诊断开销混入性能差异 | 计时边界相同，最小/完整观测独立条件，记录队列丢样 | E09/E10 | 成对观测开销测量与样本完整性 |
 | G14 | P1 | 平台/数据/模型的外推过宽 | R1、指定工作站和已覆盖动作包络，限制安全/全局最优/普适性主张 | E08/E12、paper | 数据覆盖表与 limitations |
-| G15 | P1 | 一次性 agent 分工产生相互冲突的接口 | 主 agent 独占公共接口与构建，分波并行、串行计时 | 实现 prompt | 集成检查、所有权表、完整小规模纵向运行 |
+| G15 | P1 | 独立实现产生相互冲突的接口 | 公共接口集中维护，算法归属 app，被测进程串行执行 | 应用架构与公开执行合同 | 集成检查、所有权表、完整小规模纵向运行 |
 
 ## 当前源码事实与边界
 
@@ -28,7 +28,7 @@
 - [PlaCo 源码 provenance](../../third_party/placo/MOTION_CONTROL_LAB.md) 记录 v0.9.23 快照及本地变动。比较对象是这个可追溯快照，不是所有版本的 PlaCo。
 - [HKS app](../../apps/hierarchical_kinematics_step/README.md) 当前所有 profile 均为 position Primary、orientation/posture/link4 Secondary；每臂独立 position scale。Yellow 注册 posture 和 soft collision。Core 可表达三层，不等于该 app 已在使用三层。
 - 该 app 可接受经过可行性核验的 Primary MAX_ITER 并跳过 Secondary；这种输出不能算完整层级收敛。最终状态需同时检查 native status、disposition、quality、selected/completed pass。
-- [manifest v1](../../contracts/manifests/run_manifest.v1.schema.json) 的 run_kind 包含 analysis，但 experiment_id 仍限 E##；[校验器](../../tests/validate_contracts.py) 也以实验身份为基础。A01–A03 的正式 schema 尚未实现。
+- 当前校验器支持公开 app 执行声明、analysis.v1/v2 与 manifest v1/v2/v3；旧实验读取合同保留。A01/A02 已有非 RT 探索性分析，A03 与正式统计状态见 [研究索引](README.md)。
 - E05 的 P95/P99 是 1 μs 直方图桶上界；交互 TUI 的滑动窗口与完整 run 分布不能直接混用。
 - 2026-09-10 查看外部 /mnt/mcap_dataset 可见 50 个直属 MCAP；没有在本阶段解码、会话分组或认证独立样本数。正式运行前重新盘点并校验内容。
 
@@ -36,7 +36,7 @@
 
 目前无 E06–E12 的运行数据、通过阈值、性能改善或泛化结论。候选搜索、保留集清单、平台配置和业务接受阈值必须由代码阶段产生的可审计探索与正式声明冻结流程落实。缺项时 formal preflight 失败，不静默选择有利默认值。
 
-相关工作只完成 [初始来源登记](../../paper/RELATED_WORK.md)，不是完整的新颖性检索。数据能否公开、作者和投稿格式在发布阶段确定，不由实现 agent 假设。
+相关工作只完成 [初始来源登记](../../paper/RELATED_WORK.md)，不是完整的新颖性检索。数据能否公开、作者和投稿格式在发布阶段确定，不由实现过程推定。
 
 公共修正规则见 [PROTOCOL](PROTOCOL.md)、[DATA_ANALYSIS](DATA_ANALYSIS.md)。每个实验的 README 列出对应 G/C/F/T ID。
 
