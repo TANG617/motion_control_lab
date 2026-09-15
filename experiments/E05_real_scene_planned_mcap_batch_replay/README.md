@@ -10,7 +10,8 @@ python3 experiments/E05_real_scene_planned_mcap_batch_replay/run_batch.py --data
   --include '*20260731*' --exclude '*broken*' -- --playback-rate 2 --port 8766
 ```
 
-默认扫描 `/mnt/mcap_dataset` 的直属 `*.mcap`，按相对路径排序，启动时固定清单。
+默认扫描 `/workspace/fixtures/raw/batch` 的直属 `*.mcap`，按相对路径排序，启动时固定清单。
+跨电脑使用相同 devcontainer 路径；输入版本与外部数据约定见 [输入同步说明](../README.md)。
 `--include` 和 `--exclude` 可重复，按相对路径匹配；`--limit` 在筛选排序之后应用。
 空目录或空选择报错。`--dry-run` 只打印文件与实际命令，不写目录、不运行 app。
 `--output-root` 默认是本实验的 `runs/`；`--run-id` 必须是单个目录名，已有批次不能覆盖。

@@ -1,0 +1,17 @@
+{
+  "canonical": {
+    "locator": "/workspace/labs/motion-control-lab/experiments/E07_hqp_priority_and_redundancy/inputs/generated/hard_primary_positive_control.json",
+    "sha256": "19142dc079d7f81c99b6ca32323a564dd264f7dde3a99f560b985207c4c0e1c5",
+    "size_bytes": 6268
+  },
+  "fixture": false,
+  "input_id": "E07-hard_primary_positive_control",
+  "model": {
+    "locator": "/workspace/models/r1.cos.urdf",
+    "sha256": "7f7c10114ee6937c40c5b3963d79bc000dc49c2b215ee8c60ed7858eab740341",
+    "size_bytes": 71079
+  },
+  "schema_version": "input_descriptor.v1",
+  "session_id": "synthetic",
+  "split_id": "development"
+}

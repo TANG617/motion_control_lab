@@ -1,0 +1,17 @@
+{
+  "canonical": {
+    "locator": "/workspace/labs/motion-control-lab/experiments/E07_hqp_priority_and_redundancy/inputs/generated/analytic_rank_deficient_placo.json",
+    "sha256": "c76c2fb2b4a5d043d1f982043a636078d1a9dd87f7c11637372097ce5336d70b",
+    "size_bytes": 6748
+  },
+  "fixture": false,
+  "input_id": "E07-analytic_rank_deficient_placo",
+  "model": {
+    "locator": "/workspace/models/r1.cos.urdf",
+    "sha256": "7f7c10114ee6937c40c5b3963d79bc000dc49c2b215ee8c60ed7858eab740341",
+    "size_bytes": 71079
+  },
+  "schema_version": "input_descriptor.v1",
+  "session_id": "synthetic",
+  "split_id": "development"
+}

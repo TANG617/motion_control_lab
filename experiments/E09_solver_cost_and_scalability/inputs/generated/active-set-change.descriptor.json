@@ -1,0 +1,17 @@
+{
+  "canonical": {
+    "locator": "/workspace/labs/motion-control-lab/experiments/E09_solver_cost_and_scalability/inputs/generated/active-set-change.json",
+    "sha256": "922f591a7c5fd15a5022b2e05804961c1b4f3ce6581130d745c2af95da525841",
+    "size_bytes": 66024
+  },
+  "fixture": false,
+  "input_id": "e09-active-set-change",
+  "model": {
+    "locator": "/workspace/models/r1.cos.urdf",
+    "sha256": "7f7c10114ee6937c40c5b3963d79bc000dc49c2b215ee8c60ed7858eab740341",
+    "size_bytes": 71079
+  },
+  "schema_version": "input_descriptor.v1",
+  "session_id": "synthetic",
+  "split_id": "development"
+}

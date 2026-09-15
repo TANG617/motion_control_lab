@@ -2,7 +2,22 @@
 
 状态：输入准备代码已实现；正式输入/配置冻结和正式运行仍待单独启动。本目录不复制外部 MCAP，不含已冻结 holdout。
 
-默认外部 locator 为 /mnt/mcap_dataset。候选流来自 E05 输入说明：/hal/tracker/htc/left/calib_target_pose、/hal/tracker/htc/right/calib_target_pose、/mc/ik/joint_states；代码阶段逐文件核验，不能假设所有文件 schema 和 frame 相同。
+新 inventory 的默认外部 locator 为 `/workspace/fixtures/raw/batch`。候选流来自 E05 输入说明：/hal/tracker/htc/left/calib_target_pose、/hal/tracker/htc/right/calib_target_pose、/mc/ik/joint_states；代码阶段逐文件核验，不能假设所有文件 schema 和 frame 相同。
+
+## Devcontainer batch 快照
+
+`inventory-batch-20260915/` 记录当前 batch 目录中的 37 个 `-slice.mcap`，只核验原始字节，尚未解码或完成 canonical 转换。会话来源未知，保守合并为一个 development 组，不作为 holdout。
+
+`inventory-development-20260910/` 和 `generated/` 中的 50 个未转换 descriptor 属于旧原始 MCAP 清单，保留 `/mnt/mcap_dataset` 原路径和原 hash。它们与当前切片文件没有同名项；不能通过替换目录或删除 `-slice` 后缀将二者视为同一输入。当前 `definition.json` 和 `required_units.json` 仍保留原声明身份，新 batch inventory 不会自动重写方法矩阵或解除 unavailable 状态。
+
+从 Lab 根目录为后续数据版本建立新清单（输出目录必须不存在）：
+
+```bash
+python3 experiments/E12_recorded_motion_holdout/data.py inventory \
+  --output /absolute/new-batch-inventory
+```
+
+全部输入快照通过 Git 同步；MCAP 数据本体与模型由 workspace 提供，详见 [输入同步说明](../../README.md)。
 
 每文件登记 content hash、source/session identity、采集时间、动作区间、topic/frame、质量、重复/重叠、过去 exposure 与未知信息。来源不足时保守分组并限制结论；全部旧数据已暴露时需要新的未暴露会话才能执行真正 holdout。
 

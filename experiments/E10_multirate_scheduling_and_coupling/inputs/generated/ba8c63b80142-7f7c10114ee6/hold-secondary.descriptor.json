@@ -1,0 +1,17 @@
+{
+  "canonical": {
+    "locator": "/workspace/labs/motion-control-lab/experiments/E10_multirate_scheduling_and_coupling/inputs/generated/ba8c63b80142-7f7c10114ee6/hold-secondary.json",
+    "sha256": "69b8d995045f39c2fa4eae29beba016709b052581c389b3b8da8e7ea4f04831f",
+    "size_bytes": 1121675
+  },
+  "fixture": false,
+  "input_id": "e10-hold-secondary",
+  "model": {
+    "locator": "/workspace/models/r1.cos.urdf",
+    "sha256": "7f7c10114ee6937c40c5b3963d79bc000dc49c2b215ee8c60ed7858eab740341",
+    "size_bytes": 71079
+  },
+  "schema_version": "input_descriptor.v1",
+  "session_id": "synthetic",
+  "split_id": "development"
+}

@@ -1,0 +1,17 @@
+{
+  "canonical": {
+    "locator": "/workspace/labs/motion-control-lab/experiments/E08_constraints_scaling_and_degeneracy/inputs/generated/conflicting_tasks_False.json",
+    "sha256": "18d177bfc2ccfc2c98572333b747d6b5c9e0d7150141ef90bf709cd26cbe14c4",
+    "size_bytes": 11287
+  },
+  "fixture": false,
+  "input_id": "E08-conflicting_tasks_False",
+  "model": {
+    "locator": "/workspace/models/r1.cos.urdf",
+    "sha256": "7f7c10114ee6937c40c5b3963d79bc000dc49c2b215ee8c60ed7858eab740341",
+    "size_bytes": 71079
+  },
+  "schema_version": "input_descriptor.v1",
+  "session_id": "synthetic",
+  "split_id": "development"
+}

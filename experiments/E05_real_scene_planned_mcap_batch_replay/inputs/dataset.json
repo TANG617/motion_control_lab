@@ -1,6 +1,6 @@
 {
   "input_id": "real_scene_mcap",
-  "default_directory": "/mnt/mcap_dataset",
+  "default_directory": "/workspace/fixtures/raw/batch",
   "format": "mcap",
   "selection": "sorted direct *.mcap children; CLI may select another directory or subset",
   "ownership": "external read-only source; do not copy or rewrite",

@@ -38,4 +38,5 @@ app-local launcher 默认选择安装产物，`MCL_BINARY` 可显式指定独立
 [研究索引](docs/mcc_placo_study/README.md) 统一维护实验、分析与论文状态。
 E05 批量回放见 [实验入口](experiments/E05_real_scene_planned_mcap_batch_replay/README.md)，
 E06–E12 使用 [公开 app 执行链](tools/app_execution/README.md)。
+跨电脑复跑的固定路径与输入快照见 [实验输入同步说明](experiments/README.md)。
 历史设计、迁移与验收见 [归档](docs/archive/README.md)。

@@ -1,0 +1,17 @@
+{
+  "canonical": {
+    "locator": "/workspace/labs/motion-control-lab/experiments/E06_solver_semantic_parity/inputs/generated/model_mapping.json",
+    "sha256": "899369a3f39986ea3c79ea2079d37736bd57136c354be5eb04b9d221d57b6736",
+    "size_bytes": 6247
+  },
+  "fixture": false,
+  "input_id": "E06-model_mapping",
+  "model": {
+    "locator": "/workspace/models/r1.cos.urdf",
+    "sha256": "7f7c10114ee6937c40c5b3963d79bc000dc49c2b215ee8c60ed7858eab740341",
+    "size_bytes": 71079
+  },
+  "schema_version": "input_descriptor.v1",
+  "session_id": "synthetic",
+  "split_id": "development"
+}

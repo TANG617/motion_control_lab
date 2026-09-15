@@ -27,13 +27,9 @@ __pycache__/
 /experiments/*/results/*
 !/experiments/*/results/.gitkeep
 
-# Study execution evidence and locally prepared inputs. Keep generators,
-# declarations, recipes and input contracts in source control.
+# Study execution evidence stays local. Experiment inputs (including generated
+# and superseded snapshots, inventories and recipes) are versioned for replay.
 /runs/
-/experiments/*/inputs/generated/
-/experiments/*/inputs/superseded/
-/experiments/*/inputs/inventory-*/
-/experiments/E12_recorded_motion_holdout/inputs/required_units.json
 /tools/mcc_placo_study/generator_snapshots/
 
 # Future analysis outputs follow the same local-evidence policy.

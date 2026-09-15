@@ -1,0 +1,17 @@
+{
+  "canonical": {
+    "locator": "/workspace/labs/motion-control-lab/experiments/E10_multirate_scheduling_and_coupling/inputs/generated/ba8c63b80142-7f7c10114ee6/reachable-sine.json",
+    "sha256": "7d8aa37a8cdf5deface6a4342af9af04a2921238b38fa972051c8ae502b7660d",
+    "size_bytes": 1121958
+  },
+  "fixture": false,
+  "input_id": "e10-reachable-sine",
+  "model": {
+    "locator": "/workspace/models/r1.cos.urdf",
+    "sha256": "7f7c10114ee6937c40c5b3963d79bc000dc49c2b215ee8c60ed7858eab740341",
+    "size_bytes": 71079
+  },
+  "schema_version": "input_descriptor.v1",
+  "session_id": "synthetic",
+  "split_id": "development"
+}

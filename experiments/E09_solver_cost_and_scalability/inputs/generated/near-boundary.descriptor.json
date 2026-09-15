@@ -1,0 +1,17 @@
+{
+  "canonical": {
+    "locator": "/workspace/labs/motion-control-lab/experiments/E09_solver_cost_and_scalability/inputs/generated/near-boundary.json",
+    "sha256": "bfee62ebda1607273ece1daffda8f86ddfddd1643f480f2486e43fa2d1f06f4f",
+    "size_bytes": 66080
+  },
+  "fixture": false,
+  "input_id": "e09-near-boundary",
+  "model": {
+    "locator": "/workspace/models/r1.cos.urdf",
+    "sha256": "7f7c10114ee6937c40c5b3963d79bc000dc49c2b215ee8c60ed7858eab740341",
+    "size_bytes": 71079
+  },
+  "schema_version": "input_descriptor.v1",
+  "session_id": "synthetic",
+  "split_id": "development"
+}

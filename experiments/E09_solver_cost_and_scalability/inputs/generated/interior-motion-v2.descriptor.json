@@ -1,0 +1,17 @@
+{
+  "canonical": {
+    "locator": "/workspace/labs/motion-control-lab/experiments/E09_solver_cost_and_scalability/inputs/generated/interior-motion-v2.json",
+    "sha256": "83e680e317e731e59af0f55d0dd0e2beccda9c8accb61e2d6fce073c14dc7250",
+    "size_bytes": 66005
+  },
+  "fixture": false,
+  "input_id": "e09-interior-motion-v2",
+  "model": {
+    "locator": "/workspace/models/r1.cos.urdf",
+    "sha256": "7f7c10114ee6937c40c5b3963d79bc000dc49c2b215ee8c60ed7858eab740341",
+    "size_bytes": 71079
+  },
+  "schema_version": "input_descriptor.v1",
+  "session_id": "synthetic",
+  "split_id": "development"
+}

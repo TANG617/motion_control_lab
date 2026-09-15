@@ -1,0 +1,17 @@
+{
+  "canonical": {
+    "locator": "/workspace/labs/motion-control-lab/experiments/E08_constraints_scaling_and_degeneracy/inputs/generated/joint_limit_right_arm_joint4_lower_0.1.json",
+    "sha256": "fa944c1ae1e8f2f7954d6c73656e7f1a81e4843c2229c27d88f3b1b4b9734633",
+    "size_bytes": 11327
+  },
+  "fixture": false,
+  "input_id": "E08-joint_limit_right_arm_joint4_lower_0.1",
+  "model": {
+    "locator": "/workspace/models/r1.cos.urdf",
+    "sha256": "7f7c10114ee6937c40c5b3963d79bc000dc49c2b215ee8c60ed7858eab740341",
+    "size_bytes": 71079
+  },
+  "schema_version": "input_descriptor.v1",
+  "session_id": "synthetic",
+  "split_id": "development"
+}

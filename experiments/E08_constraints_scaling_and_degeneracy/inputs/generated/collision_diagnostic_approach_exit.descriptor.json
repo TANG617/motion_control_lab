@@ -1,0 +1,17 @@
+{
+  "canonical": {
+    "locator": "/workspace/labs/motion-control-lab/experiments/E08_constraints_scaling_and_degeneracy/inputs/generated/collision_diagnostic_approach_exit.json",
+    "sha256": "98db5913cc727bb5d0f1ddd4ca632e074b7ce88d0f9d927da492c3198c1c47de",
+    "size_bytes": 6280
+  },
+  "fixture": false,
+  "input_id": "E08-collision_diagnostic_approach_exit",
+  "model": {
+    "locator": "/workspace/models/r1.cos.urdf",
+    "sha256": "7f7c10114ee6937c40c5b3963d79bc000dc49c2b215ee8c60ed7858eab740341",
+    "size_bytes": 71079
+  },
+  "schema_version": "input_descriptor.v1",
+  "session_id": "synthetic",
+  "split_id": "development"
+}

@@ -1,0 +1,17 @@
+{
+  "canonical": {
+    "locator": "/workspace/labs/motion-control-lab/experiments/E06_solver_semantic_parity/inputs/generated/enforcement_hard.json",
+    "sha256": "e00890c1ec8c5461c5b253ea16bc447cb78fbeee95885d4f5900118d7f4698f0",
+    "size_bytes": 6253
+  },
+  "fixture": false,
+  "input_id": "E06-enforcement_hard",
+  "model": {
+    "locator": "/workspace/models/r1.cos.urdf",
+    "sha256": "7f7c10114ee6937c40c5b3963d79bc000dc49c2b215ee8c60ed7858eab740341",
+    "size_bytes": 71079
+  },
+  "schema_version": "input_descriptor.v1",
+  "session_id": "synthetic",
+  "split_id": "development"
+}

@@ -1,0 +1,17 @@
+{
+  "canonical": {
+    "locator": "/workspace/labs/motion-control-lab/experiments/E07_hqp_priority_and_redundancy/inputs/generated/r1_orientation_conflict_0.1_evolving.json",
+    "sha256": "585a78c6f14639721f1e4e32fe7e9d052a457b5c20f5beea5605da288f1cdf7b",
+    "size_bytes": 11258
+  },
+  "fixture": false,
+  "input_id": "E07-r1_orientation_conflict_0.1_evolving",
+  "model": {
+    "locator": "/workspace/models/r1.cos.urdf",
+    "sha256": "7f7c10114ee6937c40c5b3963d79bc000dc49c2b215ee8c60ed7858eab740341",
+    "size_bytes": 71079
+  },
+  "schema_version": "input_descriptor.v1",
+  "session_id": "synthetic",
+  "split_id": "development"
+}

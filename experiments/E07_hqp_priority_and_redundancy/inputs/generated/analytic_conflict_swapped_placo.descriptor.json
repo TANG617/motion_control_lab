@@ -1,0 +1,17 @@
+{
+  "canonical": {
+    "locator": "/workspace/labs/motion-control-lab/experiments/E07_hqp_priority_and_redundancy/inputs/generated/analytic_conflict_swapped_placo.json",
+    "sha256": "8274800ef952f5b49ca7922a0ec3fa5bcb1a53ec8c4166f12a75c35667a6dc9c",
+    "size_bytes": 6656
+  },
+  "fixture": false,
+  "input_id": "E07-analytic_conflict_swapped_placo",
+  "model": {
+    "locator": "/workspace/models/r1.cos.urdf",
+    "sha256": "7f7c10114ee6937c40c5b3963d79bc000dc49c2b215ee8c60ed7858eab740341",
+    "size_bytes": 71079
+  },
+  "schema_version": "input_descriptor.v1",
+  "session_id": "synthetic",
+  "split_id": "development"
+}

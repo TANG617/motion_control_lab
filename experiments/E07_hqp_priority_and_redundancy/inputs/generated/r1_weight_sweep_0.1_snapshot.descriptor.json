@@ -1,0 +1,17 @@
+{
+  "canonical": {
+    "locator": "/workspace/labs/motion-control-lab/experiments/E07_hqp_priority_and_redundancy/inputs/generated/r1_weight_sweep_0.1_snapshot.json",
+    "sha256": "d023c92a67127f7ecce0e4a60c5d8e7c1fb76170490a3a12e73052b512b8d131",
+    "size_bytes": 6268
+  },
+  "fixture": false,
+  "input_id": "E07-r1_weight_sweep_0.1_snapshot",
+  "model": {
+    "locator": "/workspace/models/r1.cos.urdf",
+    "sha256": "7f7c10114ee6937c40c5b3963d79bc000dc49c2b215ee8c60ed7858eab740341",
+    "size_bytes": 71079
+  },
+  "schema_version": "input_descriptor.v1",
+  "session_id": "synthetic",
+  "split_id": "development"
+}

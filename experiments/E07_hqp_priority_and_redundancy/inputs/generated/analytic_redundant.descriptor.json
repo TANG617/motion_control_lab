@@ -1,0 +1,17 @@
+{
+  "canonical": {
+    "locator": "/workspace/labs/motion-control-lab/experiments/E07_hqp_priority_and_redundancy/inputs/generated/analytic_redundant.json",
+    "sha256": "10d661764f09224506f596f206313445b59c4730fe6e61c6de24b2f1d5dd3abd",
+    "size_bytes": 6644
+  },
+  "fixture": false,
+  "input_id": "E07-analytic_redundant",
+  "model": {
+    "locator": "/workspace/models/r1.cos.urdf",
+    "sha256": "7f7c10114ee6937c40c5b3963d79bc000dc49c2b215ee8c60ed7858eab740341",
+    "size_bytes": 71079
+  },
+  "schema_version": "input_descriptor.v1",
+  "session_id": "synthetic",
+  "split_id": "development"
+}

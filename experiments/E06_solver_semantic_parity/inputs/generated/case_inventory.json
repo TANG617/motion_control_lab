@@ -1,0 +1,62 @@
+[
+  {
+    "candidate_independent_generation": true,
+    "case_id": "model_mapping",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E06_solver_semantic_parity/inputs/generated/model_mapping.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "representation",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E06_solver_semantic_parity/inputs/generated/representation.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "target_pose_zero",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E06_solver_semantic_parity/inputs/generated/target_pose_zero.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "target_pose_small",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E06_solver_semantic_parity/inputs/generated/target_pose_small.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "target_pose_medium",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E06_solver_semantic_parity/inputs/generated/target_pose_medium.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "servo_snapshot_velocity_0.0",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E06_solver_semantic_parity/inputs/generated/servo_snapshot_velocity_0.0.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "servo_snapshot_velocity_0.25",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E06_solver_semantic_parity/inputs/generated/servo_snapshot_velocity_0.25.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "enforcement_hard",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E06_solver_semantic_parity/inputs/generated/enforcement_hard.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "enforcement_soft",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E06_solver_semantic_parity/inputs/generated/enforcement_soft.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "enforcement_scaled",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E06_solver_semantic_parity/inputs/generated/enforcement_scaled.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  }
+]

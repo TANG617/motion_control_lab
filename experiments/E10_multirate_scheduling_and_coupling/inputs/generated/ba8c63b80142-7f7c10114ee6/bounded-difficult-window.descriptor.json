@@ -1,0 +1,17 @@
+{
+  "canonical": {
+    "locator": "/workspace/labs/motion-control-lab/experiments/E10_multirate_scheduling_and_coupling/inputs/generated/ba8c63b80142-7f7c10114ee6/bounded-difficult-window.json",
+    "sha256": "a3c055bed90e76b7cc36203b2a81551e34c414f5b1496370eeb059cf1743be43",
+    "size_bytes": 1121973
+  },
+  "fixture": false,
+  "input_id": "e10-bounded-difficult-window",
+  "model": {
+    "locator": "/workspace/models/r1.cos.urdf",
+    "sha256": "7f7c10114ee6937c40c5b3963d79bc000dc49c2b215ee8c60ed7858eab740341",
+    "size_bytes": 71079
+  },
+  "schema_version": "input_descriptor.v1",
+  "session_id": "synthetic",
+  "split_id": "development"
+}

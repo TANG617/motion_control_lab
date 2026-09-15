@@ -63,7 +63,7 @@ def parse_args(argv: list[str]) -> tuple[argparse.Namespace, list[str]]:
     split = argv.index("--") if "--" in argv else len(argv)
     extra = argv[split + 1:]
     parser = argparse.ArgumentParser(description=__doc__, allow_abbrev=False)
-    parser.add_argument("--dataset-dir", type=Path, default=Path("/mnt/mcap_dataset"))
+    parser.add_argument("--dataset-dir", type=Path, default=Path("/workspace/fixtures/raw/batch"))
     parser.add_argument("--include", action="append", default=[])
     parser.add_argument("--exclude", action="append", default=[])
     parser.add_argument("--recursive", action="store_true")

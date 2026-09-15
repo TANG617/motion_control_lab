@@ -1,0 +1,17 @@
+{
+  "canonical": {
+    "locator": "/workspace/labs/motion-control-lab/experiments/E10_multirate_scheduling_and_coupling/inputs/generated/ba8c63b80142-7f7c10114ee6/fixture-observation-overflow.json",
+    "sha256": "801140f749cc44f51c38e22f483d445e9b4eeabf87f70bb3cdd9e628475f4765",
+    "size_bytes": 6178
+  },
+  "fixture": true,
+  "input_id": "e10-fixture-observation-overflow",
+  "model": {
+    "locator": "/workspace/models/r1.cos.urdf",
+    "sha256": "7f7c10114ee6937c40c5b3963d79bc000dc49c2b215ee8c60ed7858eab740341",
+    "size_bytes": 71079
+  },
+  "schema_version": "input_descriptor.v1",
+  "session_id": "fixture-e10-observation",
+  "split_id": "development"
+}

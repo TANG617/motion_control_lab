@@ -1,0 +1,17 @@
+{
+  "canonical": {
+    "locator": "/workspace/labs/motion-control-lab/experiments/E08_constraints_scaling_and_degeneracy/inputs/generated/joint_limit_torso_yaw_joint_lower_0.02.json",
+    "sha256": "92aa1711421a00139c1e73a2f0b1e1067817ece6a8bfa4f94a0626735ef037df",
+    "size_bytes": 11337
+  },
+  "fixture": false,
+  "input_id": "E08-joint_limit_torso_yaw_joint_lower_0.02",
+  "model": {
+    "locator": "/workspace/models/r1.cos.urdf",
+    "sha256": "7f7c10114ee6937c40c5b3963d79bc000dc49c2b215ee8c60ed7858eab740341",
+    "size_bytes": 71079
+  },
+  "schema_version": "input_descriptor.v1",
+  "session_id": "synthetic",
+  "split_id": "development"
+}

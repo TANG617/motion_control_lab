@@ -1,0 +1,17 @@
+{
+  "canonical": {
+    "locator": "/workspace/labs/motion-control-lab/experiments/E08_constraints_scaling_and_degeneracy/inputs/generated/moving_state_-0.75_reverse_native-policy.json",
+    "sha256": "9aa2ac68ee2fa49648c16030b173b3cff26aaf8f18f36cb3e3c5b3c24d9798e0",
+    "size_bytes": 11407
+  },
+  "fixture": false,
+  "input_id": "E08-moving_state_-0.75_reverse_native-policy",
+  "model": {
+    "locator": "/workspace/models/r1.cos.urdf",
+    "sha256": "7f7c10114ee6937c40c5b3963d79bc000dc49c2b215ee8c60ed7858eab740341",
+    "size_bytes": 71079
+  },
+  "schema_version": "input_descriptor.v1",
+  "session_id": "synthetic",
+  "split_id": "development"
+}

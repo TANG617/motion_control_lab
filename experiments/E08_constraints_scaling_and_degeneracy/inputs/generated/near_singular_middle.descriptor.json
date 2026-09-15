@@ -1,0 +1,17 @@
+{
+  "canonical": {
+    "locator": "/workspace/labs/motion-control-lab/experiments/E08_constraints_scaling_and_degeneracy/inputs/generated/near_singular_middle.json",
+    "sha256": "ffc99e523a1fd4169e9654520c7a7b7b82fb98bf8b6c7f497a4207db7313e068",
+    "size_bytes": 7096
+  },
+  "fixture": false,
+  "input_id": "E08-near_singular_middle",
+  "model": {
+    "locator": "/workspace/models/r1.cos.urdf",
+    "sha256": "7f7c10114ee6937c40c5b3963d79bc000dc49c2b215ee8c60ed7858eab740341",
+    "size_bytes": 71079
+  },
+  "schema_version": "input_descriptor.v1",
+  "session_id": "synthetic",
+  "split_id": "development"
+}

@@ -1,0 +1,464 @@
+[
+  {
+    "candidate_independent_generation": true,
+    "case_id": "analytic_redundant",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E07_hqp_priority_and_redundancy/inputs/generated/analytic_redundant.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "analytic_redundant",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E07_hqp_priority_and_redundancy/inputs/generated/analytic_redundant.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "analytic_conflict",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E07_hqp_priority_and_redundancy/inputs/generated/analytic_conflict.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "analytic_conflict",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E07_hqp_priority_and_redundancy/inputs/generated/analytic_conflict.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "analytic_conflict_swapped",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E07_hqp_priority_and_redundancy/inputs/generated/analytic_conflict_swapped.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "analytic_conflict_swapped",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E07_hqp_priority_and_redundancy/inputs/generated/analytic_conflict_swapped.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "analytic_rank_deficient",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E07_hqp_priority_and_redundancy/inputs/generated/analytic_rank_deficient.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "analytic_rank_deficient",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E07_hqp_priority_and_redundancy/inputs/generated/analytic_rank_deficient.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "analytic_active_bound",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E07_hqp_priority_and_redundancy/inputs/generated/analytic_active_bound.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "analytic_active_bound",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E07_hqp_priority_and_redundancy/inputs/generated/analytic_active_bound.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "r1_hold_tcp_left_0_-0.05_snapshot",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E07_hqp_priority_and_redundancy/inputs/generated/r1_hold_tcp_left_0_-0.05_snapshot.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "r1_hold_tcp_left_0_-0.05_evolving",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E07_hqp_priority_and_redundancy/inputs/generated/r1_hold_tcp_left_0_-0.05_evolving.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "r1_hold_tcp_left_0_-0.02_snapshot",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E07_hqp_priority_and_redundancy/inputs/generated/r1_hold_tcp_left_0_-0.02_snapshot.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "r1_hold_tcp_left_0_-0.02_evolving",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E07_hqp_priority_and_redundancy/inputs/generated/r1_hold_tcp_left_0_-0.02_evolving.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "r1_hold_tcp_left_0_0.02_snapshot",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E07_hqp_priority_and_redundancy/inputs/generated/r1_hold_tcp_left_0_0.02_snapshot.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "r1_hold_tcp_left_0_0.02_evolving",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E07_hqp_priority_and_redundancy/inputs/generated/r1_hold_tcp_left_0_0.02_evolving.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "r1_hold_tcp_left_0_0.05_snapshot",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E07_hqp_priority_and_redundancy/inputs/generated/r1_hold_tcp_left_0_0.05_snapshot.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "r1_hold_tcp_left_0_0.05_evolving",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E07_hqp_priority_and_redundancy/inputs/generated/r1_hold_tcp_left_0_0.05_evolving.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "r1_hold_tcp_left_1_-0.05_snapshot",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E07_hqp_priority_and_redundancy/inputs/generated/r1_hold_tcp_left_1_-0.05_snapshot.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "r1_hold_tcp_left_1_-0.05_evolving",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E07_hqp_priority_and_redundancy/inputs/generated/r1_hold_tcp_left_1_-0.05_evolving.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "r1_hold_tcp_left_1_-0.02_snapshot",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E07_hqp_priority_and_redundancy/inputs/generated/r1_hold_tcp_left_1_-0.02_snapshot.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "r1_hold_tcp_left_1_-0.02_evolving",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E07_hqp_priority_and_redundancy/inputs/generated/r1_hold_tcp_left_1_-0.02_evolving.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "r1_hold_tcp_left_1_0.02_snapshot",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E07_hqp_priority_and_redundancy/inputs/generated/r1_hold_tcp_left_1_0.02_snapshot.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "r1_hold_tcp_left_1_0.02_evolving",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E07_hqp_priority_and_redundancy/inputs/generated/r1_hold_tcp_left_1_0.02_evolving.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "r1_hold_tcp_left_1_0.05_snapshot",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E07_hqp_priority_and_redundancy/inputs/generated/r1_hold_tcp_left_1_0.05_snapshot.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "r1_hold_tcp_left_1_0.05_evolving",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E07_hqp_priority_and_redundancy/inputs/generated/r1_hold_tcp_left_1_0.05_evolving.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "r1_hold_tcp_left_2_-0.05_snapshot",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E07_hqp_priority_and_redundancy/inputs/generated/r1_hold_tcp_left_2_-0.05_snapshot.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "r1_hold_tcp_left_2_-0.05_evolving",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E07_hqp_priority_and_redundancy/inputs/generated/r1_hold_tcp_left_2_-0.05_evolving.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "r1_hold_tcp_left_2_-0.02_snapshot",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E07_hqp_priority_and_redundancy/inputs/generated/r1_hold_tcp_left_2_-0.02_snapshot.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "r1_hold_tcp_left_2_-0.02_evolving",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E07_hqp_priority_and_redundancy/inputs/generated/r1_hold_tcp_left_2_-0.02_evolving.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "r1_hold_tcp_left_2_0.02_snapshot",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E07_hqp_priority_and_redundancy/inputs/generated/r1_hold_tcp_left_2_0.02_snapshot.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "r1_hold_tcp_left_2_0.02_evolving",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E07_hqp_priority_and_redundancy/inputs/generated/r1_hold_tcp_left_2_0.02_evolving.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "r1_hold_tcp_left_2_0.05_snapshot",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E07_hqp_priority_and_redundancy/inputs/generated/r1_hold_tcp_left_2_0.05_snapshot.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "r1_hold_tcp_left_2_0.05_evolving",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E07_hqp_priority_and_redundancy/inputs/generated/r1_hold_tcp_left_2_0.05_evolving.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "r1_hold_tcp_right_0_-0.05_snapshot",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E07_hqp_priority_and_redundancy/inputs/generated/r1_hold_tcp_right_0_-0.05_snapshot.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "r1_hold_tcp_right_0_-0.05_evolving",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E07_hqp_priority_and_redundancy/inputs/generated/r1_hold_tcp_right_0_-0.05_evolving.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "r1_hold_tcp_right_0_-0.02_snapshot",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E07_hqp_priority_and_redundancy/inputs/generated/r1_hold_tcp_right_0_-0.02_snapshot.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "r1_hold_tcp_right_0_-0.02_evolving",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E07_hqp_priority_and_redundancy/inputs/generated/r1_hold_tcp_right_0_-0.02_evolving.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "r1_hold_tcp_right_0_0.02_snapshot",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E07_hqp_priority_and_redundancy/inputs/generated/r1_hold_tcp_right_0_0.02_snapshot.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "r1_hold_tcp_right_0_0.02_evolving",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E07_hqp_priority_and_redundancy/inputs/generated/r1_hold_tcp_right_0_0.02_evolving.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "r1_hold_tcp_right_0_0.05_snapshot",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E07_hqp_priority_and_redundancy/inputs/generated/r1_hold_tcp_right_0_0.05_snapshot.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "r1_hold_tcp_right_0_0.05_evolving",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E07_hqp_priority_and_redundancy/inputs/generated/r1_hold_tcp_right_0_0.05_evolving.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "r1_hold_tcp_right_1_-0.05_snapshot",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E07_hqp_priority_and_redundancy/inputs/generated/r1_hold_tcp_right_1_-0.05_snapshot.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "r1_hold_tcp_right_1_-0.05_evolving",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E07_hqp_priority_and_redundancy/inputs/generated/r1_hold_tcp_right_1_-0.05_evolving.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "r1_hold_tcp_right_1_-0.02_snapshot",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E07_hqp_priority_and_redundancy/inputs/generated/r1_hold_tcp_right_1_-0.02_snapshot.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "r1_hold_tcp_right_1_-0.02_evolving",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E07_hqp_priority_and_redundancy/inputs/generated/r1_hold_tcp_right_1_-0.02_evolving.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "r1_hold_tcp_right_1_0.02_snapshot",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E07_hqp_priority_and_redundancy/inputs/generated/r1_hold_tcp_right_1_0.02_snapshot.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "r1_hold_tcp_right_1_0.02_evolving",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E07_hqp_priority_and_redundancy/inputs/generated/r1_hold_tcp_right_1_0.02_evolving.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "r1_hold_tcp_right_1_0.05_snapshot",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E07_hqp_priority_and_redundancy/inputs/generated/r1_hold_tcp_right_1_0.05_snapshot.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "r1_hold_tcp_right_1_0.05_evolving",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E07_hqp_priority_and_redundancy/inputs/generated/r1_hold_tcp_right_1_0.05_evolving.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "r1_hold_tcp_right_2_-0.05_snapshot",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E07_hqp_priority_and_redundancy/inputs/generated/r1_hold_tcp_right_2_-0.05_snapshot.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "r1_hold_tcp_right_2_-0.05_evolving",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E07_hqp_priority_and_redundancy/inputs/generated/r1_hold_tcp_right_2_-0.05_evolving.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "r1_hold_tcp_right_2_-0.02_snapshot",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E07_hqp_priority_and_redundancy/inputs/generated/r1_hold_tcp_right_2_-0.02_snapshot.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "r1_hold_tcp_right_2_-0.02_evolving",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E07_hqp_priority_and_redundancy/inputs/generated/r1_hold_tcp_right_2_-0.02_evolving.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "r1_hold_tcp_right_2_0.02_snapshot",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E07_hqp_priority_and_redundancy/inputs/generated/r1_hold_tcp_right_2_0.02_snapshot.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "r1_hold_tcp_right_2_0.02_evolving",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E07_hqp_priority_and_redundancy/inputs/generated/r1_hold_tcp_right_2_0.02_evolving.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "r1_hold_tcp_right_2_0.05_snapshot",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E07_hqp_priority_and_redundancy/inputs/generated/r1_hold_tcp_right_2_0.05_snapshot.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "r1_hold_tcp_right_2_0.05_evolving",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E07_hqp_priority_and_redundancy/inputs/generated/r1_hold_tcp_right_2_0.05_evolving.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "r1_orientation_conflict_0.1_snapshot",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E07_hqp_priority_and_redundancy/inputs/generated/r1_orientation_conflict_0.1_snapshot.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "r1_orientation_conflict_0.1_evolving",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E07_hqp_priority_and_redundancy/inputs/generated/r1_orientation_conflict_0.1_evolving.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "r1_orientation_conflict_0.3_snapshot",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E07_hqp_priority_and_redundancy/inputs/generated/r1_orientation_conflict_0.3_snapshot.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "r1_orientation_conflict_0.3_evolving",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E07_hqp_priority_and_redundancy/inputs/generated/r1_orientation_conflict_0.3_evolving.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "r1_weight_sweep_0.01_snapshot",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E07_hqp_priority_and_redundancy/inputs/generated/r1_weight_sweep_0.01_snapshot.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "r1_weight_sweep_0.01_evolving",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E07_hqp_priority_and_redundancy/inputs/generated/r1_weight_sweep_0.01_evolving.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "r1_weight_sweep_0.1_snapshot",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E07_hqp_priority_and_redundancy/inputs/generated/r1_weight_sweep_0.1_snapshot.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "r1_weight_sweep_0.1_evolving",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E07_hqp_priority_and_redundancy/inputs/generated/r1_weight_sweep_0.1_evolving.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "r1_weight_sweep_1.0_snapshot",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E07_hqp_priority_and_redundancy/inputs/generated/r1_weight_sweep_1.0_snapshot.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "r1_weight_sweep_1.0_evolving",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E07_hqp_priority_and_redundancy/inputs/generated/r1_weight_sweep_1.0_evolving.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "r1_weight_sweep_10.0_snapshot",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E07_hqp_priority_and_redundancy/inputs/generated/r1_weight_sweep_10.0_snapshot.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "r1_weight_sweep_10.0_evolving",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E07_hqp_priority_and_redundancy/inputs/generated/r1_weight_sweep_10.0_evolving.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "r1_weight_sweep_100.0_snapshot",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E07_hqp_priority_and_redundancy/inputs/generated/r1_weight_sweep_100.0_snapshot.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "r1_weight_sweep_100.0_evolving",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E07_hqp_priority_and_redundancy/inputs/generated/r1_weight_sweep_100.0_evolving.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "r1_task_transition_link4",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E07_hqp_priority_and_redundancy/inputs/generated/r1_task_transition_link4.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "r1_task_transition_posture",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E07_hqp_priority_and_redundancy/inputs/generated/r1_task_transition_posture.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "r1_task_transition_both",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E07_hqp_priority_and_redundancy/inputs/generated/r1_task_transition_both.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "hard_primary_positive_control",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E07_hqp_priority_and_redundancy/inputs/generated/hard_primary_positive_control.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "fixture_compressed_events",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E07_hqp_priority_and_redundancy/inputs/generated/fixture_compressed_events.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  }
+]

@@ -1,0 +1,17 @@
+{
+  "canonical": {
+    "locator": "/workspace/labs/motion-control-lab/experiments/E06_solver_semantic_parity/inputs/generated/servo_snapshot_velocity_0.25.json",
+    "sha256": "58835adf3ae809b9f0e3d444b54b189a68ed5c9ea1507508e4ca68713e37a622",
+    "size_bytes": 6689
+  },
+  "fixture": false,
+  "input_id": "E06-servo_snapshot_velocity_0.25",
+  "model": {
+    "locator": "/workspace/models/r1.cos.urdf",
+    "sha256": "7f7c10114ee6937c40c5b3963d79bc000dc49c2b215ee8c60ed7858eab740341",
+    "size_bytes": 71079
+  },
+  "schema_version": "input_descriptor.v1",
+  "session_id": "synthetic",
+  "split_id": "development"
+}

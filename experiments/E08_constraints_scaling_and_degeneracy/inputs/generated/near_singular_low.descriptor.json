@@ -1,0 +1,17 @@
+{
+  "canonical": {
+    "locator": "/workspace/labs/motion-control-lab/experiments/E08_constraints_scaling_and_degeneracy/inputs/generated/near_singular_low.json",
+    "sha256": "545eafb2024ad06bbba1cc387b4e35c36c49afabeb1cb60bd22352778c887a31",
+    "size_bytes": 7076
+  },
+  "fixture": false,
+  "input_id": "E08-near_singular_low",
+  "model": {
+    "locator": "/workspace/models/r1.cos.urdf",
+    "sha256": "7f7c10114ee6937c40c5b3963d79bc000dc49c2b215ee8c60ed7858eab740341",
+    "size_bytes": 71079
+  },
+  "schema_version": "input_descriptor.v1",
+  "session_id": "synthetic",
+  "split_id": "development"
+}

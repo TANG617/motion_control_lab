@@ -1,0 +1,446 @@
+[
+  {
+    "candidate_independent_generation": true,
+    "case_id": "joint_limit_left_arm_joint4_lower_0.005",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E08_constraints_scaling_and_degeneracy/inputs/generated/joint_limit_left_arm_joint4_lower_0.005.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "joint_limit_left_arm_joint4_lower_0.02",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E08_constraints_scaling_and_degeneracy/inputs/generated/joint_limit_left_arm_joint4_lower_0.02.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "joint_limit_left_arm_joint4_lower_0.1",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E08_constraints_scaling_and_degeneracy/inputs/generated/joint_limit_left_arm_joint4_lower_0.1.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "joint_limit_left_arm_joint4_upper_0.005",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E08_constraints_scaling_and_degeneracy/inputs/generated/joint_limit_left_arm_joint4_upper_0.005.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "joint_limit_left_arm_joint4_upper_0.02",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E08_constraints_scaling_and_degeneracy/inputs/generated/joint_limit_left_arm_joint4_upper_0.02.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "joint_limit_left_arm_joint4_upper_0.1",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E08_constraints_scaling_and_degeneracy/inputs/generated/joint_limit_left_arm_joint4_upper_0.1.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "joint_limit_right_arm_joint4_lower_0.005",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E08_constraints_scaling_and_degeneracy/inputs/generated/joint_limit_right_arm_joint4_lower_0.005.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "joint_limit_right_arm_joint4_lower_0.02",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E08_constraints_scaling_and_degeneracy/inputs/generated/joint_limit_right_arm_joint4_lower_0.02.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "joint_limit_right_arm_joint4_lower_0.1",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E08_constraints_scaling_and_degeneracy/inputs/generated/joint_limit_right_arm_joint4_lower_0.1.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "joint_limit_right_arm_joint4_upper_0.005",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E08_constraints_scaling_and_degeneracy/inputs/generated/joint_limit_right_arm_joint4_upper_0.005.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "joint_limit_right_arm_joint4_upper_0.02",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E08_constraints_scaling_and_degeneracy/inputs/generated/joint_limit_right_arm_joint4_upper_0.02.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "joint_limit_right_arm_joint4_upper_0.1",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E08_constraints_scaling_and_degeneracy/inputs/generated/joint_limit_right_arm_joint4_upper_0.1.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "joint_limit_torso_yaw_joint_lower_0.005",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E08_constraints_scaling_and_degeneracy/inputs/generated/joint_limit_torso_yaw_joint_lower_0.005.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "joint_limit_torso_yaw_joint_lower_0.02",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E08_constraints_scaling_and_degeneracy/inputs/generated/joint_limit_torso_yaw_joint_lower_0.02.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "joint_limit_torso_yaw_joint_lower_0.1",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E08_constraints_scaling_and_degeneracy/inputs/generated/joint_limit_torso_yaw_joint_lower_0.1.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "joint_limit_torso_yaw_joint_upper_0.005",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E08_constraints_scaling_and_degeneracy/inputs/generated/joint_limit_torso_yaw_joint_upper_0.005.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "joint_limit_torso_yaw_joint_upper_0.02",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E08_constraints_scaling_and_degeneracy/inputs/generated/joint_limit_torso_yaw_joint_upper_0.02.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "joint_limit_torso_yaw_joint_upper_0.1",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E08_constraints_scaling_and_degeneracy/inputs/generated/joint_limit_torso_yaw_joint_upper_0.1.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "moving_state_0.0_continue_common",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E08_constraints_scaling_and_degeneracy/inputs/generated/moving_state_0.0_continue_common.descriptor.json",
+    "shared_hard_set_feasibility": "feasible-position-velocity-and-braking-under-4-rad-s2"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "moving_state_0.0_continue_native-policy",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E08_constraints_scaling_and_degeneracy/inputs/generated/moving_state_0.0_continue_native-policy.descriptor.json",
+    "shared_hard_set_feasibility": "feasible-position-velocity-and-braking-under-4-rad-s2"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "moving_state_0.0_reverse_common",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E08_constraints_scaling_and_degeneracy/inputs/generated/moving_state_0.0_reverse_common.descriptor.json",
+    "shared_hard_set_feasibility": "feasible-position-velocity-and-braking-under-4-rad-s2"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "moving_state_0.0_reverse_native-policy",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E08_constraints_scaling_and_degeneracy/inputs/generated/moving_state_0.0_reverse_native-policy.descriptor.json",
+    "shared_hard_set_feasibility": "feasible-position-velocity-and-braking-under-4-rad-s2"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "moving_state_0.0_stop_common",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E08_constraints_scaling_and_degeneracy/inputs/generated/moving_state_0.0_stop_common.descriptor.json",
+    "shared_hard_set_feasibility": "feasible-position-velocity-and-braking-under-4-rad-s2"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "moving_state_0.0_stop_native-policy",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E08_constraints_scaling_and_degeneracy/inputs/generated/moving_state_0.0_stop_native-policy.descriptor.json",
+    "shared_hard_set_feasibility": "feasible-position-velocity-and-braking-under-4-rad-s2"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "moving_state_-0.25_continue_common",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E08_constraints_scaling_and_degeneracy/inputs/generated/moving_state_-0.25_continue_common.descriptor.json",
+    "shared_hard_set_feasibility": "feasible-position-velocity-and-braking-under-4-rad-s2"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "moving_state_-0.25_continue_native-policy",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E08_constraints_scaling_and_degeneracy/inputs/generated/moving_state_-0.25_continue_native-policy.descriptor.json",
+    "shared_hard_set_feasibility": "feasible-position-velocity-and-braking-under-4-rad-s2"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "moving_state_-0.25_reverse_common",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E08_constraints_scaling_and_degeneracy/inputs/generated/moving_state_-0.25_reverse_common.descriptor.json",
+    "shared_hard_set_feasibility": "feasible-position-velocity-and-braking-under-4-rad-s2"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "moving_state_-0.25_reverse_native-policy",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E08_constraints_scaling_and_degeneracy/inputs/generated/moving_state_-0.25_reverse_native-policy.descriptor.json",
+    "shared_hard_set_feasibility": "feasible-position-velocity-and-braking-under-4-rad-s2"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "moving_state_-0.25_stop_common",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E08_constraints_scaling_and_degeneracy/inputs/generated/moving_state_-0.25_stop_common.descriptor.json",
+    "shared_hard_set_feasibility": "feasible-position-velocity-and-braking-under-4-rad-s2"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "moving_state_-0.25_stop_native-policy",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E08_constraints_scaling_and_degeneracy/inputs/generated/moving_state_-0.25_stop_native-policy.descriptor.json",
+    "shared_hard_set_feasibility": "feasible-position-velocity-and-braking-under-4-rad-s2"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "moving_state_0.25_continue_common",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E08_constraints_scaling_and_degeneracy/inputs/generated/moving_state_0.25_continue_common.descriptor.json",
+    "shared_hard_set_feasibility": "feasible-position-velocity-and-braking-under-4-rad-s2"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "moving_state_0.25_continue_native-policy",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E08_constraints_scaling_and_degeneracy/inputs/generated/moving_state_0.25_continue_native-policy.descriptor.json",
+    "shared_hard_set_feasibility": "feasible-position-velocity-and-braking-under-4-rad-s2"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "moving_state_0.25_reverse_common",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E08_constraints_scaling_and_degeneracy/inputs/generated/moving_state_0.25_reverse_common.descriptor.json",
+    "shared_hard_set_feasibility": "feasible-position-velocity-and-braking-under-4-rad-s2"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "moving_state_0.25_reverse_native-policy",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E08_constraints_scaling_and_degeneracy/inputs/generated/moving_state_0.25_reverse_native-policy.descriptor.json",
+    "shared_hard_set_feasibility": "feasible-position-velocity-and-braking-under-4-rad-s2"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "moving_state_0.25_stop_common",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E08_constraints_scaling_and_degeneracy/inputs/generated/moving_state_0.25_stop_common.descriptor.json",
+    "shared_hard_set_feasibility": "feasible-position-velocity-and-braking-under-4-rad-s2"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "moving_state_0.25_stop_native-policy",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E08_constraints_scaling_and_degeneracy/inputs/generated/moving_state_0.25_stop_native-policy.descriptor.json",
+    "shared_hard_set_feasibility": "feasible-position-velocity-and-braking-under-4-rad-s2"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "moving_state_-0.75_continue_common",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E08_constraints_scaling_and_degeneracy/inputs/generated/moving_state_-0.75_continue_common.descriptor.json",
+    "shared_hard_set_feasibility": "feasible-position-velocity-and-braking-under-4-rad-s2"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "moving_state_-0.75_continue_native-policy",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E08_constraints_scaling_and_degeneracy/inputs/generated/moving_state_-0.75_continue_native-policy.descriptor.json",
+    "shared_hard_set_feasibility": "feasible-position-velocity-and-braking-under-4-rad-s2"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "moving_state_-0.75_reverse_common",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E08_constraints_scaling_and_degeneracy/inputs/generated/moving_state_-0.75_reverse_common.descriptor.json",
+    "shared_hard_set_feasibility": "feasible-position-velocity-and-braking-under-4-rad-s2"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "moving_state_-0.75_reverse_native-policy",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E08_constraints_scaling_and_degeneracy/inputs/generated/moving_state_-0.75_reverse_native-policy.descriptor.json",
+    "shared_hard_set_feasibility": "feasible-position-velocity-and-braking-under-4-rad-s2"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "moving_state_-0.75_stop_common",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E08_constraints_scaling_and_degeneracy/inputs/generated/moving_state_-0.75_stop_common.descriptor.json",
+    "shared_hard_set_feasibility": "feasible-position-velocity-and-braking-under-4-rad-s2"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "moving_state_-0.75_stop_native-policy",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E08_constraints_scaling_and_degeneracy/inputs/generated/moving_state_-0.75_stop_native-policy.descriptor.json",
+    "shared_hard_set_feasibility": "feasible-position-velocity-and-braking-under-4-rad-s2"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "moving_state_0.75_continue_common",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E08_constraints_scaling_and_degeneracy/inputs/generated/moving_state_0.75_continue_common.descriptor.json",
+    "shared_hard_set_feasibility": "feasible-position-velocity-and-braking-under-4-rad-s2"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "moving_state_0.75_continue_native-policy",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E08_constraints_scaling_and_degeneracy/inputs/generated/moving_state_0.75_continue_native-policy.descriptor.json",
+    "shared_hard_set_feasibility": "feasible-position-velocity-and-braking-under-4-rad-s2"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "moving_state_0.75_reverse_common",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E08_constraints_scaling_and_degeneracy/inputs/generated/moving_state_0.75_reverse_common.descriptor.json",
+    "shared_hard_set_feasibility": "feasible-position-velocity-and-braking-under-4-rad-s2"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "moving_state_0.75_reverse_native-policy",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E08_constraints_scaling_and_degeneracy/inputs/generated/moving_state_0.75_reverse_native-policy.descriptor.json",
+    "shared_hard_set_feasibility": "feasible-position-velocity-and-braking-under-4-rad-s2"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "moving_state_0.75_stop_common",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E08_constraints_scaling_and_degeneracy/inputs/generated/moving_state_0.75_stop_common.descriptor.json",
+    "shared_hard_set_feasibility": "feasible-position-velocity-and-braking-under-4-rad-s2"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "moving_state_0.75_stop_native-policy",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E08_constraints_scaling_and_degeneracy/inputs/generated/moving_state_0.75_stop_native-policy.descriptor.json",
+    "shared_hard_set_feasibility": "feasible-position-velocity-and-braking-under-4-rad-s2"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "unreachable_one_arm_left_0.0_shared",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E08_constraints_scaling_and_degeneracy/inputs/generated/unreachable_one_arm_left_0.0_shared.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "unreachable_one_arm_left_0.0_per-arm",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E08_constraints_scaling_and_degeneracy/inputs/generated/unreachable_one_arm_left_0.0_per-arm.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "unreachable_one_arm_left_0.05_shared",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E08_constraints_scaling_and_degeneracy/inputs/generated/unreachable_one_arm_left_0.05_shared.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "unreachable_one_arm_left_0.05_per-arm",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E08_constraints_scaling_and_degeneracy/inputs/generated/unreachable_one_arm_left_0.05_per-arm.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "unreachable_one_arm_left_0.15_shared",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E08_constraints_scaling_and_degeneracy/inputs/generated/unreachable_one_arm_left_0.15_shared.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "unreachable_one_arm_left_0.15_per-arm",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E08_constraints_scaling_and_degeneracy/inputs/generated/unreachable_one_arm_left_0.15_per-arm.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "unreachable_one_arm_left_0.3_shared",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E08_constraints_scaling_and_degeneracy/inputs/generated/unreachable_one_arm_left_0.3_shared.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "unreachable_one_arm_left_0.3_per-arm",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E08_constraints_scaling_and_degeneracy/inputs/generated/unreachable_one_arm_left_0.3_per-arm.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "unreachable_one_arm_right_0.0_shared",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E08_constraints_scaling_and_degeneracy/inputs/generated/unreachable_one_arm_right_0.0_shared.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "unreachable_one_arm_right_0.0_per-arm",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E08_constraints_scaling_and_degeneracy/inputs/generated/unreachable_one_arm_right_0.0_per-arm.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "unreachable_one_arm_right_0.05_shared",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E08_constraints_scaling_and_degeneracy/inputs/generated/unreachable_one_arm_right_0.05_shared.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "unreachable_one_arm_right_0.05_per-arm",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E08_constraints_scaling_and_degeneracy/inputs/generated/unreachable_one_arm_right_0.05_per-arm.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "unreachable_one_arm_right_0.15_shared",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E08_constraints_scaling_and_degeneracy/inputs/generated/unreachable_one_arm_right_0.15_shared.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "unreachable_one_arm_right_0.15_per-arm",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E08_constraints_scaling_and_degeneracy/inputs/generated/unreachable_one_arm_right_0.15_per-arm.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "unreachable_one_arm_right_0.3_shared",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E08_constraints_scaling_and_degeneracy/inputs/generated/unreachable_one_arm_right_0.3_shared.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "unreachable_one_arm_right_0.3_per-arm",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E08_constraints_scaling_and_degeneracy/inputs/generated/unreachable_one_arm_right_0.3_per-arm.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "near_singular_low",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E08_constraints_scaling_and_degeneracy/inputs/generated/near_singular_low.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "near_singular_middle",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E08_constraints_scaling_and_degeneracy/inputs/generated/near_singular_middle.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "near_singular_high",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E08_constraints_scaling_and_degeneracy/inputs/generated/near_singular_high.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "conflicting_tasks_False",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E08_constraints_scaling_and_degeneracy/inputs/generated/conflicting_tasks_False.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "conflicting_tasks_True",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E08_constraints_scaling_and_degeneracy/inputs/generated/conflicting_tasks_True.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "initial_infeasible",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E08_constraints_scaling_and_degeneracy/inputs/generated/initial_infeasible.descriptor.json",
+    "shared_hard_set_feasibility": "infeasible-position-box-before-solve"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "recovery_0.05",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E08_constraints_scaling_and_degeneracy/inputs/generated/recovery_0.05.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "recovery_0.3",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E08_constraints_scaling_and_degeneracy/inputs/generated/recovery_0.3.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "collision_diagnostic_approach_exit",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E08_constraints_scaling_and_degeneracy/inputs/generated/collision_diagnostic_approach_exit.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  },
+  {
+    "candidate_independent_generation": true,
+    "case_id": "fixture_compressed_events",
+    "descriptor": "/workspace/labs/motion-control-lab/experiments/E08_constraints_scaling_and_degeneracy/inputs/generated/fixture_compressed_events.descriptor.json",
+    "shared_hard_set_feasibility": "position-and-velocity-box-feasible"
+  }
+]

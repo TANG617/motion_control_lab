@@ -1,0 +1,17 @@
+{
+  "canonical": {
+    "locator": "/workspace/labs/motion-control-lab/experiments/E07_hqp_priority_and_redundancy/inputs/generated/r1_task_transition_link4.json",
+    "sha256": "8041ca4ec60610dfe5c9bbbff5a56e4f0eaac9a3203b70ebb8c7de35dd1839b6",
+    "size_bytes": 11286
+  },
+  "fixture": false,
+  "input_id": "E07-r1_task_transition_link4",
+  "model": {
+    "locator": "/workspace/models/r1.cos.urdf",
+    "sha256": "7f7c10114ee6937c40c5b3963d79bc000dc49c2b215ee8c60ed7858eab740341",
+    "size_bytes": 71079
+  },
+  "schema_version": "input_descriptor.v1",
+  "session_id": "synthetic",
+  "split_id": "development"
+}

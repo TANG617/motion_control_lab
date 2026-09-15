@@ -1,0 +1,17 @@
+{
+  "canonical": {
+    "locator": "/workspace/labs/motion-control-lab/experiments/E07_hqp_priority_and_redundancy/inputs/generated/r1_hold_tcp_left_2_0.05_evolving.json",
+    "sha256": "0c252b75675a9791c35f63b22ee5390ae346d2585c070ff08b45072dc1964095",
+    "size_bytes": 11251
+  },
+  "fixture": false,
+  "input_id": "E07-r1_hold_tcp_left_2_0.05_evolving",
+  "model": {
+    "locator": "/workspace/models/r1.cos.urdf",
+    "sha256": "7f7c10114ee6937c40c5b3963d79bc000dc49c2b215ee8c60ed7858eab740341",
+    "size_bytes": 71079
+  },
+  "schema_version": "input_descriptor.v1",
+  "session_id": "synthetic",
+  "split_id": "development"
+}

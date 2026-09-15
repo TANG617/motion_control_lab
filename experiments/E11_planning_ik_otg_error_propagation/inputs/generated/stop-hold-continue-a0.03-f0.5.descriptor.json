@@ -1,0 +1,17 @@
+{
+  "canonical": {
+    "locator": "/workspace/labs/motion-control-lab/experiments/E11_planning_ik_otg_error_propagation/inputs/generated/stop-hold-continue-a0.03-f0.5.json",
+    "sha256": "0635ba5cedb91be8e8ea8328d53b5643dd2448eeee763531566f3d2d130aa16c",
+    "size_bytes": 2017475
+  },
+  "fixture": false,
+  "input_id": "stop-hold-continue-a0.03-f0.5",
+  "model": {
+    "locator": "/workspace/models/r1.cos.urdf",
+    "sha256": "7f7c10114ee6937c40c5b3963d79bc000dc49c2b215ee8c60ed7858eab740341",
+    "size_bytes": 71079
+  },
+  "schema_version": "input_descriptor.v1",
+  "session_id": "synthetic",
+  "split_id": "development"
+}

@@ -1,0 +1,17 @@
+{
+  "canonical": {
+    "locator": "/workspace/labs/motion-control-lab/experiments/E11_planning_ik_otg_error_propagation/inputs/generated/step-a0.03-f0.5.json",
+    "sha256": "fe64eb1929c4527c1407c876325dff0d6c95fd8e1fc927105433b3abb3b1bfc3",
+    "size_bytes": 2008339
+  },
+  "fixture": false,
+  "input_id": "step-a0.03-f0.5",
+  "model": {
+    "locator": "/workspace/models/r1.cos.urdf",
+    "sha256": "7f7c10114ee6937c40c5b3963d79bc000dc49c2b215ee8c60ed7858eab740341",
+    "size_bytes": 71079
+  },
+  "schema_version": "input_descriptor.v1",
+  "session_id": "synthetic",
+  "split_id": "development"
+}

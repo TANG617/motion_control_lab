@@ -1,0 +1,9 @@
+{
+  "disposition": "superseded-development-input; never formally executed",
+  "original_artifact": {
+    "locator": "/workspace/labs/motion-control-lab/experiments/E11_planning_ik_otg_error_propagation/inputs/generated/piecewise-smooth-a0.03-f0.2.json",
+    "sha256": "e339e9c97026a9fb19383aea651fa92038ba14f1e2ff6b43be1581056994d815",
+    "size_bytes": 2017203
+  },
+  "reason": "generator quintic reset introduced unintended jumps; not valid piecewise-smooth input"
+}

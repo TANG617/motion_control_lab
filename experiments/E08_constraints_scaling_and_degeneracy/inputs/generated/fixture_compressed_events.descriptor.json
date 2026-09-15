@@ -1,0 +1,17 @@
+{
+  "canonical": {
+    "locator": "/workspace/labs/motion-control-lab/experiments/E08_constraints_scaling_and_degeneracy/inputs/generated/fixture_compressed_events.json",
+    "sha256": "9ac15bf3c8e1b1c52512b16cf86789a6ab5329e4b9e7784542fcd7f3df0f8a0f",
+    "size_bytes": 11531
+  },
+  "fixture": true,
+  "input_id": "E08-fixture_compressed_events",
+  "model": {
+    "locator": "/workspace/models/r1.cos.urdf",
+    "sha256": "7f7c10114ee6937c40c5b3963d79bc000dc49c2b215ee8c60ed7858eab740341",
+    "size_bytes": 71079
+  },
+  "schema_version": "input_descriptor.v1",
+  "session_id": "synthetic",
+  "split_id": "development"
+}

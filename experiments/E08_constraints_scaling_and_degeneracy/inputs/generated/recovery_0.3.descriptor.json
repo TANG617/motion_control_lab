@@ -1,0 +1,17 @@
+{
+  "canonical": {
+    "locator": "/workspace/labs/motion-control-lab/experiments/E08_constraints_scaling_and_degeneracy/inputs/generated/recovery_0.3.json",
+    "sha256": "b6c976987ff5f0687996a374b9b12c99222c902eeec1acfd9c929b26ef89a1a9",
+    "size_bytes": 11236
+  },
+  "fixture": false,
+  "input_id": "E08-recovery_0.3",
+  "model": {
+    "locator": "/workspace/models/r1.cos.urdf",
+    "sha256": "7f7c10114ee6937c40c5b3963d79bc000dc49c2b215ee8c60ed7858eab740341",
+    "size_bytes": 71079
+  },
+  "schema_version": "input_descriptor.v1",
+  "session_id": "synthetic",
+  "split_id": "development"
+}

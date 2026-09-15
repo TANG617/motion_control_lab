@@ -1,0 +1,822 @@
+{
+  "content_access": "hash-only; no MCAP decode",
+  "inventory_hash": "e02d4de7e5ec79bba0e97e9f602d57514bccb4d244f7a9dfed68ef77299b5764",
+  "locator": "/workspace/fixtures/raw/batch",
+  "records": [
+    {
+      "duplicate_of": null,
+      "exposure": "unknown-historically-available-to-E05",
+      "exposure_reason": "existing mount and historical E05 use; no unexposed attestation",
+      "interval_ns": null,
+      "quality": "not-decoded",
+      "raw": {
+        "locator": "/workspace/fixtures/raw/batch/RW1AZHYCSEFT5_RW1AZHYCSEFT5260310002_20260731015547_0-slice.mcap",
+        "sha256": "e5b9aec794545fb4d7cc590b4dcda7bca4e4f1bae94c038afea1202807eb74cb",
+        "size_bytes": 5663997
+      },
+      "recording_id": "RW1AZHYCSEFT5_RW1AZHYCSEFT5260310002_20260731015547_0-slice",
+      "relative_path": "RW1AZHYCSEFT5_RW1AZHYCSEFT5260310002_20260731015547_0-slice.mcap",
+      "session_id": "unknown-common-session",
+      "session_provenance": "unknown; conservatively merged",
+      "source_id": null,
+      "source_topics": {
+        "joints": "/mc/ik/joint_states",
+        "left": "/hal/tracker/htc/left/calib_target_pose",
+        "right": "/hal/tracker/htc/right/calib_target_pose"
+      }
+    },
+    {
+      "duplicate_of": null,
+      "exposure": "unknown-historically-available-to-E05",
+      "exposure_reason": "existing mount and historical E05 use; no unexposed attestation",
+      "interval_ns": null,
+      "quality": "not-decoded",
+      "raw": {
+        "locator": "/workspace/fixtures/raw/batch/RW1AZHYCSEFT5_RW1AZHYCSEFT5260310002_20260731015556_0-slice.mcap",
+        "sha256": "ef01fa33f5f9094e52980d63807c2501398bf8eddf97c73b9e1ede399cfc380c",
+        "size_bytes": 11579461
+      },
+      "recording_id": "RW1AZHYCSEFT5_RW1AZHYCSEFT5260310002_20260731015556_0-slice",
+      "relative_path": "RW1AZHYCSEFT5_RW1AZHYCSEFT5260310002_20260731015556_0-slice.mcap",
+      "session_id": "unknown-common-session",
+      "session_provenance": "unknown; conservatively merged",
+      "source_id": null,
+      "source_topics": {
+        "joints": "/mc/ik/joint_states",
+        "left": "/hal/tracker/htc/left/calib_target_pose",
+        "right": "/hal/tracker/htc/right/calib_target_pose"
+      }
+    },
+    {
+      "duplicate_of": null,
+      "exposure": "unknown-historically-available-to-E05",
+      "exposure_reason": "existing mount and historical E05 use; no unexposed attestation",
+      "interval_ns": null,
+      "quality": "not-decoded",
+      "raw": {
+        "locator": "/workspace/fixtures/raw/batch/RW1AZHYCSEFT5_RW1AZHYCSEFT5260310002_20260731015614_0-slice.mcap",
+        "sha256": "8199f2ea9d349c38568ba0abfab11bcbb81a3fbdeea3e47e5c12fae80080d970",
+        "size_bytes": 6589841
+      },
+      "recording_id": "RW1AZHYCSEFT5_RW1AZHYCSEFT5260310002_20260731015614_0-slice",
+      "relative_path": "RW1AZHYCSEFT5_RW1AZHYCSEFT5260310002_20260731015614_0-slice.mcap",
+      "session_id": "unknown-common-session",
+      "session_provenance": "unknown; conservatively merged",
+      "source_id": null,
+      "source_topics": {
+        "joints": "/mc/ik/joint_states",
+        "left": "/hal/tracker/htc/left/calib_target_pose",
+        "right": "/hal/tracker/htc/right/calib_target_pose"
+      }
+    },
+    {
+      "duplicate_of": null,
+      "exposure": "unknown-historically-available-to-E05",
+      "exposure_reason": "existing mount and historical E05 use; no unexposed attestation",
+      "interval_ns": null,
+      "quality": "not-decoded",
+      "raw": {
+        "locator": "/workspace/fixtures/raw/batch/RW1AZHYCSEFT5_RW1AZHYCSEFT5260310002_20260731015649_0-slice.mcap",
+        "sha256": "d3c1bd408d28141016c9f10605b95d498ac145d4d90199dbc5ec469373a198ab",
+        "size_bytes": 5833280
+      },
+      "recording_id": "RW1AZHYCSEFT5_RW1AZHYCSEFT5260310002_20260731015649_0-slice",
+      "relative_path": "RW1AZHYCSEFT5_RW1AZHYCSEFT5260310002_20260731015649_0-slice.mcap",
+      "session_id": "unknown-common-session",
+      "session_provenance": "unknown; conservatively merged",
+      "source_id": null,
+      "source_topics": {
+        "joints": "/mc/ik/joint_states",
+        "left": "/hal/tracker/htc/left/calib_target_pose",
+        "right": "/hal/tracker/htc/right/calib_target_pose"
+      }
+    },
+    {
+      "duplicate_of": null,
+      "exposure": "unknown-historically-available-to-E05",
+      "exposure_reason": "existing mount and historical E05 use; no unexposed attestation",
+      "interval_ns": null,
+      "quality": "not-decoded",
+      "raw": {
+        "locator": "/workspace/fixtures/raw/batch/RW1AZHYCSEFT5_RW1AZHYCSEFT5260310002_20260731015732_0-slice.mcap",
+        "sha256": "d25e1da344c22c7c6c0b58cbe4c6c0131c7f8b494ecb6b97c4d2c215d2b65401",
+        "size_bytes": 9275305
+      },
+      "recording_id": "RW1AZHYCSEFT5_RW1AZHYCSEFT5260310002_20260731015732_0-slice",
+      "relative_path": "RW1AZHYCSEFT5_RW1AZHYCSEFT5260310002_20260731015732_0-slice.mcap",
+      "session_id": "unknown-common-session",
+      "session_provenance": "unknown; conservatively merged",
+      "source_id": null,
+      "source_topics": {
+        "joints": "/mc/ik/joint_states",
+        "left": "/hal/tracker/htc/left/calib_target_pose",
+        "right": "/hal/tracker/htc/right/calib_target_pose"
+      }
+    },
+    {
+      "duplicate_of": null,
+      "exposure": "unknown-historically-available-to-E05",
+      "exposure_reason": "existing mount and historical E05 use; no unexposed attestation",
+      "interval_ns": null,
+      "quality": "not-decoded",
+      "raw": {
+        "locator": "/workspace/fixtures/raw/batch/RW1AZHYCSEFT5_RW1AZHYCSEFT5260310002_20260731015809_0-slice.mcap",
+        "sha256": "6b2cc1c24c17ebe70d4bf4f89d3a6256038ca189d6bc5f9f154073952aeeab11",
+        "size_bytes": 6076056
+      },
+      "recording_id": "RW1AZHYCSEFT5_RW1AZHYCSEFT5260310002_20260731015809_0-slice",
+      "relative_path": "RW1AZHYCSEFT5_RW1AZHYCSEFT5260310002_20260731015809_0-slice.mcap",
+      "session_id": "unknown-common-session",
+      "session_provenance": "unknown; conservatively merged",
+      "source_id": null,
+      "source_topics": {
+        "joints": "/mc/ik/joint_states",
+        "left": "/hal/tracker/htc/left/calib_target_pose",
+        "right": "/hal/tracker/htc/right/calib_target_pose"
+      }
+    },
+    {
+      "duplicate_of": null,
+      "exposure": "unknown-historically-available-to-E05",
+      "exposure_reason": "existing mount and historical E05 use; no unexposed attestation",
+      "interval_ns": null,
+      "quality": "not-decoded",
+      "raw": {
+        "locator": "/workspace/fixtures/raw/batch/RW1AZHYCSEFT5_RW1AZHYCSEFT5260310002_20260731015819_0-slice.mcap",
+        "sha256": "23573eea402f7dfdd4266e5199c48e3d3864ffecbb42c407299dfcd7085b303e",
+        "size_bytes": 6408770
+      },
+      "recording_id": "RW1AZHYCSEFT5_RW1AZHYCSEFT5260310002_20260731015819_0-slice",
+      "relative_path": "RW1AZHYCSEFT5_RW1AZHYCSEFT5260310002_20260731015819_0-slice.mcap",
+      "session_id": "unknown-common-session",
+      "session_provenance": "unknown; conservatively merged",
+      "source_id": null,
+      "source_topics": {
+        "joints": "/mc/ik/joint_states",
+        "left": "/hal/tracker/htc/left/calib_target_pose",
+        "right": "/hal/tracker/htc/right/calib_target_pose"
+      }
+    },
+    {
+      "duplicate_of": null,
+      "exposure": "unknown-historically-available-to-E05",
+      "exposure_reason": "existing mount and historical E05 use; no unexposed attestation",
+      "interval_ns": null,
+      "quality": "not-decoded",
+      "raw": {
+        "locator": "/workspace/fixtures/raw/batch/RW1AZHYCSEFT5_RW1AZHYCSEFT5260310002_20260731015829_0-slice.mcap",
+        "sha256": "4c6f37b86cc714a55cf6ef035e90f9153b21b02d6a4a064eb94e05245fcb4e74",
+        "size_bytes": 8275780
+      },
+      "recording_id": "RW1AZHYCSEFT5_RW1AZHYCSEFT5260310002_20260731015829_0-slice",
+      "relative_path": "RW1AZHYCSEFT5_RW1AZHYCSEFT5260310002_20260731015829_0-slice.mcap",
+      "session_id": "unknown-common-session",
+      "session_provenance": "unknown; conservatively merged",
+      "source_id": null,
+      "source_topics": {
+        "joints": "/mc/ik/joint_states",
+        "left": "/hal/tracker/htc/left/calib_target_pose",
+        "right": "/hal/tracker/htc/right/calib_target_pose"
+      }
+    },
+    {
+      "duplicate_of": null,
+      "exposure": "unknown-historically-available-to-E05",
+      "exposure_reason": "existing mount and historical E05 use; no unexposed attestation",
+      "interval_ns": null,
+      "quality": "not-decoded",
+      "raw": {
+        "locator": "/workspace/fixtures/raw/batch/RW1AZHYCSEFT5_RW1AZHYCSEFT5260310002_20260731015846_0-slice.mcap",
+        "sha256": "a7d7841be7b65b10a7297f6d70ddbaab415158bf683dcce6d3b84ff621d10072",
+        "size_bytes": 7825317
+      },
+      "recording_id": "RW1AZHYCSEFT5_RW1AZHYCSEFT5260310002_20260731015846_0-slice",
+      "relative_path": "RW1AZHYCSEFT5_RW1AZHYCSEFT5260310002_20260731015846_0-slice.mcap",
+      "session_id": "unknown-common-session",
+      "session_provenance": "unknown; conservatively merged",
+      "source_id": null,
+      "source_topics": {
+        "joints": "/mc/ik/joint_states",
+        "left": "/hal/tracker/htc/left/calib_target_pose",
+        "right": "/hal/tracker/htc/right/calib_target_pose"
+      }
+    },
+    {
+      "duplicate_of": null,
+      "exposure": "unknown-historically-available-to-E05",
+      "exposure_reason": "existing mount and historical E05 use; no unexposed attestation",
+      "interval_ns": null,
+      "quality": "not-decoded",
+      "raw": {
+        "locator": "/workspace/fixtures/raw/batch/RW1AZHYCSEFT5_RW1AZHYCSEFT5260310002_20260731015917_0-slice.mcap",
+        "sha256": "f2734649ce662614135040ea0cf381ea6bf732a1a71f76a4eb2a4c9e893105e1",
+        "size_bytes": 4962804
+      },
+      "recording_id": "RW1AZHYCSEFT5_RW1AZHYCSEFT5260310002_20260731015917_0-slice",
+      "relative_path": "RW1AZHYCSEFT5_RW1AZHYCSEFT5260310002_20260731015917_0-slice.mcap",
+      "session_id": "unknown-common-session",
+      "session_provenance": "unknown; conservatively merged",
+      "source_id": null,
+      "source_topics": {
+        "joints": "/mc/ik/joint_states",
+        "left": "/hal/tracker/htc/left/calib_target_pose",
+        "right": "/hal/tracker/htc/right/calib_target_pose"
+      }
+    },
+    {
+      "duplicate_of": null,
+      "exposure": "unknown-historically-available-to-E05",
+      "exposure_reason": "existing mount and historical E05 use; no unexposed attestation",
+      "interval_ns": null,
+      "quality": "not-decoded",
+      "raw": {
+        "locator": "/workspace/fixtures/raw/batch/RW1AZHYCSEFT5_RW1AZHYCSEFT5260310002_20260731015936_0-slice.mcap",
+        "sha256": "20ce6fb9ec8f077f2551271c4eb99dbcfdf99cebb879cf5e797858973bcbbc41",
+        "size_bytes": 6456948
+      },
+      "recording_id": "RW1AZHYCSEFT5_RW1AZHYCSEFT5260310002_20260731015936_0-slice",
+      "relative_path": "RW1AZHYCSEFT5_RW1AZHYCSEFT5260310002_20260731015936_0-slice.mcap",
+      "session_id": "unknown-common-session",
+      "session_provenance": "unknown; conservatively merged",
+      "source_id": null,
+      "source_topics": {
+        "joints": "/mc/ik/joint_states",
+        "left": "/hal/tracker/htc/left/calib_target_pose",
+        "right": "/hal/tracker/htc/right/calib_target_pose"
+      }
+    },
+    {
+      "duplicate_of": null,
+      "exposure": "unknown-historically-available-to-E05",
+      "exposure_reason": "existing mount and historical E05 use; no unexposed attestation",
+      "interval_ns": null,
+      "quality": "not-decoded",
+      "raw": {
+        "locator": "/workspace/fixtures/raw/batch/RW1AZHYCSEFT5_RW1AZHYCSEFT5260310002_20260731015948_0-slice.mcap",
+        "sha256": "07cdde937a7f75cd34160d97c3d121ac032bea580a82caf94f911a236ac58aff",
+        "size_bytes": 8998216
+      },
+      "recording_id": "RW1AZHYCSEFT5_RW1AZHYCSEFT5260310002_20260731015948_0-slice",
+      "relative_path": "RW1AZHYCSEFT5_RW1AZHYCSEFT5260310002_20260731015948_0-slice.mcap",
+      "session_id": "unknown-common-session",
+      "session_provenance": "unknown; conservatively merged",
+      "source_id": null,
+      "source_topics": {
+        "joints": "/mc/ik/joint_states",
+        "left": "/hal/tracker/htc/left/calib_target_pose",
+        "right": "/hal/tracker/htc/right/calib_target_pose"
+      }
+    },
+    {
+      "duplicate_of": null,
+      "exposure": "unknown-historically-available-to-E05",
+      "exposure_reason": "existing mount and historical E05 use; no unexposed attestation",
+      "interval_ns": null,
+      "quality": "not-decoded",
+      "raw": {
+        "locator": "/workspace/fixtures/raw/batch/RW1AZHYCSEFT5_RW1AZHYCSEFT5260310002_20260731020026_0-slice.mcap",
+        "sha256": "ff60eb1894a9ee710642a96ce4327494347b59fc19d1860fcea0a0c83282169f",
+        "size_bytes": 15571421
+      },
+      "recording_id": "RW1AZHYCSEFT5_RW1AZHYCSEFT5260310002_20260731020026_0-slice",
+      "relative_path": "RW1AZHYCSEFT5_RW1AZHYCSEFT5260310002_20260731020026_0-slice.mcap",
+      "session_id": "unknown-common-session",
+      "session_provenance": "unknown; conservatively merged",
+      "source_id": null,
+      "source_topics": {
+        "joints": "/mc/ik/joint_states",
+        "left": "/hal/tracker/htc/left/calib_target_pose",
+        "right": "/hal/tracker/htc/right/calib_target_pose"
+      }
+    },
+    {
+      "duplicate_of": null,
+      "exposure": "unknown-historically-available-to-E05",
+      "exposure_reason": "existing mount and historical E05 use; no unexposed attestation",
+      "interval_ns": null,
+      "quality": "not-decoded",
+      "raw": {
+        "locator": "/workspace/fixtures/raw/batch/RW1AZHYCSEFT5_RW1AZHYCSEFT5260310002_20260731020051_0-slice.mcap",
+        "sha256": "1cc38949b14722facf5a81886d79de993bad5874e701a220ed94f0b885521762",
+        "size_bytes": 6945643
+      },
+      "recording_id": "RW1AZHYCSEFT5_RW1AZHYCSEFT5260310002_20260731020051_0-slice",
+      "relative_path": "RW1AZHYCSEFT5_RW1AZHYCSEFT5260310002_20260731020051_0-slice.mcap",
+      "session_id": "unknown-common-session",
+      "session_provenance": "unknown; conservatively merged",
+      "source_id": null,
+      "source_topics": {
+        "joints": "/mc/ik/joint_states",
+        "left": "/hal/tracker/htc/left/calib_target_pose",
+        "right": "/hal/tracker/htc/right/calib_target_pose"
+      }
+    },
+    {
+      "duplicate_of": null,
+      "exposure": "unknown-historically-available-to-E05",
+      "exposure_reason": "existing mount and historical E05 use; no unexposed attestation",
+      "interval_ns": null,
+      "quality": "not-decoded",
+      "raw": {
+        "locator": "/workspace/fixtures/raw/batch/RW1AZHYCSEFT5_RW1AZHYCSEFT5260310002_20260731020102_0-slice.mcap",
+        "sha256": "e947bcb8fbdd878da0c5fd0b2c52ccfdaa5eaa33c12bc20536593f11866bd441",
+        "size_bytes": 6681895
+      },
+      "recording_id": "RW1AZHYCSEFT5_RW1AZHYCSEFT5260310002_20260731020102_0-slice",
+      "relative_path": "RW1AZHYCSEFT5_RW1AZHYCSEFT5260310002_20260731020102_0-slice.mcap",
+      "session_id": "unknown-common-session",
+      "session_provenance": "unknown; conservatively merged",
+      "source_id": null,
+      "source_topics": {
+        "joints": "/mc/ik/joint_states",
+        "left": "/hal/tracker/htc/left/calib_target_pose",
+        "right": "/hal/tracker/htc/right/calib_target_pose"
+      }
+    },
+    {
+      "duplicate_of": null,
+      "exposure": "unknown-historically-available-to-E05",
+      "exposure_reason": "existing mount and historical E05 use; no unexposed attestation",
+      "interval_ns": null,
+      "quality": "not-decoded",
+      "raw": {
+        "locator": "/workspace/fixtures/raw/batch/RW1AZHYCSEFT5_RW1AZHYCSEFT5260310002_20260731020113_0-slice.mcap",
+        "sha256": "4212d79773d1dde4c7427342ad78328197d1fb83649dcc3f4d5edfa822fe4d7b",
+        "size_bytes": 11447425
+      },
+      "recording_id": "RW1AZHYCSEFT5_RW1AZHYCSEFT5260310002_20260731020113_0-slice",
+      "relative_path": "RW1AZHYCSEFT5_RW1AZHYCSEFT5260310002_20260731020113_0-slice.mcap",
+      "session_id": "unknown-common-session",
+      "session_provenance": "unknown; conservatively merged",
+      "source_id": null,
+      "source_topics": {
+        "joints": "/mc/ik/joint_states",
+        "left": "/hal/tracker/htc/left/calib_target_pose",
+        "right": "/hal/tracker/htc/right/calib_target_pose"
+      }
+    },
+    {
+      "duplicate_of": null,
+      "exposure": "unknown-historically-available-to-E05",
+      "exposure_reason": "existing mount and historical E05 use; no unexposed attestation",
+      "interval_ns": null,
+      "quality": "not-decoded",
+      "raw": {
+        "locator": "/workspace/fixtures/raw/batch/RW1AZHYCSEFT5_RW1AZHYCSEFT5260310002_20260731020152_0-slice.mcap",
+        "sha256": "701ce7c3154aed2e56d1e7a7190bba70b439f27a13370970a05d64b12177fb94",
+        "size_bytes": 6624252
+      },
+      "recording_id": "RW1AZHYCSEFT5_RW1AZHYCSEFT5260310002_20260731020152_0-slice",
+      "relative_path": "RW1AZHYCSEFT5_RW1AZHYCSEFT5260310002_20260731020152_0-slice.mcap",
+      "session_id": "unknown-common-session",
+      "session_provenance": "unknown; conservatively merged",
+      "source_id": null,
+      "source_topics": {
+        "joints": "/mc/ik/joint_states",
+        "left": "/hal/tracker/htc/left/calib_target_pose",
+        "right": "/hal/tracker/htc/right/calib_target_pose"
+      }
+    },
+    {
+      "duplicate_of": null,
+      "exposure": "unknown-historically-available-to-E05",
+      "exposure_reason": "existing mount and historical E05 use; no unexposed attestation",
+      "interval_ns": null,
+      "quality": "not-decoded",
+      "raw": {
+        "locator": "/workspace/fixtures/raw/batch/RW1AZHYCSEFT5_RW1AZHYCSEFT5260310002_20260731020202_0-slice.mcap",
+        "sha256": "5963e4a95827f79f7e98da73b710160178af6831b96b719d9eb235e41892d7b8",
+        "size_bytes": 12955389
+      },
+      "recording_id": "RW1AZHYCSEFT5_RW1AZHYCSEFT5260310002_20260731020202_0-slice",
+      "relative_path": "RW1AZHYCSEFT5_RW1AZHYCSEFT5260310002_20260731020202_0-slice.mcap",
+      "session_id": "unknown-common-session",
+      "session_provenance": "unknown; conservatively merged",
+      "source_id": null,
+      "source_topics": {
+        "joints": "/mc/ik/joint_states",
+        "left": "/hal/tracker/htc/left/calib_target_pose",
+        "right": "/hal/tracker/htc/right/calib_target_pose"
+      }
+    },
+    {
+      "duplicate_of": null,
+      "exposure": "unknown-historically-available-to-E05",
+      "exposure_reason": "existing mount and historical E05 use; no unexposed attestation",
+      "interval_ns": null,
+      "quality": "not-decoded",
+      "raw": {
+        "locator": "/workspace/fixtures/raw/batch/RW1AZHYCSEFT5_RW1AZHYCSEFT5260310002_20260731020222_0-slice.mcap",
+        "sha256": "352138c5b75a1fda880ba33546be53a4b129e2bce6ba19e867975899159d11c4",
+        "size_bytes": 5702563
+      },
+      "recording_id": "RW1AZHYCSEFT5_RW1AZHYCSEFT5260310002_20260731020222_0-slice",
+      "relative_path": "RW1AZHYCSEFT5_RW1AZHYCSEFT5260310002_20260731020222_0-slice.mcap",
+      "session_id": "unknown-common-session",
+      "session_provenance": "unknown; conservatively merged",
+      "source_id": null,
+      "source_topics": {
+        "joints": "/mc/ik/joint_states",
+        "left": "/hal/tracker/htc/left/calib_target_pose",
+        "right": "/hal/tracker/htc/right/calib_target_pose"
+      }
+    },
+    {
+      "duplicate_of": null,
+      "exposure": "unknown-historically-available-to-E05",
+      "exposure_reason": "existing mount and historical E05 use; no unexposed attestation",
+      "interval_ns": null,
+      "quality": "not-decoded",
+      "raw": {
+        "locator": "/workspace/fixtures/raw/batch/RW1AZHYCSEFT5_RW1AZHYCSEFT5260310002_20260731020231_0-slice.mcap",
+        "sha256": "37a4ffdc5f871d0c0dba2b6e970737b265fd6aea08e99a2f53d6acef6747ea37",
+        "size_bytes": 10646607
+      },
+      "recording_id": "RW1AZHYCSEFT5_RW1AZHYCSEFT5260310002_20260731020231_0-slice",
+      "relative_path": "RW1AZHYCSEFT5_RW1AZHYCSEFT5260310002_20260731020231_0-slice.mcap",
+      "session_id": "unknown-common-session",
+      "session_provenance": "unknown; conservatively merged",
+      "source_id": null,
+      "source_topics": {
+        "joints": "/mc/ik/joint_states",
+        "left": "/hal/tracker/htc/left/calib_target_pose",
+        "right": "/hal/tracker/htc/right/calib_target_pose"
+      }
+    },
+    {
+      "duplicate_of": null,
+      "exposure": "unknown-historically-available-to-E05",
+      "exposure_reason": "existing mount and historical E05 use; no unexposed attestation",
+      "interval_ns": null,
+      "quality": "not-decoded",
+      "raw": {
+        "locator": "/workspace/fixtures/raw/batch/RW1AZHYCSEFT5_RW1AZHYCSEFT5260310002_20260731020305_0-slice.mcap",
+        "sha256": "6412a3086524bbcd1b349c4c1d4f43dc6b15114ede503eb68428a883c41e7f65",
+        "size_bytes": 8960653
+      },
+      "recording_id": "RW1AZHYCSEFT5_RW1AZHYCSEFT5260310002_20260731020305_0-slice",
+      "relative_path": "RW1AZHYCSEFT5_RW1AZHYCSEFT5260310002_20260731020305_0-slice.mcap",
+      "session_id": "unknown-common-session",
+      "session_provenance": "unknown; conservatively merged",
+      "source_id": null,
+      "source_topics": {
+        "joints": "/mc/ik/joint_states",
+        "left": "/hal/tracker/htc/left/calib_target_pose",
+        "right": "/hal/tracker/htc/right/calib_target_pose"
+      }
+    },
+    {
+      "duplicate_of": null,
+      "exposure": "unknown-historically-available-to-E05",
+      "exposure_reason": "existing mount and historical E05 use; no unexposed attestation",
+      "interval_ns": null,
+      "quality": "not-decoded",
+      "raw": {
+        "locator": "/workspace/fixtures/raw/batch/RW1AZHYCSEFT5_RW1AZHYCSEFT5260310002_20260731020318_0-slice.mcap",
+        "sha256": "03b362ec2c364b89075d2f6b4261bb27a23a7654000ff6454d60684304aeb790",
+        "size_bytes": 4330051
+      },
+      "recording_id": "RW1AZHYCSEFT5_RW1AZHYCSEFT5260310002_20260731020318_0-slice",
+      "relative_path": "RW1AZHYCSEFT5_RW1AZHYCSEFT5260310002_20260731020318_0-slice.mcap",
+      "session_id": "unknown-common-session",
+      "session_provenance": "unknown; conservatively merged",
+      "source_id": null,
+      "source_topics": {
+        "joints": "/mc/ik/joint_states",
+        "left": "/hal/tracker/htc/left/calib_target_pose",
+        "right": "/hal/tracker/htc/right/calib_target_pose"
+      }
+    },
+    {
+      "duplicate_of": null,
+      "exposure": "unknown-historically-available-to-E05",
+      "exposure_reason": "existing mount and historical E05 use; no unexposed attestation",
+      "interval_ns": null,
+      "quality": "not-decoded",
+      "raw": {
+        "locator": "/workspace/fixtures/raw/batch/RW1AZHYCSEFT5_RW1AZHYCSEFT5260310002_20260731020429_0-slice.mcap",
+        "sha256": "3e106bf7f3cd1bb4afa3a4cda77bf4cd07b9c82e3c785bb00d794b832b242380",
+        "size_bytes": 6972237
+      },
+      "recording_id": "RW1AZHYCSEFT5_RW1AZHYCSEFT5260310002_20260731020429_0-slice",
+      "relative_path": "RW1AZHYCSEFT5_RW1AZHYCSEFT5260310002_20260731020429_0-slice.mcap",
+      "session_id": "unknown-common-session",
+      "session_provenance": "unknown; conservatively merged",
+      "source_id": null,
+      "source_topics": {
+        "joints": "/mc/ik/joint_states",
+        "left": "/hal/tracker/htc/left/calib_target_pose",
+        "right": "/hal/tracker/htc/right/calib_target_pose"
+      }
+    },
+    {
+      "duplicate_of": null,
+      "exposure": "unknown-historically-available-to-E05",
+      "exposure_reason": "existing mount and historical E05 use; no unexposed attestation",
+      "interval_ns": null,
+      "quality": "not-decoded",
+      "raw": {
+        "locator": "/workspace/fixtures/raw/batch/RW1AZHYCSEFT5_RW1AZHYCSEFT5260310002_20260731020440_0-slice.mcap",
+        "sha256": "2f5485ab685f985b57d38d487667fa898aad22389ae64e0bc564da194f83ff39",
+        "size_bytes": 7413031
+      },
+      "recording_id": "RW1AZHYCSEFT5_RW1AZHYCSEFT5260310002_20260731020440_0-slice",
+      "relative_path": "RW1AZHYCSEFT5_RW1AZHYCSEFT5260310002_20260731020440_0-slice.mcap",
+      "session_id": "unknown-common-session",
+      "session_provenance": "unknown; conservatively merged",
+      "source_id": null,
+      "source_topics": {
+        "joints": "/mc/ik/joint_states",
+        "left": "/hal/tracker/htc/left/calib_target_pose",
+        "right": "/hal/tracker/htc/right/calib_target_pose"
+      }
+    },
+    {
+      "duplicate_of": null,
+      "exposure": "unknown-historically-available-to-E05",
+      "exposure_reason": "existing mount and historical E05 use; no unexposed attestation",
+      "interval_ns": null,
+      "quality": "not-decoded",
+      "raw": {
+        "locator": "/workspace/fixtures/raw/batch/RW1AZHYCSEFT5_RW1AZHYCSEFT5260310002_20260731020516_0-slice.mcap",
+        "sha256": "22364fb377b5cfb8f55ac2f7edeb2852642a35d03ac8fe2c665720f22f350ac9",
+        "size_bytes": 5223082
+      },
+      "recording_id": "RW1AZHYCSEFT5_RW1AZHYCSEFT5260310002_20260731020516_0-slice",
+      "relative_path": "RW1AZHYCSEFT5_RW1AZHYCSEFT5260310002_20260731020516_0-slice.mcap",
+      "session_id": "unknown-common-session",
+      "session_provenance": "unknown; conservatively merged",
+      "source_id": null,
+      "source_topics": {
+        "joints": "/mc/ik/joint_states",
+        "left": "/hal/tracker/htc/left/calib_target_pose",
+        "right": "/hal/tracker/htc/right/calib_target_pose"
+      }
+    },
+    {
+      "duplicate_of": null,
+      "exposure": "unknown-historically-available-to-E05",
+      "exposure_reason": "existing mount and historical E05 use; no unexposed attestation",
+      "interval_ns": null,
+      "quality": "not-decoded",
+      "raw": {
+        "locator": "/workspace/fixtures/raw/batch/RW1AZHYCSEFT5_RW1AZHYCSEFT5260310002_20260731020524_0-slice.mcap",
+        "sha256": "bdc0ca73f925ab23b16469f65b833921a04a87e39053913f9257d14d0a70deb4",
+        "size_bytes": 6368614
+      },
+      "recording_id": "RW1AZHYCSEFT5_RW1AZHYCSEFT5260310002_20260731020524_0-slice",
+      "relative_path": "RW1AZHYCSEFT5_RW1AZHYCSEFT5260310002_20260731020524_0-slice.mcap",
+      "session_id": "unknown-common-session",
+      "session_provenance": "unknown; conservatively merged",
+      "source_id": null,
+      "source_topics": {
+        "joints": "/mc/ik/joint_states",
+        "left": "/hal/tracker/htc/left/calib_target_pose",
+        "right": "/hal/tracker/htc/right/calib_target_pose"
+      }
+    },
+    {
+      "duplicate_of": null,
+      "exposure": "unknown-historically-available-to-E05",
+      "exposure_reason": "existing mount and historical E05 use; no unexposed attestation",
+      "interval_ns": null,
+      "quality": "not-decoded",
+      "raw": {
+        "locator": "/workspace/fixtures/raw/batch/RW1AZHYCSEFT5_RW1AZHYCSEFT5260310002_20260731020549_0-slice.mcap",
+        "sha256": "f61f48cdb95f96281055c5a5ac7186db3e2906404bb032f72b75c6f5b753d48e",
+        "size_bytes": 9726206
+      },
+      "recording_id": "RW1AZHYCSEFT5_RW1AZHYCSEFT5260310002_20260731020549_0-slice",
+      "relative_path": "RW1AZHYCSEFT5_RW1AZHYCSEFT5260310002_20260731020549_0-slice.mcap",
+      "session_id": "unknown-common-session",
+      "session_provenance": "unknown; conservatively merged",
+      "source_id": null,
+      "source_topics": {
+        "joints": "/mc/ik/joint_states",
+        "left": "/hal/tracker/htc/left/calib_target_pose",
+        "right": "/hal/tracker/htc/right/calib_target_pose"
+      }
+    },
+    {
+      "duplicate_of": null,
+      "exposure": "unknown-historically-available-to-E05",
+      "exposure_reason": "existing mount and historical E05 use; no unexposed attestation",
+      "interval_ns": null,
+      "quality": "not-decoded",
+      "raw": {
+        "locator": "/workspace/fixtures/raw/batch/RW1AZHYCSEFT5_RW1AZHYCSEFT5260310002_20260731020621_0-slice.mcap",
+        "sha256": "d5eda9621fb014f305792140e34fe94360039d697b995bb75ef782d06d5d4a5e",
+        "size_bytes": 8210493
+      },
+      "recording_id": "RW1AZHYCSEFT5_RW1AZHYCSEFT5260310002_20260731020621_0-slice",
+      "relative_path": "RW1AZHYCSEFT5_RW1AZHYCSEFT5260310002_20260731020621_0-slice.mcap",
+      "session_id": "unknown-common-session",
+      "session_provenance": "unknown; conservatively merged",
+      "source_id": null,
+      "source_topics": {
+        "joints": "/mc/ik/joint_states",
+        "left": "/hal/tracker/htc/left/calib_target_pose",
+        "right": "/hal/tracker/htc/right/calib_target_pose"
+      }
+    },
+    {
+      "duplicate_of": null,
+      "exposure": "unknown-historically-available-to-E05",
+      "exposure_reason": "existing mount and historical E05 use; no unexposed attestation",
+      "interval_ns": null,
+      "quality": "not-decoded",
+      "raw": {
+        "locator": "/workspace/fixtures/raw/batch/RW1AZHYCSEFT5_RW1AZHYCSEFT5260310002_20260731020634_0-slice.mcap",
+        "sha256": "72fdae98c2a0494b9a3c2f91b8488886d933a451187a1359fb97cf5d24e04238",
+        "size_bytes": 6157091
+      },
+      "recording_id": "RW1AZHYCSEFT5_RW1AZHYCSEFT5260310002_20260731020634_0-slice",
+      "relative_path": "RW1AZHYCSEFT5_RW1AZHYCSEFT5260310002_20260731020634_0-slice.mcap",
+      "session_id": "unknown-common-session",
+      "session_provenance": "unknown; conservatively merged",
+      "source_id": null,
+      "source_topics": {
+        "joints": "/mc/ik/joint_states",
+        "left": "/hal/tracker/htc/left/calib_target_pose",
+        "right": "/hal/tracker/htc/right/calib_target_pose"
+      }
+    },
+    {
+      "duplicate_of": null,
+      "exposure": "unknown-historically-available-to-E05",
+      "exposure_reason": "existing mount and historical E05 use; no unexposed attestation",
+      "interval_ns": null,
+      "quality": "not-decoded",
+      "raw": {
+        "locator": "/workspace/fixtures/raw/batch/RW1AZHYCSEFT5_RW1AZHYCSEFT5260310002_20260731020647_0-slice.mcap",
+        "sha256": "d16ea3240227f0dedc5828e0ee2e171916e3997309d322941cfe1e23e94d2332",
+        "size_bytes": 8247692
+      },
+      "recording_id": "RW1AZHYCSEFT5_RW1AZHYCSEFT5260310002_20260731020647_0-slice",
+      "relative_path": "RW1AZHYCSEFT5_RW1AZHYCSEFT5260310002_20260731020647_0-slice.mcap",
+      "session_id": "unknown-common-session",
+      "session_provenance": "unknown; conservatively merged",
+      "source_id": null,
+      "source_topics": {
+        "joints": "/mc/ik/joint_states",
+        "left": "/hal/tracker/htc/left/calib_target_pose",
+        "right": "/hal/tracker/htc/right/calib_target_pose"
+      }
+    },
+    {
+      "duplicate_of": null,
+      "exposure": "unknown-historically-available-to-E05",
+      "exposure_reason": "existing mount and historical E05 use; no unexposed attestation",
+      "interval_ns": null,
+      "quality": "not-decoded",
+      "raw": {
+        "locator": "/workspace/fixtures/raw/batch/RW1AZHYCSEFT5_RW1AZHYCSEFT5260310002_20260731020701_0-slice.mcap",
+        "sha256": "827c30fd6037671484e39bc5dda25ee227559c82b2d3c33d486934aec5ef843d",
+        "size_bytes": 7721397
+      },
+      "recording_id": "RW1AZHYCSEFT5_RW1AZHYCSEFT5260310002_20260731020701_0-slice",
+      "relative_path": "RW1AZHYCSEFT5_RW1AZHYCSEFT5260310002_20260731020701_0-slice.mcap",
+      "session_id": "unknown-common-session",
+      "session_provenance": "unknown; conservatively merged",
+      "source_id": null,
+      "source_topics": {
+        "joints": "/mc/ik/joint_states",
+        "left": "/hal/tracker/htc/left/calib_target_pose",
+        "right": "/hal/tracker/htc/right/calib_target_pose"
+      }
+    },
+    {
+      "duplicate_of": null,
+      "exposure": "unknown-historically-available-to-E05",
+      "exposure_reason": "existing mount and historical E05 use; no unexposed attestation",
+      "interval_ns": null,
+      "quality": "not-decoded",
+      "raw": {
+        "locator": "/workspace/fixtures/raw/batch/RW1AZHYCSEFT5_RW1AZHYCSEFT5260310002_20260731020736_0-slice.mcap",
+        "sha256": "fca3f1635fb31d158f5059b6203b7b20b9f3508f8288b008e871398a98b049c3",
+        "size_bytes": 6829189
+      },
+      "recording_id": "RW1AZHYCSEFT5_RW1AZHYCSEFT5260310002_20260731020736_0-slice",
+      "relative_path": "RW1AZHYCSEFT5_RW1AZHYCSEFT5260310002_20260731020736_0-slice.mcap",
+      "session_id": "unknown-common-session",
+      "session_provenance": "unknown; conservatively merged",
+      "source_id": null,
+      "source_topics": {
+        "joints": "/mc/ik/joint_states",
+        "left": "/hal/tracker/htc/left/calib_target_pose",
+        "right": "/hal/tracker/htc/right/calib_target_pose"
+      }
+    },
+    {
+      "duplicate_of": null,
+      "exposure": "unknown-historically-available-to-E05",
+      "exposure_reason": "existing mount and historical E05 use; no unexposed attestation",
+      "interval_ns": null,
+      "quality": "not-decoded",
+      "raw": {
+        "locator": "/workspace/fixtures/raw/batch/RW1AZHYCSEFT5_RW1AZHYCSEFT5260310002_20260731020752_0-slice.mcap",
+        "sha256": "90bde53230cb88955d0d5ec17cbe53db1955e56465c0c1cc27c53d25140b894f",
+        "size_bytes": 6620384
+      },
+      "recording_id": "RW1AZHYCSEFT5_RW1AZHYCSEFT5260310002_20260731020752_0-slice",
+      "relative_path": "RW1AZHYCSEFT5_RW1AZHYCSEFT5260310002_20260731020752_0-slice.mcap",
+      "session_id": "unknown-common-session",
+      "session_provenance": "unknown; conservatively merged",
+      "source_id": null,
+      "source_topics": {
+        "joints": "/mc/ik/joint_states",
+        "left": "/hal/tracker/htc/left/calib_target_pose",
+        "right": "/hal/tracker/htc/right/calib_target_pose"
+      }
+    },
+    {
+      "duplicate_of": null,
+      "exposure": "unknown-historically-available-to-E05",
+      "exposure_reason": "existing mount and historical E05 use; no unexposed attestation",
+      "interval_ns": null,
+      "quality": "not-decoded",
+      "raw": {
+        "locator": "/workspace/fixtures/raw/batch/RW1AZHYCSEFT5_RW1AZHYCSEFT5260310002_20260731020802_0-slice.mcap",
+        "sha256": "5ca39e44fa09b0402cc44479bf62deec2abe2aa55981d7a9b4967fecc808fce6",
+        "size_bytes": 8153005
+      },
+      "recording_id": "RW1AZHYCSEFT5_RW1AZHYCSEFT5260310002_20260731020802_0-slice",
+      "relative_path": "RW1AZHYCSEFT5_RW1AZHYCSEFT5260310002_20260731020802_0-slice.mcap",
+      "session_id": "unknown-common-session",
+      "session_provenance": "unknown; conservatively merged",
+      "source_id": null,
+      "source_topics": {
+        "joints": "/mc/ik/joint_states",
+        "left": "/hal/tracker/htc/left/calib_target_pose",
+        "right": "/hal/tracker/htc/right/calib_target_pose"
+      }
+    },
+    {
+      "duplicate_of": null,
+      "exposure": "unknown-historically-available-to-E05",
+      "exposure_reason": "existing mount and historical E05 use; no unexposed attestation",
+      "interval_ns": null,
+      "quality": "not-decoded",
+      "raw": {
+        "locator": "/workspace/fixtures/raw/batch/RW1AZHYCSEFT5_RW1AZHYCSEFT5260310002_20260731020853_0-slice.mcap",
+        "sha256": "b851fb34e64cbb00fba4927faadb348c63a2f42945c1094f82206eb63e2d1840",
+        "size_bytes": 6114846
+      },
+      "recording_id": "RW1AZHYCSEFT5_RW1AZHYCSEFT5260310002_20260731020853_0-slice",
+      "relative_path": "RW1AZHYCSEFT5_RW1AZHYCSEFT5260310002_20260731020853_0-slice.mcap",
+      "session_id": "unknown-common-session",
+      "session_provenance": "unknown; conservatively merged",
+      "source_id": null,
+      "source_topics": {
+        "joints": "/mc/ik/joint_states",
+        "left": "/hal/tracker/htc/left/calib_target_pose",
+        "right": "/hal/tracker/htc/right/calib_target_pose"
+      }
+    },
+    {
+      "duplicate_of": null,
+      "exposure": "unknown-historically-available-to-E05",
+      "exposure_reason": "existing mount and historical E05 use; no unexposed attestation",
+      "interval_ns": null,
+      "quality": "not-decoded",
+      "raw": {
+        "locator": "/workspace/fixtures/raw/batch/RW1AZHYCSEFT5_RW1AZHYCSEFT5260310002_20260731021138_0-slice.mcap",
+        "sha256": "984574d3c16a45a959894955cd9a2ec033cb66cfea98a815cffc851ad92919a6",
+        "size_bytes": 8485193
+      },
+      "recording_id": "RW1AZHYCSEFT5_RW1AZHYCSEFT5260310002_20260731021138_0-slice",
+      "relative_path": "RW1AZHYCSEFT5_RW1AZHYCSEFT5260310002_20260731021138_0-slice.mcap",
+      "session_id": "unknown-common-session",
+      "session_provenance": "unknown; conservatively merged",
+      "source_id": null,
+      "source_topics": {
+        "joints": "/mc/ik/joint_states",
+        "left": "/hal/tracker/htc/left/calib_target_pose",
+        "right": "/hal/tracker/htc/right/calib_target_pose"
+      }
+    },
+    {
+      "duplicate_of": null,
+      "exposure": "unknown-historically-available-to-E05",
+      "exposure_reason": "existing mount and historical E05 use; no unexposed attestation",
+      "interval_ns": null,
+      "quality": "not-decoded",
+      "raw": {
+        "locator": "/workspace/fixtures/raw/batch/RW1AZHYCSEFT5_RW1AZHYCSEFT5260310002_20260731021151_0-slice.mcap",
+        "sha256": "12a82e903d01ab658a4925b103e43960c64290564319b08e7b6229643e6ee43e",
+        "size_bytes": 7189572
+      },
+      "recording_id": "RW1AZHYCSEFT5_RW1AZHYCSEFT5260310002_20260731021151_0-slice",
+      "relative_path": "RW1AZHYCSEFT5_RW1AZHYCSEFT5260310002_20260731021151_0-slice.mcap",
+      "session_id": "unknown-common-session",
+      "session_provenance": "unknown; conservatively merged",
+      "source_id": null,
+      "source_topics": {
+        "joints": "/mc/ik/joint_states",
+        "left": "/hal/tracker/htc/left/calib_target_pose",
+        "right": "/hal/tracker/htc/right/calib_target_pose"
+      }
+    }
+  ],
+  "schema_version": "dataset_inventory.v1"
+}

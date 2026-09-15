@@ -1,0 +1,21 @@
+{
+  "canonical": null,
+  "exposure": "unknown-historically-available-to-E05",
+  "fixture": false,
+  "input_id": "RW1AZHYCSEFT5_RW1AZHYCSEFT5260310002_20260731020102_0",
+  "model": {
+    "locator": "/workspace/models/r1.cos.urdf",
+    "sha256": "7f7c10114ee6937c40c5b3963d79bc000dc49c2b215ee8c60ed7858eab740341",
+    "size_bytes": 71079
+  },
+  "raw_source": {
+    "locator": "/mnt/mcap_dataset/RW1AZHYCSEFT5_RW1AZHYCSEFT5260310002_20260731020102_0.mcap",
+    "sha256": "7216741bec33c208f4a445ffbba3266909e9c0ecbb0d2661ce5910a7cc6ac8be",
+    "size_bytes": 604597361
+  },
+  "reason": "raw not converted; source/session freeze pending; no holdout accessed",
+  "schema_version": "input_descriptor.v1",
+  "session_id": "unknown-common-session",
+  "split_id": "development",
+  "status": "input-unavailable"
+}

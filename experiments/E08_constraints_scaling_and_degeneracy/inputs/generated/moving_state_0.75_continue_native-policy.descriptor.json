@@ -1,0 +1,17 @@
+{
+  "canonical": {
+    "locator": "/workspace/labs/motion-control-lab/experiments/E08_constraints_scaling_and_degeneracy/inputs/generated/moving_state_0.75_continue_native-policy.json",
+    "sha256": "9ed0c03c2721f1877ede49ad44cdbd6d04a93cdce18a36486473ee1d0e7a119c",
+    "size_bytes": 11403
+  },
+  "fixture": false,
+  "input_id": "E08-moving_state_0.75_continue_native-policy",
+  "model": {
+    "locator": "/workspace/models/r1.cos.urdf",
+    "sha256": "7f7c10114ee6937c40c5b3963d79bc000dc49c2b215ee8c60ed7858eab740341",
+    "size_bytes": 71079
+  },
+  "schema_version": "input_descriptor.v1",
+  "session_id": "synthetic",
+  "split_id": "development"
+}
