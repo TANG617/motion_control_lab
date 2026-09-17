@@ -2253,6 +2253,124 @@ void appendPlanningRequestPoses(motion_control::viz::RenderBatch &frame,
       contract::kRightCartesianReferenceTopic, reference_frame, right_pose));
 }
 
+std::unique_ptr<CenterOfMassVisualization> makeCenterOfMassVisualization(
+    std::shared_ptr<const mcc::RobotModel> model, const RobotOptions &robot) {
+  auto visualization = std::make_unique<CenterOfMassVisualization>();
+  visualization->support = robot.support_visualization;
+  requireOk(visualization->query.configure(model, {robot.base_frame}),
+            "configure whole-robot CoM query");
+
+  // A task-free FK workspace, independent of Red/Yellow and their FK cache.
+  // Core FK requires a reference independent of active joints. For a moving
+  // display frame, load the same model description with the fixed support
+  // reference, and query the display frame relative to it (then invert).
+  if (model->description().kinematics_reference_frame !=
+      visualization->support.reference_frame) {
+    auto description = model->description();
+    description.kinematics_reference_frame = visualization->support.reference_frame;
+    requireOk(mcc::RobotModel::load(description, model),
+              "load fixed-reference CoM visualization FK model");
+  }
+  auto fk = std::make_unique<mcc::KinematicsSolver>();
+  mcc::KinematicsSolverBuilder builder;
+  mcc::KinematicsSolverConfig config;
+  config.execution = mcc::TargetSolveOptions{};
+  config.joint_limit_policy = mcc::KinematicsJointLimitPolicy::Unconstrained;
+  requireOk(builder.configure(model, model->jointNames(), config),
+            "configure CoM visualization FK");
+  requireOk(builder.finalize(*fk), "finalize CoM visualization FK");
+
+  mcc::ForwardKinematicsRequest request;
+  request.reference_frame_name = visualization->support.reference_frame;
+  request.frame_names.assign(visualization->support.wheel_frames.begin(),
+                             visualization->support.wheel_frames.end());
+  request.state.joint_positions = Eigen::Map<const Eigen::VectorXd>(
+      robot.default_positions.data(), robot.default_positions.size());
+  request.joint_position_validation =
+      mcc::JointPositionValidation::UncheckedJointPositionLimits;
+  mcc::ForwardKinematicsSolution solution;
+  mcc::ForwardKinematicsDiagnostics diagnostics;
+  requireOk(fk->computeForwardKinematics(request, solution, diagnostics),
+            "query four-wheel support geometry");
+  for (std::size_t i = 0; i < visualization->support_corners.size(); ++i) {
+    auto &corner = visualization->support_corners[i];
+    corner = solution.poses.at(i).pose.translation();
+    corner.z() = visualization->support.ground_height_m;
+  }
+  if (robot.base_frame != visualization->support.reference_frame)
+    visualization->frame_query = std::move(fk);
+  return visualization;
+}
+
+void appendCenterOfMassScene(motion_control::viz::RenderBatch &batch,
+                            CenterOfMassVisualization *visualization,
+                            const Eigen::VectorXd &executed_positions) {
+  if (!visualization) {
+    return;
+  }
+  mcc::RobotState state;
+  state.joint_positions = executed_positions;
+  mcc::CenterOfMassResult result;
+  requireOk(visualization->query.evaluate(state, result), "evaluate whole-robot CoM");
+  Eigen::Isometry3d reference_from_support = Eigen::Isometry3d::Identity();
+  if (visualization->frame_query) {
+    mcc::ForwardKinematicsRequest request;
+    request.state = state;
+    request.reference_frame_name = visualization->support.reference_frame;
+    request.frame_names = {result.reference_frame_name};
+    request.joint_position_validation =
+        mcc::JointPositionValidation::UncheckedJointPositionLimits;
+    mcc::ForwardKinematicsSolution solution;
+    mcc::ForwardKinematicsDiagnostics diagnostics;
+    requireOk(visualization->frame_query->computeForwardKinematics(
+                  request, solution, diagnostics),
+              "query CoM support reference pose");
+    reference_from_support = solution.poses.at(0).pose.inverse();
+  }
+  Eigen::Vector3d projected = reference_from_support.inverse() * result.position_m;
+  projected.z() = visualization->support.ground_height_m;
+
+  // Signed perpendicular distances work for either polygon winding. Treat the
+  // boundary (within 1 nm) as red, including its vertices and edge extensions.
+  bool all_positive = true;
+  bool all_negative = true;
+  const auto &corners = visualization->support_corners;
+  for (std::size_t i = 0; i < corners.size(); ++i) {
+    const Eigen::Vector2d edge =
+        (corners[(i + 1) % corners.size()] - corners[i]).head<2>();
+    const Eigen::Vector2d offset = (projected - corners[i]).head<2>();
+    const double distance =
+        (edge.x() * offset.y() - edge.y() * offset.x()) / edge.norm();
+    all_positive = all_positive && distance > 1e-9;
+    all_negative = all_negative && distance < -1e-9;
+  }
+  const motion_control::viz::ColorRgba color = all_positive || all_negative
+      ? motion_control::viz::ColorRgba{0.15, 1.0, 0.2, 0.95}
+      : motion_control::viz::ColorRgba{1.0, 0.1, 0.1, 0.95};
+  const Eigen::Vector3d projection_in_reference = reference_from_support * projected;
+  motion_control::viz::LineStrip3d support;
+  support.entity_id = "four_wheel_support";
+  support.channel = "/mcl/dynamics/com/scene";
+  support.frame_id = result.reference_frame_name;
+  support.color = {0.1, 0.8, 1.0, 0.95};
+  support.thickness = 3.0;
+  for (const auto &corner : corners)
+    support.points_m.push_back(visualizationPoint(reference_from_support * corner));
+  support.points_m.push_back(support.points_m.front());
+
+  batch.spheres.push_back(motion_control::viz::Sphere3d{
+      "whole_robot_com", "/mcl/dynamics/com/scene", result.reference_frame_name,
+      visualizationPoint(result.position_m), 0.06, {1.0, 0.55, 0.0, 0.95}});
+  batch.spheres.push_back(motion_control::viz::Sphere3d{
+      "whole_robot_com_projection", "/mcl/dynamics/com/scene", result.reference_frame_name,
+      visualizationPoint(projection_in_reference), 0.04, color});
+  batch.line_strips.push_back(std::move(support));
+  batch.line_strips.push_back(motion_control::viz::LineStrip3d{
+      "whole_robot_com_projection_line", "/mcl/dynamics/com/scene", result.reference_frame_name,
+      {visualizationPoint(result.position_m), visualizationPoint(projection_in_reference)},
+      color, 2.0, true});
+}
+
 void appendOtgExecution(motion_control::viz::RenderBatch &batch,
                         const std::vector<std::string> &joint_names,
                         const std::vector<double> &positions,
@@ -2290,6 +2408,7 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
             SolverRuntime &solver, const SolverHandles &handles,
             mcc::CartesianPlanner *cartesian_planner,
             mcc::JointPlanner *joint_planner,
+            CenterOfMassVisualization *com_visualization,
             const JointTargetLimits &joint_otg_limits,
             const std::vector<std::size_t> &active_joint_full_indices,
             std::string &normal_exit_detail) {
@@ -4486,6 +4605,8 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
       }
       auto visualization_frame = mcl::makeIkRenderBatch(
           visualization_debug_frame, presentation, emit_stamp.timestamp_ns);
+      appendCenterOfMassScene(visualization_frame, com_visualization,
+                              latest_output.state.positions);
       if (capabilities.cartesian_planning) {
         mcl::hierarchical_kinematics_step::appendPlanningRequestPoses(
             visualization_frame, robot.base_frame,

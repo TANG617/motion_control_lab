@@ -204,7 +204,7 @@ if(MCL_BUILD_ANY_INTERACTIVE_IK OR MCL_BUILD_OPTIMIZATION_PROBLEM OR MCL_BUILD_P
   if(MCL_BUILD_HARP)
     find_package(motion_control_core 0.5 CONFIG REQUIRED COMPONENTS posture_reference)
   else()
-    find_package(motion_control_core 0.4 CONFIG REQUIRED)
+    find_package(motion_control_core 0.5 CONFIG REQUIRED)
   endif()
 endif()
 

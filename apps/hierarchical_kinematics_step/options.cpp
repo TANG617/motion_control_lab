@@ -713,6 +713,7 @@ std::string resolvedOptionsJson(const Options &options) {
   runtime["teleop"]["max_step_m"] = app.tui.max_step_m;
   runtime["teleop"]["rotation_step_deg"] = app.tui.rotation_step_deg;
   runtime["visualization"]["enabled"] = app.visualization.enabled;
+  runtime["visualization"]["show_com"] = app.show_com;
   runtime["visualization"]["host"] = app.visualization.host;
   runtime["visualization"]["port"] = app.visualization.port;
   runtime["visualization"]["mcap_path"] =
@@ -799,6 +800,13 @@ std::string resolvedOptionsJson(const Options &options) {
   auto &robot_json = root["robot"];
   robot_json["profile_provenance"] = robot.profile_provenance;
   robot_json["base_frame"] = robot.base_frame;
+  auto &support_json = robot_json["support_visualization"];
+  support_json["reference_frame"] = robot.support_visualization.reference_frame;
+  support_json["ground_height_m"] = robot.support_visualization.ground_height_m;
+  for (const auto &frame : robot.support_visualization.wheel_frames)
+    support_json["wheel_frames"].append(frame);
+  support_json["geometry"] = "wheel_center_projections";
+  support_json["assumption"] = "fixed_level_base_four_wheels_in_contact";
   robot_json["left_end_effector_frame"] = robot.left_end_effector_frame;
   robot_json["right_end_effector_frame"] = robot.right_end_effector_frame;
   robot_json["torso_frame"] = robot.torso_frame;
@@ -987,6 +995,7 @@ void printHierarchicalUsage(const char *program) {
       << defaults.ui_rate_hz << ")\n"
       << "  --ui <tui|none>     User interface mode (default: tui)\n"
       << "  --viz <foxglove|none> Visualization transport (default: foxglove)\n"
+      << "  --show-com / --no-show-com Show executed CoM, four-wheel support and ground projection (default: off; requires viz)\n"
       << "  --deadline-policy <strict|monitor> Deadline handling (default: "
          "strict)\n"
       << "  --duration <sec>    Stop after seconds; 0 runs until Ctrl-C "
@@ -1177,6 +1186,8 @@ HierarchicalOptions parseHierarchicalOptions(int argc, char **argv,
       parseReferenceOption(argument, requireValue(index, argc, argv, argument), options);
     } else if (argument == "--mirror-tcp-input" || argument == "--no-mirror-tcp-input") {
       options.mirror_tcp_input = argument == "--mirror-tcp-input";
+    } else if (argument == "--show-com" || argument == "--no-show-com") {
+      options.show_com = argument == "--show-com";
     } else if (argument == "--side") {
       options.tui.side = requireValue(index, argc, argv, argument);
     } else if (argument == "--urdf") {
@@ -1711,7 +1722,8 @@ Options parseOptions(int argc, char **argv) {
       hierarchical_arguments.push_back(argv[index]);
     } else {
       if (optionIn(argument,
-                   {"--mujoco-viewer", "--no-mujoco-viewer",
+                   {"--show-com", "--no-show-com",
+                    "--mujoco-viewer", "--no-mujoco-viewer",
                     "--angular-admittance", "--no-angular-admittance",
                     "--joint-position-braking-velocity-envelope",
                     "--no-joint-position-braking-velocity-envelope",

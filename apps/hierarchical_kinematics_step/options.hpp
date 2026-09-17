@@ -208,9 +208,19 @@ struct JointStreamProfileOptions {
       3200.0, 3200.0, 3200.0, 3200.0, 3200.0, 3200.0};
 };
 
+struct SupportVisualizationOptions {
+  std::string reference_frame{"base_link"};
+  // Front left, front right, rear right, rear left; wheel-center projections.
+  std::array<std::string, 4> wheel_frames{
+      "wheel_front_left_link", "wheel_front_right_link",
+      "wheel_back_right_link", "wheel_back_left_link"};
+  double ground_height_m{0.0};
+};
+
 struct RobotOptions {
   std::string profile_provenance;
   std::string base_frame{"base_link"};
+  SupportVisualizationOptions support_visualization;
   std::string left_end_effector_frame{"left_arm_ee_link"};
   std::string right_end_effector_frame{"right_arm_ee_link"};
   std::string torso_frame{"body_link4"};
@@ -293,6 +303,7 @@ struct HierarchicalOptions {
   CartesianTeleopOptions tui{"left", 0.005, 0.001, 0.5, 5.0};
   bool mirror_tcp_input{false};
   PreviewSinkOptions visualization{true, "127.0.0.1", 8765, std::nullopt};
+  bool show_com{false};
   RobotOptions robot;
   SolverOptions solver;
   ElbowReferenceOptions elbow_reference;

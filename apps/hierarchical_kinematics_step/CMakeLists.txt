@@ -72,6 +72,9 @@ install(FILES HARP.md
   DESTINATION "${CMAKE_INSTALL_LIBEXECDIR}/motion-control-lab/mcl_hierarchical_kinematics_step")
 
 if(BUILD_TESTING)
+  add_test(NAME apps.mcl_hierarchical_kinematics_step_show_com_contract
+    COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/show_com_contract.py"
+    --binary $<TARGET_FILE:mcl_hierarchical_kinematics_step>)
   add_executable(test_hierarchical_kinematics_step_replay_accounting tests/replay_accounting.cpp)
   target_link_libraries(test_hierarchical_kinematics_step_replay_accounting PRIVATE motion_control_lab::hierarchical_kinematics_step_support)
   add_test(NAME apps.mcl_hierarchical_kinematics_step_replay_accounting COMMAND test_hierarchical_kinematics_step_replay_accounting)

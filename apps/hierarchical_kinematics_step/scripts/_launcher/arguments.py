@@ -6,6 +6,7 @@ import argparse
 
 
 BOOL_FLAGS = (
+    "show-com",
     "mirror-tcp-input",
     "mujoco-viewer",
     "angular-admittance",
@@ -118,6 +119,8 @@ def create_parser(source: str, program: str) -> argparse.ArgumentParser:
     for flag in BOOL_FLAGS:
         parser.add_argument(
             f"--{flag}", dest=_dest(flag), action=argparse.BooleanOptionalAction,
+            help=("Show executed CoM, four-wheel support and ground projection (requires viz)"
+                  if flag == "show-com" else None),
         )
     for flag in VALUE_FLAGS:
         parser.add_argument(f"--{flag}")

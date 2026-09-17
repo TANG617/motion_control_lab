@@ -423,6 +423,17 @@ Json::Value executionCapabilities() {
   j["target_spaces"].append("frame");
   j["target_spaces"].append("tcp");
   j["batch_profile"] = "hierarchical";
+  j["visualization"]["show_com"]["default"] = false;
+  j["visualization"]["show_com"]["state_source"] = "committed_execution";
+  j["visualization"]["show_com"]["topic"] = "/mcl/dynamics/com/scene";
+  for (const auto *entity : {"whole_robot_com", "four_wheel_support",
+                            "whole_robot_com_projection", "whole_robot_com_projection_line"})
+    j["visualization"]["show_com"]["entities"].append(entity);
+  j["visualization"]["show_com"]["projection_color"] =
+      "green_strictly_inside_red_boundary_or_outside";
+  j["visualization"]["show_com"]["support_assumption"] =
+      "fixed_level_base_four_wheels_in_contact";
+  j["visualization"]["show_com"]["requires"] = "runLoop with visualization enabled";
   j["replay_planning"] =
       "existing runLoop CartesianPlanner/JointPlanner profiles";
   j["native_reference_sources"].append("manual");

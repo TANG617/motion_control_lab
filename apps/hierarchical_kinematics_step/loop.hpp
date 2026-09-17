@@ -18,6 +18,19 @@ namespace motion_control_lab::hierarchical_kinematics_step {
 
 struct Link4TargetSnapshot;
 
+// App-local visualization state; all mutable caches belong to the UI thread.
+struct CenterOfMassVisualization {
+  motion_control::core::CenterOfMassQuery query;
+  SupportVisualizationOptions support;
+  std::array<Eigen::Vector3d, 4> support_corners;
+  // Only retained when the display reference differs from the support reference.
+  std::unique_ptr<motion_control::core::KinematicsSolver> frame_query;
+};
+
+std::unique_ptr<CenterOfMassVisualization> makeCenterOfMassVisualization(
+    std::shared_ptr<const motion_control::core::RobotModel> model,
+    const RobotOptions &robot);
+
 class ReplayPipelineGate {
 public:
   void pause() noexcept;
@@ -41,9 +54,16 @@ int runLoop(Options options, const R1RobotConfig &robot, SolverRuntime &solver,
             const SolverHandles &handles,
             motion_control::core::CartesianPlanner *cartesian_planner,
             motion_control::core::JointPlanner *joint_planner,
+            CenterOfMassVisualization *com_visualization,
             const JointTargetLimits &joint_limits,
             const std::vector<std::size_t> &active_joint_full_indices,
             std::string &normal_exit_detail);
+
+// Called only on the UI thread, with the committed execution positions.
+// A null visualization leaves the batch untouched.
+void appendCenterOfMassScene(motion_control::viz::RenderBatch &batch,
+                            CenterOfMassVisualization *visualization,
+                            const Eigen::VectorXd &executed_positions);
 
 void appendPlanningRequestPoses(motion_control::viz::RenderBatch &frame,
                                 const std::string &reference_frame,

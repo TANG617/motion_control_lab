@@ -135,9 +135,14 @@ int run(int argc, char **argv, std::string &normal_exit_detail) {
         app::makeJointPlannerConfig(options.planning));
   }
 
+  std::unique_ptr<app::CenterOfMassVisualization> com_visualization;
+  if (options.interactive.show_com && options.interactive.visualization.enabled) {
+    com_visualization = app::makeCenterOfMassVisualization(model, robot);
+  }
+
   const int result =
       app::runLoop(std::move(options), robot, runtime, handles,
-                   cartesian_planner.get(), joint_planner.get(), joint_limits,
+                   cartesian_planner.get(), joint_planner.get(), com_visualization.get(), joint_limits,
                    active_joint_full_indices, normal_exit_detail);
   if (request)
     app::writeReplaySummary(request->output, result);

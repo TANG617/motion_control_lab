@@ -40,6 +40,50 @@ position-first 使用
 `--dump-resolved-options` 在加载模型前输出 profile、能力、robot、solver、planning、replay、
 binary argv 与 launcher provenance 的完整 JSON。
 
+### 整机质心显示
+
+在原生二进制或任意 profile 的 keyboard / replay launcher 参数后添加 `--show-com`，
+即可在 Foxglove 3D 面板的 `/mcl/dynamics/com/scene` 中同时显示：
+
+- 整机 CoM：直径 6 cm 的橙色球，entity ID 为 `whole_robot_com`。
+- 四轮支撑框：3 px 青色闭合线，entity ID 为 `four_wheel_support`。
+- CoM 地面投影：直径 4 cm 的球，严格在框内为绿色，边界及框外为红色，
+  entity ID 为 `whole_robot_com_projection`。
+- CoM 到投影点的连接线：2 px，颜色跟随投影点，entity ID 为
+  `whole_robot_com_projection_line`。
+
+现有 app layouts 已启用该话题；使用自定义 layout 时手动勾选该话题。
+例如：
+
+```bash
+scripts/profiles/planned_otg/run_keyboard.py --show-com
+```
+
+默认关闭，`--no-show-com` 可覆盖 launcher 参数。request 使用
+`app_config.options["show-com"]: true`；resolved options 中对应
+`runtime.visualization.show_com`。此开关服从 `--viz`：`--viz none` 和不进入
+可视化循环的 snapshot / trajectory batch 不创建查询对象，也不执行 CoM 计算。
+
+球心来自当前已提交的完整关节状态：有 OTG 时取执行状态，无 OTG 时取已接受的 IK
+状态。参考系为 `--base-frame`（默认 `base_link`），与执行 FK 和 MuJoCo 运动学显示
+一致。暂停或拒绝新解时随已保留的执行状态保持位置，不使用未接受候选解。
+查询使用 MCC `CenterOfMassQuery`，包括加载模型中的固定基座、固定连接刚体和已建模
+工具质量；不附加外部 payload 或标定结果。
+
+支撑框采用固定水平底座、四轮同时着地的近似：启动时从当前 URDF 读取四轮轮心，
+投影到物理 `base_link` 的 `z=0` 平面，按前左、前右、后右、后左连接。
+当前 R1 四角为 `(±0.2297, ±0.2297, 0)` m，不取底座外壳尺寸。
+frame 名称和地面高度集中在 `RobotOptions::support_visualization`，并写入
+resolved options 的 `robot.support_visualization`；不新增 CLI 参数。
+CoM 沿支撑参考系的负 Z 方向投影，距边界不超过 `1e-9 m` 按边界处理，
+不设置额外安全缩边。红绿颜色仅表示几何内外，不代表动态稳定性、接触状态或
+关节承载能力，也不约束 IK。修改 `--base-frame` 时，在物理支撑参考系完成
+投影和判断，再转换到显示参考系；运动参考系不会改变地面和颜色的物理含义。
+
+计算在 UI 线程随 `--ui-rate` 执行，CoM 与现有机器人显示进入同一个 `RenderBatch`。
+启用 `--mcap` 时同样录制全部四个标记，可直接回放；这是显示频率的状态采样，不是每个
+Red tick 的 CoM 遥测。启动前需要安装包含 CoM 查询接口的 MCC；launcher 不自动构建。
+
 批量交互回放可显式开启 `--replay-exit-on-fault`：Replay 遇到致命错误后关闭输出、
 写入失败产物并退出，即使 TUI 开启也不等待人工退出 FAULT HOLD。默认关闭，
 `--no-replay-exit-on-fault` 恢复交互检查行为。该选项不改变求解或错误判定。

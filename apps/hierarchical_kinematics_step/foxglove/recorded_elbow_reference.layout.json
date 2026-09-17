@@ -4,6 +4,9 @@
       "fixedFrame": "base_link",
       "followTf": "base_link",
       "topics": {
+        "/mcl/dynamics/com/scene": {
+          "visible": true
+        },
         "/mcl/elbow_reference/left/scene": {
           "visible": true
         },
