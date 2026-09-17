@@ -12,6 +12,7 @@ MCL 是 R1 运动控制的原生应用与可复现实验仓库。具体 app 直�
 | [target](apps/target/README.md) | 双臂 MCC/PlaCo TargetSolve |
 | [hierarchical_kinematics_step](apps/hierarchical_kinematics_step/README.md) | Red/Yellow、规划、OTG、HARP 与运动学仿真 |
 | [planned_kinematics_step](apps/planned_kinematics_step/README.md) | CartesianPlanner → weighted IK → JointPlanner |
+| [joint_path_planning](apps/joint_path_planning/README.md) | 显式 IK → OMPL 关节避障 → 保持路径的时间参数化与 Foxglove 展示 |
 | [optimization_problem](apps/optimization_problem/README.md) | 显式矩阵 QP/HQP 数值调试 |
 | [hierarchical_inverse_dynamics_torque_sim](apps/hierarchical_inverse_dynamics_torque_sim/README.md) | 固定基座 R1 力矩仿真 |
 | [psibot_teleop](apps/psibot_teleop/README.md) | 可选 Linux Psi SDK 客户端 |

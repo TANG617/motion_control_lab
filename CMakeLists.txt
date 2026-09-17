@@ -15,6 +15,7 @@ include(CTest)
 include(GNUInstallDirs)
 
 option(MCL_BUILD_PSIBOT_TELEOP "Build the Psi SDK keyboard teleoperation client" OFF)
+option(MCL_BUILD_JOINT_PATH_PLANNING "Build interactive joint-space obstacle planning" OFF)
 
 option(
   MCL_BUILD_STEP
@@ -60,7 +61,7 @@ endif()
 
 
 set(MCL_BUILD_ANY_INTERACTIVE_IK OFF)
-if(MCL_BUILD_STEP OR
+if(MCL_BUILD_JOINT_PATH_PLANNING OR MCL_BUILD_STEP OR
    MCL_BUILD_TARGET OR MCL_BUILD_BASELINE OR
    MCL_BUILD_HIERARCHICAL_KINEMATICS_STEP OR
    MCL_BUILD_HIERARCHICAL_INVERSE_DYNAMICS_TORQUE_SIM)
@@ -211,6 +212,10 @@ endif()
 if(MCL_BUILD_HIERARCHICAL_KINEMATICS_STEP OR
    MCL_BUILD_HIERARCHICAL_INVERSE_DYNAMICS_TORQUE_SIM)
   find_package(motion_control_sim 0.1 CONFIG REQUIRED)
+endif()
+
+if(MCL_BUILD_JOINT_PATH_PLANNING)
+  find_package(motion_control_core 0.5 CONFIG REQUIRED COMPONENTS joint_planning)
 endif()
 
 if(MCL_BUILD_ANY_INTERACTIVE_IK)
@@ -457,6 +462,9 @@ if(MCL_BUILD_ANY_INTERACTIVE_IK)
 
   if(MCL_BUILD_STEP)
     add_subdirectory(apps/step)
+  endif()
+  if(MCL_BUILD_JOINT_PATH_PLANNING)
+    add_subdirectory(apps/joint_path_planning)
   endif()
   if(MCL_BUILD_TARGET)
     add_subdirectory(apps/target)

@@ -114,6 +114,11 @@ solver/planner request。
 五个 profile 默认使用 `/workspace/models/Psi_R1_visual_collision.urdf`。该 URDF 的 mesh
 引用均为同目录下的 `meshes/<name>.obj`，不依赖 `products/synrobot` 中的 robot description。
 
+本 app 的默认初始姿态中，`knee_pitch_joint` 和 `ankle_pitch_joint` 均为 `0 rad`，
+即膝、踝直立；其余关节默认值保持原配置。所有 profile 共用该默认姿态。
+`--default-joint-positions` 可覆盖默认位置，回放初始状态及显式 `--initial-state`
+仍按既有优先级生效。初始姿态不会锁定关节，是否参与后续求解由 `--inactive-joints` 决定。
+
 控制链为：
 
 ```text

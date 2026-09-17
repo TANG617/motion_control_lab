@@ -49,6 +49,7 @@ for app in ("step", "target"):
 APP_SOURCE_FILES["hierarchical_kinematics_step"] |= {"execution.cpp", "execution.hpp", "elbow_reference.cpp", "elbow_reference.hpp", "elbow_reference_visualization.cpp", "elbow_reference_visualization.hpp", "allocation.cpp", "allocation.hpp"}
 APP_SOURCE_FILES["planned_kinematics_step"] = {"main.cpp", "options.cpp", "options.hpp", "solver.cpp", "solver.hpp", "planning.cpp", "planning.hpp", "loop.cpp", "loop.hpp"}
 APP_SOURCE_FILES["optimization_problem"] = {"main.cpp", "options.cpp", "options.hpp", "solver.cpp", "solver.hpp"}
+APP_SOURCE_FILES["joint_path_planning"] = {"main.cpp", "options.cpp", "options.hpp", "solver.cpp", "solver.hpp", "planning.cpp", "planning.hpp", "loop.cpp", "loop.hpp", "tui_projection.cpp", "tui_projection.hpp", "visualization.cpp", "visualization.hpp"}
 APP_MAIN_REQUIREMENTS = {
     "psibot_teleop": ("parseOptions", "runLoop"),
     "baseline": ("parseTeleopOptions", "parseReplayOptions", "BaselineSolver", "runLoop", "runReplayLoop"),
@@ -59,6 +60,7 @@ APP_MAIN_REQUIREMENTS = {
     "target": ("parseOptions", "MccTargetSolver", "PlacoTargetSolver", "runLoop"),
 }
 
+APP_MAIN_REQUIREMENTS["joint_path_planning"] = ("parseOptions", "Solver", "Planning", "run")
 APP_MAIN_REQUIREMENTS["optimization_problem"] = ("resolveOptions", "app::solve")
 APP_MAIN_REQUIREMENTS["planned_kinematics_step"] = ("parse", "Solver", "Planning", "loop")
 

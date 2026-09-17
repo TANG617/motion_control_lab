@@ -254,7 +254,7 @@ struct RobotOptions {
       "right_arm_joint3",  "right_arm_joint4", "right_arm_joint5",
       "right_arm_joint6",  "right_arm_joint7"};
   std::vector<double> default_positions{
-      0.0, 0.31, 0.0, 0.5, 0.5, -0.5, 0.9, -1.38, -1.57, -1.4,
+      0.0, 0.31, 0.0, 0.5, 0.05, -0.05, 0.9, -1.38, -1.57, -1.4,
       -0.45, 0.0, 0.0, -0.9, 1.38, 1.57, 1.4, 0.45, 0.0, 0.0};
   std::vector<std::size_t> left_arm_joint_indices{6, 7, 8, 9, 10, 11, 12};
   std::vector<std::size_t> right_arm_joint_indices{13, 14, 15, 16, 17, 18, 19};
