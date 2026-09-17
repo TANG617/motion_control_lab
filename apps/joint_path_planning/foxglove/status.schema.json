@@ -1,0 +1,290 @@
+{
+  "title": "mcl.JointPathStatus",
+  "type": "object",
+  "properties": {
+    "state": {
+      "type": "string"
+    },
+    "side": {
+      "type": "string"
+    },
+    "message": {
+      "type": "string"
+    },
+    "reason": {
+      "type": "string"
+    },
+    "scene_id": {
+      "type": "string"
+    },
+    "backend_status": {
+      "type": "string"
+    },
+    "accepted": {
+      "type": "boolean"
+    },
+    "ik_accepted": {
+      "type": "boolean"
+    },
+    "direct_valid": {
+      "type": "boolean"
+    },
+    "trajectory_time_s": {
+      "type": "number"
+    },
+    "remaining_position_error_m": {
+      "type": "number"
+    },
+    "request_id": {
+      "type": "number"
+    },
+    "ik_ms": {
+      "type": "number"
+    },
+    "ik_position_error_m": {
+      "type": "number"
+    },
+    "ik_orientation_error_rad": {
+      "type": "number"
+    },
+    "scene_revision": {
+      "type": "number"
+    },
+    "seed": {
+      "type": "number"
+    },
+    "termination": {
+      "type": "number"
+    },
+    "validation_reason": {
+      "type": "number"
+    },
+    "waypoints": {
+      "type": "number"
+    },
+    "checked_states": {
+      "type": "number"
+    },
+    "planning_ms": {
+      "type": "number"
+    },
+    "search_ms": {
+      "type": "number"
+    },
+    "simplification_ms": {
+      "type": "number"
+    },
+    "verification_ms": {
+      "type": "number"
+    },
+    "duration_s": {
+      "type": "number"
+    },
+    "velocity_limit_ratio": {
+      "type": "number"
+    },
+    "acceleration_limit_ratio": {
+      "type": "number"
+    },
+    "jerk_limit_ratio": {
+      "type": "number"
+    },
+    "final_path_sampled_distance_m": {
+      "type": "number"
+    },
+    "search_sampled_distance_m": {
+      "type": "number"
+    },
+    "tcp_xyz": {
+      "type": "array",
+      "items": {
+        "type": "number"
+      }
+    },
+    "draft_xyz": {
+      "type": "array",
+      "items": {
+        "type": "number"
+      }
+    },
+    "positions": {
+      "type": "array",
+      "items": {
+        "type": "number"
+      }
+    },
+    "planned_velocity": {
+      "type": "array",
+      "items": {
+        "type": "number"
+      }
+    },
+    "planned_acceleration": {
+      "type": "array",
+      "items": {
+        "type": "number"
+      }
+    },
+    "planned_jerk": {
+      "type": "array",
+      "items": {
+        "type": "number"
+      }
+    },
+    "events": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "nearest_pair": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "execution_complete": {
+      "type": "boolean"
+    },
+    "ik_iterations": {
+      "type": "integer"
+    },
+    "ik_posture_error_rad": {
+      "type": "number"
+    },
+    "ik_task_scales": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "active": {
+            "type": "boolean"
+          },
+          "scale": {
+            "type": "number"
+          }
+        }
+      }
+    },
+    "active_dof": {
+      "type": "number"
+    },
+    "held_position_error_m": {
+      "type": "number"
+    },
+    "held_orientation_error_rad": {
+      "type": "number"
+    },
+    "hold_position_tolerance_m": {
+      "type": "number"
+    },
+    "hold_orientation_tolerance_rad": {
+      "type": "number"
+    },
+    "held_path_position_error_bound_m": {
+      "type": "number"
+    },
+    "held_path_orientation_error_bound_rad": {
+      "type": "number"
+    },
+    "held_path_max_position_error_m": {
+      "type": "number"
+    },
+    "held_path_max_orientation_error_rad": {
+      "type": "number"
+    },
+    "planning_mode": {
+      "type": "string"
+    },
+    "held_frame": {
+      "type": "string"
+    },
+    "active_joint_names": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "held_target_xyz": {
+      "type": "array",
+      "items": {
+        "type": "number"
+      }
+    },
+    "held_target_quaternion_xyzw": {
+      "type": "array",
+      "items": {
+        "type": "number"
+      }
+    },
+    "path_length_before_simplification": {
+      "type": "number"
+    },
+    "path_length_after_simplification": {
+      "type": "number"
+    },
+    "path_shortening_percent": {
+      "type": "number"
+    },
+    "simplification_attempts": {
+      "type": "integer"
+    },
+    "accepted_shortcuts": {
+      "type": "integer"
+    },
+    "simplification_termination": {
+      "type": "string"
+    },
+    "timing_mode": {
+      "type": "string"
+    },
+    "through_waypoint_count": {
+      "type": "integer"
+    },
+    "stop_waypoint_count": {
+      "type": "integer"
+    },
+    "app_path_checks": {
+      "type": "integer"
+    },
+    "app_timed_state_checks": {
+      "type": "integer"
+    },
+    "collision_queries": {
+      "type": "integer"
+    },
+    "narrowphase_calls": {
+      "type": "integer"
+    },
+    "broadphase_skips": {
+      "type": "integer"
+    },
+    "pose_checks": {
+      "type": "integer"
+    },
+    "request_ms": {
+      "type": "number"
+    },
+    "timing_ms": {
+      "type": "number"
+    },
+    "app_verification_ms": {
+      "type": "number"
+    },
+    "stop_waypoint_indices": {
+      "type": "array",
+      "items": {
+        "type": "integer"
+      }
+    },
+    "violating_pair": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  }
+}

@@ -1,0 +1,3989 @@
+{
+  "id": "r1-front-cube",
+  "initial_positions": {
+    "joint_hand1_link_1_1": 0,
+    "joint_hand1_link_1_2": 0,
+    "joint_hand1_link_1_3": 0,
+    "joint_hand1_link_2_1": 0,
+    "joint_hand1_link_2_2": 0,
+    "joint_hand1_link_3_1": 0,
+    "joint_hand1_link_3_2": 0,
+    "joint_hand1_link_4_1": 0,
+    "joint_hand1_link_4_2": 0,
+    "joint_hand1_link_5_1": 0,
+    "joint_hand1_link_5_2": 0,
+    "joint_hand2_link_1_1": 0,
+    "joint_hand2_link_1_2": 0,
+    "joint_hand2_link_1_3": 0,
+    "joint_hand2_link_2_1": 0,
+    "joint_hand2_link_2_2": 0,
+    "joint_hand2_link_3_1": 0,
+    "joint_hand2_link_3_2": 0,
+    "joint_hand2_link_4_1": 0,
+    "joint_hand2_link_4_2": 0,
+    "joint_hand2_link_5_1": 0,
+    "joint_hand2_link_5_2": 0,
+    "left_arm_joint2": -1.5,
+    "right_arm_joint2": 1.5
+  },
+  "allowed_collisions": [
+    {
+      "links": [
+        "base_link",
+        "body_link1"
+      ],
+      "reason": "Neighbouring joint assembly envelopes (fixed adapters included)"
+    },
+    {
+      "links": [
+        "base_link",
+        "body_link2"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "base_link",
+        "body_link3"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "base_link",
+        "body_link4"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "base_link",
+        "head_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "base_link",
+        "head_link2"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "base_link",
+        "left_arm_base_link"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "base_link",
+        "left_arm_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "base_link",
+        "left_arm_link2"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "base_link",
+        "left_arm_link3"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "base_link",
+        "left_arm_link4"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "base_link",
+        "left_arm_link5"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "base_link",
+        "left_arm_link6"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "base_link",
+        "left_arm_link7"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "base_link",
+        "right_arm_base_link"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "base_link",
+        "right_arm_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "base_link",
+        "right_arm_link2"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "base_link",
+        "right_arm_link3"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "base_link",
+        "right_arm_link4"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "base_link",
+        "right_arm_link5"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "base_link",
+        "right_arm_link6"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "base_link",
+        "right_arm_link7"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "base_link",
+        "flange_link_1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "base_link",
+        "flange_link_2"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "base_link",
+        "hand1_link_base"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "base_link",
+        "hand2_link_base"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "base_link",
+        "head_rgbd_camera_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "base_link",
+        "head_rgb_camera_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "base_link",
+        "head_fisheye_camera_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "base_link",
+        "head_fisheye_camera_link2"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "base_link",
+        "head_fisheye_camera_link3"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "base_link",
+        "body_rgbd_camera_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "base_link",
+        "body_imu_link"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "body_link1",
+        "body_link2"
+      ],
+      "reason": "Neighbouring joint assembly envelopes (fixed adapters included)"
+    },
+    {
+      "links": [
+        "body_link1",
+        "body_link3"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "body_link1",
+        "body_link4"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "body_link1",
+        "head_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "body_link1",
+        "head_link2"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "body_link1",
+        "left_arm_base_link"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "body_link1",
+        "left_arm_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "body_link1",
+        "left_arm_link2"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "body_link1",
+        "left_arm_link3"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "body_link1",
+        "left_arm_link4"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "body_link1",
+        "left_arm_link5"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "body_link1",
+        "left_arm_link6"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "body_link1",
+        "left_arm_link7"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "body_link1",
+        "right_arm_base_link"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "body_link1",
+        "right_arm_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "body_link1",
+        "right_arm_link2"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "body_link1",
+        "right_arm_link3"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "body_link1",
+        "right_arm_link4"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "body_link1",
+        "right_arm_link5"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "body_link1",
+        "right_arm_link6"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "body_link1",
+        "right_arm_link7"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "body_link1",
+        "flange_link_1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "body_link1",
+        "flange_link_2"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "body_link1",
+        "hand1_link_base"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "body_link1",
+        "hand2_link_base"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "body_link1",
+        "head_rgbd_camera_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "body_link1",
+        "head_rgb_camera_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "body_link1",
+        "head_fisheye_camera_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "body_link1",
+        "head_fisheye_camera_link2"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "body_link1",
+        "head_fisheye_camera_link3"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "body_link1",
+        "body_rgbd_camera_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "body_link1",
+        "body_imu_link"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "body_link2",
+        "body_link3"
+      ],
+      "reason": "Neighbouring joint assembly envelopes (fixed adapters included)"
+    },
+    {
+      "links": [
+        "body_link2",
+        "body_link4"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "body_link2",
+        "head_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "body_link2",
+        "head_link2"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "body_link2",
+        "left_arm_base_link"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "body_link2",
+        "left_arm_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "body_link2",
+        "left_arm_link2"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "body_link2",
+        "left_arm_link3"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "body_link2",
+        "left_arm_link4"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "body_link2",
+        "left_arm_link5"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "body_link2",
+        "left_arm_link6"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "body_link2",
+        "left_arm_link7"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "body_link2",
+        "right_arm_base_link"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "body_link2",
+        "right_arm_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "body_link2",
+        "right_arm_link2"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "body_link2",
+        "right_arm_link3"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "body_link2",
+        "right_arm_link4"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "body_link2",
+        "right_arm_link5"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "body_link2",
+        "right_arm_link6"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "body_link2",
+        "right_arm_link7"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "body_link2",
+        "flange_link_1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "body_link2",
+        "flange_link_2"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "body_link2",
+        "hand1_link_base"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "body_link2",
+        "hand2_link_base"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "body_link2",
+        "head_rgbd_camera_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "body_link2",
+        "head_rgb_camera_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "body_link2",
+        "head_fisheye_camera_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "body_link2",
+        "head_fisheye_camera_link2"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "body_link2",
+        "head_fisheye_camera_link3"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "body_link2",
+        "body_rgbd_camera_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "body_link2",
+        "body_imu_link"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "body_link3",
+        "body_link4"
+      ],
+      "reason": "Neighbouring joint assembly envelopes (fixed adapters included)"
+    },
+    {
+      "links": [
+        "body_link3",
+        "head_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "body_link3",
+        "head_link2"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "body_link3",
+        "left_arm_base_link"
+      ],
+      "reason": "Neighbouring joint assembly envelopes (fixed adapters included)"
+    },
+    {
+      "links": [
+        "body_link3",
+        "left_arm_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "body_link3",
+        "left_arm_link2"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "body_link3",
+        "left_arm_link3"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "body_link3",
+        "left_arm_link4"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "body_link3",
+        "left_arm_link5"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "body_link3",
+        "left_arm_link6"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "body_link3",
+        "left_arm_link7"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "body_link3",
+        "right_arm_base_link"
+      ],
+      "reason": "Neighbouring joint assembly envelopes (fixed adapters included)"
+    },
+    {
+      "links": [
+        "body_link3",
+        "right_arm_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "body_link3",
+        "right_arm_link2"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "body_link3",
+        "right_arm_link3"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "body_link3",
+        "right_arm_link4"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "body_link3",
+        "right_arm_link5"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "body_link3",
+        "right_arm_link6"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "body_link3",
+        "right_arm_link7"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "body_link3",
+        "flange_link_1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "body_link3",
+        "flange_link_2"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "body_link3",
+        "hand1_link_base"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "body_link3",
+        "hand2_link_base"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "body_link3",
+        "head_rgbd_camera_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "body_link3",
+        "head_rgb_camera_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "body_link3",
+        "head_fisheye_camera_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "body_link3",
+        "head_fisheye_camera_link2"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "body_link3",
+        "head_fisheye_camera_link3"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "body_link3",
+        "body_rgbd_camera_link1"
+      ],
+      "reason": "Neighbouring joint assembly envelopes (fixed adapters included)"
+    },
+    {
+      "links": [
+        "body_link3",
+        "body_imu_link"
+      ],
+      "reason": "Neighbouring joint assembly envelopes (fixed adapters included)"
+    },
+    {
+      "links": [
+        "body_link4",
+        "head_link1"
+      ],
+      "reason": "Neighbouring joint assembly envelopes (fixed adapters included)"
+    },
+    {
+      "links": [
+        "body_link4",
+        "head_link2"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "body_link4",
+        "left_arm_base_link"
+      ],
+      "reason": "Same rigid assembly"
+    },
+    {
+      "links": [
+        "body_link4",
+        "left_arm_link1"
+      ],
+      "reason": "Neighbouring joint assembly envelopes (fixed adapters included)"
+    },
+    {
+      "links": [
+        "body_link4",
+        "left_arm_link2"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "body_link4",
+        "left_arm_link3"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "body_link4",
+        "left_arm_link4"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "body_link4",
+        "left_arm_link5"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "body_link4",
+        "left_arm_link6"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "body_link4",
+        "left_arm_link7"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "body_link4",
+        "right_arm_base_link"
+      ],
+      "reason": "Same rigid assembly"
+    },
+    {
+      "links": [
+        "body_link4",
+        "right_arm_link1"
+      ],
+      "reason": "Neighbouring joint assembly envelopes (fixed adapters included)"
+    },
+    {
+      "links": [
+        "body_link4",
+        "right_arm_link2"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "body_link4",
+        "right_arm_link3"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "body_link4",
+        "right_arm_link4"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "body_link4",
+        "right_arm_link5"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "body_link4",
+        "right_arm_link6"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "body_link4",
+        "right_arm_link7"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "body_link4",
+        "flange_link_1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "body_link4",
+        "flange_link_2"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "body_link4",
+        "hand1_link_base"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "body_link4",
+        "hand2_link_base"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "body_link4",
+        "head_rgbd_camera_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "body_link4",
+        "head_rgb_camera_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "body_link4",
+        "head_fisheye_camera_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "body_link4",
+        "head_fisheye_camera_link2"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "body_link4",
+        "head_fisheye_camera_link3"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "body_link4",
+        "body_rgbd_camera_link1"
+      ],
+      "reason": "Same rigid assembly"
+    },
+    {
+      "links": [
+        "body_link4",
+        "body_imu_link"
+      ],
+      "reason": "Same rigid assembly"
+    },
+    {
+      "links": [
+        "head_link1",
+        "head_link2"
+      ],
+      "reason": "Neighbouring joint assembly envelopes (fixed adapters included)"
+    },
+    {
+      "links": [
+        "head_link1",
+        "left_arm_base_link"
+      ],
+      "reason": "Neighbouring joint assembly envelopes (fixed adapters included)"
+    },
+    {
+      "links": [
+        "head_link1",
+        "left_arm_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "head_link1",
+        "left_arm_link2"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "head_link1",
+        "left_arm_link3"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "head_link1",
+        "left_arm_link4"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "head_link1",
+        "left_arm_link5"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "head_link1",
+        "left_arm_link6"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "head_link1",
+        "left_arm_link7"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "head_link1",
+        "right_arm_base_link"
+      ],
+      "reason": "Neighbouring joint assembly envelopes (fixed adapters included)"
+    },
+    {
+      "links": [
+        "head_link1",
+        "right_arm_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "head_link1",
+        "right_arm_link2"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "head_link1",
+        "right_arm_link3"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "head_link1",
+        "right_arm_link4"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "head_link1",
+        "right_arm_link5"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "head_link1",
+        "right_arm_link6"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "head_link1",
+        "right_arm_link7"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "head_link1",
+        "flange_link_1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "head_link1",
+        "flange_link_2"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "head_link1",
+        "hand1_link_base"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "head_link1",
+        "hand2_link_base"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "head_link1",
+        "head_rgbd_camera_link1"
+      ],
+      "reason": "Neighbouring joint assembly envelopes (fixed adapters included)"
+    },
+    {
+      "links": [
+        "head_link1",
+        "head_rgb_camera_link1"
+      ],
+      "reason": "Neighbouring joint assembly envelopes (fixed adapters included)"
+    },
+    {
+      "links": [
+        "head_link1",
+        "head_fisheye_camera_link1"
+      ],
+      "reason": "Neighbouring joint assembly envelopes (fixed adapters included)"
+    },
+    {
+      "links": [
+        "head_link1",
+        "head_fisheye_camera_link2"
+      ],
+      "reason": "Neighbouring joint assembly envelopes (fixed adapters included)"
+    },
+    {
+      "links": [
+        "head_link1",
+        "head_fisheye_camera_link3"
+      ],
+      "reason": "Neighbouring joint assembly envelopes (fixed adapters included)"
+    },
+    {
+      "links": [
+        "head_link1",
+        "body_rgbd_camera_link1"
+      ],
+      "reason": "Neighbouring joint assembly envelopes (fixed adapters included)"
+    },
+    {
+      "links": [
+        "head_link1",
+        "body_imu_link"
+      ],
+      "reason": "Neighbouring joint assembly envelopes (fixed adapters included)"
+    },
+    {
+      "links": [
+        "head_link2",
+        "left_arm_base_link"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "head_link2",
+        "left_arm_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "head_link2",
+        "left_arm_link2"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "head_link2",
+        "left_arm_link3"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "head_link2",
+        "left_arm_link4"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "head_link2",
+        "left_arm_link5"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "head_link2",
+        "left_arm_link6"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "head_link2",
+        "left_arm_link7"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "head_link2",
+        "right_arm_base_link"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "head_link2",
+        "right_arm_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "head_link2",
+        "right_arm_link2"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "head_link2",
+        "right_arm_link3"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "head_link2",
+        "right_arm_link4"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "head_link2",
+        "right_arm_link5"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "head_link2",
+        "right_arm_link6"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "head_link2",
+        "right_arm_link7"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "head_link2",
+        "flange_link_1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "head_link2",
+        "flange_link_2"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "head_link2",
+        "hand1_link_base"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "head_link2",
+        "hand2_link_base"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "head_link2",
+        "head_rgbd_camera_link1"
+      ],
+      "reason": "Same rigid assembly"
+    },
+    {
+      "links": [
+        "head_link2",
+        "head_rgb_camera_link1"
+      ],
+      "reason": "Same rigid assembly"
+    },
+    {
+      "links": [
+        "head_link2",
+        "head_fisheye_camera_link1"
+      ],
+      "reason": "Same rigid assembly"
+    },
+    {
+      "links": [
+        "head_link2",
+        "head_fisheye_camera_link2"
+      ],
+      "reason": "Same rigid assembly"
+    },
+    {
+      "links": [
+        "head_link2",
+        "head_fisheye_camera_link3"
+      ],
+      "reason": "Same rigid assembly"
+    },
+    {
+      "links": [
+        "head_link2",
+        "body_rgbd_camera_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "head_link2",
+        "body_imu_link"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_base_link",
+        "left_arm_link1"
+      ],
+      "reason": "Neighbouring joint assembly envelopes (fixed adapters included)"
+    },
+    {
+      "links": [
+        "left_arm_base_link",
+        "left_arm_link2"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_base_link",
+        "left_arm_link3"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_base_link",
+        "left_arm_link4"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_base_link",
+        "left_arm_link5"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_base_link",
+        "left_arm_link6"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_base_link",
+        "left_arm_link7"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_base_link",
+        "right_arm_base_link"
+      ],
+      "reason": "Same rigid assembly"
+    },
+    {
+      "links": [
+        "left_arm_base_link",
+        "right_arm_link1"
+      ],
+      "reason": "Neighbouring joint assembly envelopes (fixed adapters included)"
+    },
+    {
+      "links": [
+        "left_arm_base_link",
+        "right_arm_link2"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_base_link",
+        "right_arm_link3"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_base_link",
+        "right_arm_link4"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_base_link",
+        "right_arm_link5"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_base_link",
+        "right_arm_link6"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_base_link",
+        "right_arm_link7"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_base_link",
+        "flange_link_1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_base_link",
+        "flange_link_2"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_base_link",
+        "hand1_link_base"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_base_link",
+        "hand2_link_base"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_base_link",
+        "head_rgbd_camera_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_base_link",
+        "head_rgb_camera_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_base_link",
+        "head_fisheye_camera_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_base_link",
+        "head_fisheye_camera_link2"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_base_link",
+        "head_fisheye_camera_link3"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_base_link",
+        "body_rgbd_camera_link1"
+      ],
+      "reason": "Same rigid assembly"
+    },
+    {
+      "links": [
+        "left_arm_base_link",
+        "body_imu_link"
+      ],
+      "reason": "Same rigid assembly"
+    },
+    {
+      "links": [
+        "left_arm_link1",
+        "left_arm_link2"
+      ],
+      "reason": "Neighbouring joint assembly envelopes (fixed adapters included)"
+    },
+    {
+      "links": [
+        "left_arm_link1",
+        "left_arm_link3"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link1",
+        "left_arm_link4"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link1",
+        "left_arm_link5"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link1",
+        "left_arm_link6"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link1",
+        "left_arm_link7"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link1",
+        "right_arm_base_link"
+      ],
+      "reason": "Neighbouring joint assembly envelopes (fixed adapters included)"
+    },
+    {
+      "links": [
+        "left_arm_link1",
+        "right_arm_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link1",
+        "right_arm_link2"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link1",
+        "right_arm_link3"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link1",
+        "right_arm_link4"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link1",
+        "right_arm_link5"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link1",
+        "right_arm_link6"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link1",
+        "right_arm_link7"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link1",
+        "flange_link_1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link1",
+        "flange_link_2"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link1",
+        "hand1_link_base"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link1",
+        "hand2_link_base"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link1",
+        "head_rgbd_camera_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link1",
+        "head_rgb_camera_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link1",
+        "head_fisheye_camera_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link1",
+        "head_fisheye_camera_link2"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link1",
+        "head_fisheye_camera_link3"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link1",
+        "body_rgbd_camera_link1"
+      ],
+      "reason": "Neighbouring joint assembly envelopes (fixed adapters included)"
+    },
+    {
+      "links": [
+        "left_arm_link1",
+        "body_imu_link"
+      ],
+      "reason": "Neighbouring joint assembly envelopes (fixed adapters included)"
+    },
+    {
+      "links": [
+        "left_arm_link2",
+        "left_arm_link3"
+      ],
+      "reason": "Neighbouring joint assembly envelopes (fixed adapters included)"
+    },
+    {
+      "links": [
+        "left_arm_link2",
+        "left_arm_link4"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link2",
+        "left_arm_link5"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link2",
+        "left_arm_link6"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link2",
+        "left_arm_link7"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link2",
+        "right_arm_base_link"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link2",
+        "right_arm_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link2",
+        "right_arm_link2"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link2",
+        "right_arm_link3"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link2",
+        "right_arm_link4"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link2",
+        "right_arm_link5"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link2",
+        "right_arm_link6"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link2",
+        "right_arm_link7"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link2",
+        "flange_link_1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link2",
+        "flange_link_2"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link2",
+        "hand1_link_base"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link2",
+        "hand2_link_base"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link2",
+        "head_rgbd_camera_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link2",
+        "head_rgb_camera_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link2",
+        "head_fisheye_camera_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link2",
+        "head_fisheye_camera_link2"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link2",
+        "head_fisheye_camera_link3"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link2",
+        "body_rgbd_camera_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link2",
+        "body_imu_link"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link3",
+        "left_arm_link4"
+      ],
+      "reason": "Neighbouring joint assembly envelopes (fixed adapters included)"
+    },
+    {
+      "links": [
+        "left_arm_link3",
+        "left_arm_link5"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link3",
+        "left_arm_link6"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link3",
+        "left_arm_link7"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link3",
+        "right_arm_base_link"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link3",
+        "right_arm_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link3",
+        "right_arm_link2"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link3",
+        "right_arm_link3"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link3",
+        "right_arm_link4"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link3",
+        "right_arm_link5"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link3",
+        "right_arm_link6"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link3",
+        "right_arm_link7"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link3",
+        "flange_link_1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link3",
+        "flange_link_2"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link3",
+        "hand1_link_base"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link3",
+        "hand2_link_base"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link3",
+        "head_rgbd_camera_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link3",
+        "head_rgb_camera_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link3",
+        "head_fisheye_camera_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link3",
+        "head_fisheye_camera_link2"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link3",
+        "head_fisheye_camera_link3"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link3",
+        "body_rgbd_camera_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link3",
+        "body_imu_link"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link4",
+        "left_arm_link5"
+      ],
+      "reason": "Neighbouring joint assembly envelopes (fixed adapters included)"
+    },
+    {
+      "links": [
+        "left_arm_link4",
+        "left_arm_link6"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link4",
+        "left_arm_link7"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link4",
+        "right_arm_base_link"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link4",
+        "right_arm_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link4",
+        "right_arm_link2"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link4",
+        "right_arm_link3"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link4",
+        "right_arm_link4"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link4",
+        "right_arm_link5"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link4",
+        "right_arm_link6"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link4",
+        "right_arm_link7"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link4",
+        "flange_link_1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link4",
+        "flange_link_2"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link4",
+        "hand1_link_base"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link4",
+        "hand2_link_base"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link4",
+        "head_rgbd_camera_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link4",
+        "head_rgb_camera_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link4",
+        "head_fisheye_camera_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link4",
+        "head_fisheye_camera_link2"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link4",
+        "head_fisheye_camera_link3"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link4",
+        "body_rgbd_camera_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link4",
+        "body_imu_link"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link5",
+        "left_arm_link6"
+      ],
+      "reason": "Neighbouring joint assembly envelopes (fixed adapters included)"
+    },
+    {
+      "links": [
+        "left_arm_link5",
+        "left_arm_link7"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link5",
+        "right_arm_base_link"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link5",
+        "right_arm_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link5",
+        "right_arm_link2"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link5",
+        "right_arm_link3"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link5",
+        "right_arm_link4"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link5",
+        "right_arm_link5"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link5",
+        "right_arm_link6"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link5",
+        "right_arm_link7"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link5",
+        "flange_link_1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link5",
+        "flange_link_2"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link5",
+        "hand1_link_base"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link5",
+        "hand2_link_base"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link5",
+        "head_rgbd_camera_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link5",
+        "head_rgb_camera_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link5",
+        "head_fisheye_camera_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link5",
+        "head_fisheye_camera_link2"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link5",
+        "head_fisheye_camera_link3"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link5",
+        "body_rgbd_camera_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link5",
+        "body_imu_link"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link6",
+        "left_arm_link7"
+      ],
+      "reason": "Neighbouring joint assembly envelopes (fixed adapters included)"
+    },
+    {
+      "links": [
+        "left_arm_link6",
+        "right_arm_base_link"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link6",
+        "right_arm_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link6",
+        "right_arm_link2"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link6",
+        "right_arm_link3"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link6",
+        "right_arm_link4"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link6",
+        "right_arm_link5"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link6",
+        "right_arm_link6"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link6",
+        "right_arm_link7"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link6",
+        "flange_link_1"
+      ],
+      "reason": "Neighbouring joint assembly envelopes (fixed adapters included)"
+    },
+    {
+      "links": [
+        "left_arm_link6",
+        "flange_link_2"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link6",
+        "hand1_link_base"
+      ],
+      "reason": "Neighbouring joint assembly envelopes (fixed adapters included)"
+    },
+    {
+      "links": [
+        "left_arm_link6",
+        "hand2_link_base"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link6",
+        "head_rgbd_camera_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link6",
+        "head_rgb_camera_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link6",
+        "head_fisheye_camera_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link6",
+        "head_fisheye_camera_link2"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link6",
+        "head_fisheye_camera_link3"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link6",
+        "body_rgbd_camera_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link6",
+        "body_imu_link"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link7",
+        "right_arm_base_link"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link7",
+        "right_arm_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link7",
+        "right_arm_link2"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link7",
+        "right_arm_link3"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link7",
+        "right_arm_link4"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link7",
+        "right_arm_link5"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link7",
+        "right_arm_link6"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link7",
+        "right_arm_link7"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link7",
+        "flange_link_1"
+      ],
+      "reason": "Same rigid assembly"
+    },
+    {
+      "links": [
+        "left_arm_link7",
+        "flange_link_2"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link7",
+        "hand1_link_base"
+      ],
+      "reason": "Same rigid assembly"
+    },
+    {
+      "links": [
+        "left_arm_link7",
+        "hand2_link_base"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link7",
+        "head_rgbd_camera_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link7",
+        "head_rgb_camera_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link7",
+        "head_fisheye_camera_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link7",
+        "head_fisheye_camera_link2"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link7",
+        "head_fisheye_camera_link3"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link7",
+        "body_rgbd_camera_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "left_arm_link7",
+        "body_imu_link"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "right_arm_base_link",
+        "right_arm_link1"
+      ],
+      "reason": "Neighbouring joint assembly envelopes (fixed adapters included)"
+    },
+    {
+      "links": [
+        "right_arm_base_link",
+        "right_arm_link2"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "right_arm_base_link",
+        "right_arm_link3"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "right_arm_base_link",
+        "right_arm_link4"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "right_arm_base_link",
+        "right_arm_link5"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "right_arm_base_link",
+        "right_arm_link6"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "right_arm_base_link",
+        "right_arm_link7"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "right_arm_base_link",
+        "flange_link_1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "right_arm_base_link",
+        "flange_link_2"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "right_arm_base_link",
+        "hand1_link_base"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "right_arm_base_link",
+        "hand2_link_base"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "right_arm_base_link",
+        "head_rgbd_camera_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "right_arm_base_link",
+        "head_rgb_camera_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "right_arm_base_link",
+        "head_fisheye_camera_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "right_arm_base_link",
+        "head_fisheye_camera_link2"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "right_arm_base_link",
+        "head_fisheye_camera_link3"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "right_arm_base_link",
+        "body_rgbd_camera_link1"
+      ],
+      "reason": "Same rigid assembly"
+    },
+    {
+      "links": [
+        "right_arm_base_link",
+        "body_imu_link"
+      ],
+      "reason": "Same rigid assembly"
+    },
+    {
+      "links": [
+        "right_arm_link1",
+        "right_arm_link2"
+      ],
+      "reason": "Neighbouring joint assembly envelopes (fixed adapters included)"
+    },
+    {
+      "links": [
+        "right_arm_link1",
+        "right_arm_link3"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "right_arm_link1",
+        "right_arm_link4"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "right_arm_link1",
+        "right_arm_link5"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "right_arm_link1",
+        "right_arm_link6"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "right_arm_link1",
+        "right_arm_link7"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "right_arm_link1",
+        "flange_link_1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "right_arm_link1",
+        "flange_link_2"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "right_arm_link1",
+        "hand1_link_base"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "right_arm_link1",
+        "hand2_link_base"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "right_arm_link1",
+        "head_rgbd_camera_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "right_arm_link1",
+        "head_rgb_camera_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "right_arm_link1",
+        "head_fisheye_camera_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "right_arm_link1",
+        "head_fisheye_camera_link2"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "right_arm_link1",
+        "head_fisheye_camera_link3"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "right_arm_link1",
+        "body_rgbd_camera_link1"
+      ],
+      "reason": "Neighbouring joint assembly envelopes (fixed adapters included)"
+    },
+    {
+      "links": [
+        "right_arm_link1",
+        "body_imu_link"
+      ],
+      "reason": "Neighbouring joint assembly envelopes (fixed adapters included)"
+    },
+    {
+      "links": [
+        "right_arm_link2",
+        "right_arm_link3"
+      ],
+      "reason": "Neighbouring joint assembly envelopes (fixed adapters included)"
+    },
+    {
+      "links": [
+        "right_arm_link2",
+        "right_arm_link4"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "right_arm_link2",
+        "right_arm_link5"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "right_arm_link2",
+        "right_arm_link6"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "right_arm_link2",
+        "right_arm_link7"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "right_arm_link2",
+        "flange_link_1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "right_arm_link2",
+        "flange_link_2"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "right_arm_link2",
+        "hand1_link_base"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "right_arm_link2",
+        "hand2_link_base"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "right_arm_link2",
+        "head_rgbd_camera_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "right_arm_link2",
+        "head_rgb_camera_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "right_arm_link2",
+        "head_fisheye_camera_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "right_arm_link2",
+        "head_fisheye_camera_link2"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "right_arm_link2",
+        "head_fisheye_camera_link3"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "right_arm_link2",
+        "body_rgbd_camera_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "right_arm_link2",
+        "body_imu_link"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "right_arm_link3",
+        "right_arm_link4"
+      ],
+      "reason": "Neighbouring joint assembly envelopes (fixed adapters included)"
+    },
+    {
+      "links": [
+        "right_arm_link3",
+        "right_arm_link5"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "right_arm_link3",
+        "right_arm_link6"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "right_arm_link3",
+        "right_arm_link7"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "right_arm_link3",
+        "flange_link_1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "right_arm_link3",
+        "flange_link_2"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "right_arm_link3",
+        "hand1_link_base"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "right_arm_link3",
+        "hand2_link_base"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "right_arm_link3",
+        "head_rgbd_camera_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "right_arm_link3",
+        "head_rgb_camera_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "right_arm_link3",
+        "head_fisheye_camera_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "right_arm_link3",
+        "head_fisheye_camera_link2"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "right_arm_link3",
+        "head_fisheye_camera_link3"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "right_arm_link3",
+        "body_rgbd_camera_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "right_arm_link3",
+        "body_imu_link"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "right_arm_link4",
+        "right_arm_link5"
+      ],
+      "reason": "Neighbouring joint assembly envelopes (fixed adapters included)"
+    },
+    {
+      "links": [
+        "right_arm_link4",
+        "right_arm_link6"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "right_arm_link4",
+        "right_arm_link7"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "right_arm_link4",
+        "flange_link_1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "right_arm_link4",
+        "flange_link_2"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "right_arm_link4",
+        "hand1_link_base"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "right_arm_link4",
+        "hand2_link_base"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "right_arm_link4",
+        "head_rgbd_camera_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "right_arm_link4",
+        "head_rgb_camera_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "right_arm_link4",
+        "head_fisheye_camera_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "right_arm_link4",
+        "head_fisheye_camera_link2"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "right_arm_link4",
+        "head_fisheye_camera_link3"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "right_arm_link4",
+        "body_rgbd_camera_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "right_arm_link4",
+        "body_imu_link"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "right_arm_link5",
+        "right_arm_link6"
+      ],
+      "reason": "Neighbouring joint assembly envelopes (fixed adapters included)"
+    },
+    {
+      "links": [
+        "right_arm_link5",
+        "right_arm_link7"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "right_arm_link5",
+        "flange_link_1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "right_arm_link5",
+        "flange_link_2"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "right_arm_link5",
+        "hand1_link_base"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "right_arm_link5",
+        "hand2_link_base"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "right_arm_link5",
+        "head_rgbd_camera_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "right_arm_link5",
+        "head_rgb_camera_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "right_arm_link5",
+        "head_fisheye_camera_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "right_arm_link5",
+        "head_fisheye_camera_link2"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "right_arm_link5",
+        "head_fisheye_camera_link3"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "right_arm_link5",
+        "body_rgbd_camera_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "right_arm_link5",
+        "body_imu_link"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "right_arm_link6",
+        "right_arm_link7"
+      ],
+      "reason": "Neighbouring joint assembly envelopes (fixed adapters included)"
+    },
+    {
+      "links": [
+        "right_arm_link6",
+        "flange_link_1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "right_arm_link6",
+        "flange_link_2"
+      ],
+      "reason": "Neighbouring joint assembly envelopes (fixed adapters included)"
+    },
+    {
+      "links": [
+        "right_arm_link6",
+        "hand1_link_base"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "right_arm_link6",
+        "hand2_link_base"
+      ],
+      "reason": "Neighbouring joint assembly envelopes (fixed adapters included)"
+    },
+    {
+      "links": [
+        "right_arm_link6",
+        "head_rgbd_camera_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "right_arm_link6",
+        "head_rgb_camera_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "right_arm_link6",
+        "head_fisheye_camera_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "right_arm_link6",
+        "head_fisheye_camera_link2"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "right_arm_link6",
+        "head_fisheye_camera_link3"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "right_arm_link6",
+        "body_rgbd_camera_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "right_arm_link6",
+        "body_imu_link"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "right_arm_link7",
+        "flange_link_1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "right_arm_link7",
+        "flange_link_2"
+      ],
+      "reason": "Same rigid assembly"
+    },
+    {
+      "links": [
+        "right_arm_link7",
+        "hand1_link_base"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "right_arm_link7",
+        "hand2_link_base"
+      ],
+      "reason": "Same rigid assembly"
+    },
+    {
+      "links": [
+        "right_arm_link7",
+        "head_rgbd_camera_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "right_arm_link7",
+        "head_rgb_camera_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "right_arm_link7",
+        "head_fisheye_camera_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "right_arm_link7",
+        "head_fisheye_camera_link2"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "right_arm_link7",
+        "head_fisheye_camera_link3"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "right_arm_link7",
+        "body_rgbd_camera_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "right_arm_link7",
+        "body_imu_link"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "flange_link_1",
+        "flange_link_2"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "flange_link_1",
+        "hand1_link_base"
+      ],
+      "reason": "Same rigid assembly"
+    },
+    {
+      "links": [
+        "flange_link_1",
+        "hand2_link_base"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "flange_link_1",
+        "head_rgbd_camera_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "flange_link_1",
+        "head_rgb_camera_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "flange_link_1",
+        "head_fisheye_camera_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "flange_link_1",
+        "head_fisheye_camera_link2"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "flange_link_1",
+        "head_fisheye_camera_link3"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "flange_link_1",
+        "body_rgbd_camera_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "flange_link_1",
+        "body_imu_link"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "flange_link_2",
+        "hand1_link_base"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "flange_link_2",
+        "hand2_link_base"
+      ],
+      "reason": "Same rigid assembly"
+    },
+    {
+      "links": [
+        "flange_link_2",
+        "head_rgbd_camera_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "flange_link_2",
+        "head_rgb_camera_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "flange_link_2",
+        "head_fisheye_camera_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "flange_link_2",
+        "head_fisheye_camera_link2"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "flange_link_2",
+        "head_fisheye_camera_link3"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "flange_link_2",
+        "body_rgbd_camera_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "flange_link_2",
+        "body_imu_link"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "hand1_link_base",
+        "hand2_link_base"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "hand1_link_base",
+        "head_rgbd_camera_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "hand1_link_base",
+        "head_rgb_camera_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "hand1_link_base",
+        "head_fisheye_camera_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "hand1_link_base",
+        "head_fisheye_camera_link2"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "hand1_link_base",
+        "head_fisheye_camera_link3"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "hand1_link_base",
+        "body_rgbd_camera_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "hand1_link_base",
+        "body_imu_link"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "hand2_link_base",
+        "head_rgbd_camera_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "hand2_link_base",
+        "head_rgb_camera_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "hand2_link_base",
+        "head_fisheye_camera_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "hand2_link_base",
+        "head_fisheye_camera_link2"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "hand2_link_base",
+        "head_fisheye_camera_link3"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "hand2_link_base",
+        "body_rgbd_camera_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "hand2_link_base",
+        "body_imu_link"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "head_rgbd_camera_link1",
+        "head_rgb_camera_link1"
+      ],
+      "reason": "Same rigid assembly"
+    },
+    {
+      "links": [
+        "head_rgbd_camera_link1",
+        "head_fisheye_camera_link1"
+      ],
+      "reason": "Same rigid assembly"
+    },
+    {
+      "links": [
+        "head_rgbd_camera_link1",
+        "head_fisheye_camera_link2"
+      ],
+      "reason": "Same rigid assembly"
+    },
+    {
+      "links": [
+        "head_rgbd_camera_link1",
+        "head_fisheye_camera_link3"
+      ],
+      "reason": "Same rigid assembly"
+    },
+    {
+      "links": [
+        "head_rgbd_camera_link1",
+        "body_rgbd_camera_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "head_rgbd_camera_link1",
+        "body_imu_link"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "head_rgb_camera_link1",
+        "head_fisheye_camera_link1"
+      ],
+      "reason": "Same rigid assembly"
+    },
+    {
+      "links": [
+        "head_rgb_camera_link1",
+        "head_fisheye_camera_link2"
+      ],
+      "reason": "Same rigid assembly"
+    },
+    {
+      "links": [
+        "head_rgb_camera_link1",
+        "head_fisheye_camera_link3"
+      ],
+      "reason": "Same rigid assembly"
+    },
+    {
+      "links": [
+        "head_rgb_camera_link1",
+        "body_rgbd_camera_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "head_rgb_camera_link1",
+        "body_imu_link"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "head_fisheye_camera_link1",
+        "head_fisheye_camera_link2"
+      ],
+      "reason": "Same rigid assembly"
+    },
+    {
+      "links": [
+        "head_fisheye_camera_link1",
+        "head_fisheye_camera_link3"
+      ],
+      "reason": "Same rigid assembly"
+    },
+    {
+      "links": [
+        "head_fisheye_camera_link1",
+        "body_rgbd_camera_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "head_fisheye_camera_link1",
+        "body_imu_link"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "head_fisheye_camera_link2",
+        "head_fisheye_camera_link3"
+      ],
+      "reason": "Same rigid assembly"
+    },
+    {
+      "links": [
+        "head_fisheye_camera_link2",
+        "body_rgbd_camera_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "head_fisheye_camera_link2",
+        "body_imu_link"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "head_fisheye_camera_link3",
+        "body_rgbd_camera_link1"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "head_fisheye_camera_link3",
+        "body_imu_link"
+      ],
+      "reason": "User requested ignoring all self collisions"
+    },
+    {
+      "links": [
+        "body_rgbd_camera_link1",
+        "body_imu_link"
+      ],
+      "reason": "Same rigid assembly"
+    }
+  ],
+  "obstacles": [
+    {
+      "id": "front_cube",
+      "xyz": [
+        0.6,
+        0.075,
+        1.2
+      ],
+      "size": [
+        0.2,
+        0.2,
+        0.2
+      ]
+    }
+  ],
+  "goals": {
+    "left": {
+      "delta": [
+        0.08,
+        0,
+        0.1
+      ]
+    },
+    "right": {
+      "delta": [
+        0.08,
+        0,
+        0.1
+      ]
+    }
+  }
+}

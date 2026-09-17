@@ -1,0 +1,511 @@
+{
+  "configById": {
+    "3D!jointpath": {
+      "layers": {
+        "current": {
+          "visible": true,
+          "instanceId": "current",
+          "layerId": "foxglove.Urdf",
+          "label": "Current robot",
+          "sourceType": "url",
+          "url": "http://127.0.0.1:8766/Psi_R1_visual_collision.urdf",
+          "controlMode": "jointStates",
+          "jointStatesTopic": "/mcl/joints/execution",
+          "displayMode": "visual",
+          "showOutlines": true,
+          "opacity": 1
+        },
+        "goal": {
+          "visible": true,
+          "instanceId": "goal",
+          "layerId": "foxglove.Urdf",
+          "label": "Last accepted IK endpoint",
+          "sourceType": "url",
+          "url": "http://127.0.0.1:8766/Psi_R1_visual_collision.urdf",
+          "controlMode": "jointStates",
+          "jointStatesTopic": "/mcl/joints/ik",
+          "displayMode": "visual",
+          "showOutlines": true,
+          "opacity": 0.25
+        },
+        "collision": {
+          "visible": false,
+          "instanceId": "collision",
+          "layerId": "foxglove.Urdf",
+          "label": "Collision geometry",
+          "sourceType": "url",
+          "url": "http://127.0.0.1:8766/Psi_R1_visual_collision.urdf",
+          "controlMode": "jointStates",
+          "jointStatesTopic": "/mcl/joints/execution",
+          "displayMode": "collision",
+          "showOutlines": true,
+          "opacity": 0.25
+        },
+        "grid": {
+          "visible": true,
+          "instanceId": "grid",
+          "layerId": "foxglove.Grid",
+          "label": "Reference grid (not a collision object)",
+          "size": 4,
+          "divisions": 20
+        }
+      },
+      "topics": {
+        "/joint_path/scene": {
+          "visible": true
+        },
+        "/mcl/cartesian/goal/left": {
+          "visible": true
+        },
+        "/mcl/cartesian/goal/right": {
+          "visible": true
+        },
+        "/mcl/cartesian/execution/left": {
+          "visible": true
+        },
+        "/mcl/cartesian/execution/right": {
+          "visible": true
+        },
+        "/mcl/cartesian/reference/left": {
+          "visible": true
+        },
+        "/mcl/cartesian/reference/right": {
+          "visible": true
+        },
+        "/mcl/cartesian/ik/left": {
+          "visible": true,
+          "axisScale": 0.05
+        },
+        "/mcl/cartesian/ik/right": {
+          "visible": true,
+          "axisScale": 0.05
+        },
+        "/joint_path/held_tcp": {
+          "visible": true,
+          "axisScale": 0.15
+        }
+      },
+      "cameraState": {
+        "distance": 2.6,
+        "perspective": true,
+        "phi": 65,
+        "targetOffset": [
+          0.35,
+          0,
+          1
+        ],
+        "thetaOffset": -45,
+        "near": 0.01,
+        "far": 100
+      },
+      "followTf": "base_link",
+      "fixedFrame": "base_link",
+      "foxglovePanelTitle": "R1: orange obstacle | cyan plan | green executed | red invalid direct"
+    },
+    "RawMessages!status": {
+      "topicPath": "/joint_path/status",
+      "diffEnabled": false,
+      "diffMethod": "custom",
+      "showFullMessageForDiff": false,
+      "foxglovePanelTitle": "Plan diagnostics and native rejection reason"
+    },
+    "Plot!position": {
+      "foxglovePanelTitle": "TCP and target remaining error (m)",
+      "paths": [
+        {
+          "enabled": true,
+          "value": "/joint_path/status.remaining_position_error_m",
+          "label": "remaining_position_error_m",
+          "timestampMethod": "receiveTime",
+          "showLine": true,
+          "lineSize": 1,
+          "color": "#56B4E9"
+        },
+        {
+          "enabled": true,
+          "value": "/joint_path/status.tcp_xyz[0]",
+          "label": "tcp_xyz[0]",
+          "timestampMethod": "receiveTime",
+          "showLine": true,
+          "lineSize": 1,
+          "color": "#009E73"
+        },
+        {
+          "enabled": true,
+          "value": "/joint_path/status.tcp_xyz[1]",
+          "label": "tcp_xyz[1]",
+          "timestampMethod": "receiveTime",
+          "showLine": true,
+          "lineSize": 1,
+          "color": "#E69F00"
+        },
+        {
+          "enabled": true,
+          "value": "/joint_path/status.tcp_xyz[2]",
+          "label": "tcp_xyz[2]",
+          "timestampMethod": "receiveTime",
+          "showLine": true,
+          "lineSize": 1,
+          "color": "#CC79A7"
+        }
+      ],
+      "xAxisVal": "timestamp",
+      "showLegend": true,
+      "isSynced": true
+    },
+    "Plot!limits": {
+      "foxglovePanelTitle": "Analytic derivative maxima / limits",
+      "paths": [
+        {
+          "enabled": true,
+          "value": "/joint_path/status.velocity_limit_ratio",
+          "label": "velocity_limit_ratio",
+          "timestampMethod": "receiveTime",
+          "showLine": true,
+          "lineSize": 1,
+          "color": "#56B4E9"
+        },
+        {
+          "enabled": true,
+          "value": "/joint_path/status.acceleration_limit_ratio",
+          "label": "acceleration_limit_ratio",
+          "timestampMethod": "receiveTime",
+          "showLine": true,
+          "lineSize": 1,
+          "color": "#009E73"
+        },
+        {
+          "enabled": true,
+          "value": "/joint_path/status.jerk_limit_ratio",
+          "label": "jerk_limit_ratio",
+          "timestampMethod": "receiveTime",
+          "showLine": true,
+          "lineSize": 1,
+          "color": "#E69F00"
+        }
+      ],
+      "xAxisVal": "timestamp",
+      "showLegend": true,
+      "isSynced": true
+    },
+    "Plot!clearance": {
+      "foxglovePanelTitle": "Final path sampled clearance (m)",
+      "paths": [
+        {
+          "enabled": true,
+          "value": "/joint_path/status.final_path_sampled_distance_m",
+          "label": "final_path_sampled_distance_m",
+          "timestampMethod": "receiveTime",
+          "showLine": true,
+          "lineSize": 1,
+          "color": "#56B4E9"
+        }
+      ],
+      "xAxisVal": "timestamp",
+      "showLegend": true,
+      "isSynced": true
+    },
+    "Plot!velocity": {
+      "foxglovePanelTitle": "Nominal trajectory velocity (model indices; select other joints as needed)",
+      "paths": [
+        {
+          "enabled": true,
+          "value": "/joint_path/status.planned_velocity[6]",
+          "label": "planned_velocity[6]",
+          "timestampMethod": "receiveTime",
+          "showLine": true,
+          "lineSize": 1,
+          "color": "#56B4E9"
+        },
+        {
+          "enabled": true,
+          "value": "/joint_path/status.planned_velocity[7]",
+          "label": "planned_velocity[7]",
+          "timestampMethod": "receiveTime",
+          "showLine": true,
+          "lineSize": 1,
+          "color": "#009E73"
+        },
+        {
+          "enabled": true,
+          "value": "/joint_path/status.planned_velocity[8]",
+          "label": "planned_velocity[8]",
+          "timestampMethod": "receiveTime",
+          "showLine": true,
+          "lineSize": 1,
+          "color": "#E69F00"
+        }
+      ],
+      "xAxisVal": "timestamp",
+      "showLegend": true,
+      "isSynced": true
+    },
+    "Plot!acceleration": {
+      "foxglovePanelTitle": "Nominal trajectory acceleration (model indices; select other joints as needed)",
+      "paths": [
+        {
+          "enabled": true,
+          "value": "/joint_path/status.planned_acceleration[6]",
+          "label": "planned_acceleration[6]",
+          "timestampMethod": "receiveTime",
+          "showLine": true,
+          "lineSize": 1,
+          "color": "#56B4E9"
+        },
+        {
+          "enabled": true,
+          "value": "/joint_path/status.planned_acceleration[7]",
+          "label": "planned_acceleration[7]",
+          "timestampMethod": "receiveTime",
+          "showLine": true,
+          "lineSize": 1,
+          "color": "#009E73"
+        },
+        {
+          "enabled": true,
+          "value": "/joint_path/status.planned_acceleration[8]",
+          "label": "planned_acceleration[8]",
+          "timestampMethod": "receiveTime",
+          "showLine": true,
+          "lineSize": 1,
+          "color": "#E69F00"
+        }
+      ],
+      "xAxisVal": "timestamp",
+      "showLegend": true,
+      "isSynced": true
+    },
+    "Plot!jerk": {
+      "foxglovePanelTitle": "Nominal trajectory jerk (model indices; select other joints as needed)",
+      "paths": [
+        {
+          "enabled": true,
+          "value": "/joint_path/status.planned_jerk[6]",
+          "label": "planned_jerk[6]",
+          "timestampMethod": "receiveTime",
+          "showLine": true,
+          "lineSize": 1,
+          "color": "#56B4E9"
+        },
+        {
+          "enabled": true,
+          "value": "/joint_path/status.planned_jerk[7]",
+          "label": "planned_jerk[7]",
+          "timestampMethod": "receiveTime",
+          "showLine": true,
+          "lineSize": 1,
+          "color": "#009E73"
+        },
+        {
+          "enabled": true,
+          "value": "/joint_path/status.planned_jerk[8]",
+          "label": "planned_jerk[8]",
+          "timestampMethod": "receiveTime",
+          "showLine": true,
+          "lineSize": 1,
+          "color": "#E69F00"
+        }
+      ],
+      "xAxisVal": "timestamp",
+      "showLegend": true,
+      "isSynced": true
+    },
+    "Tab!metrics": {
+      "activeTabIdx": 0,
+      "tabs": [
+        {
+          "title": "Path quality",
+          "layout": "Plot!pathQuality"
+        },
+        {
+          "title": "Stage times",
+          "layout": "Plot!stages"
+        },
+        {
+          "title": "Stops",
+          "layout": "Plot!stops"
+        },
+        {
+          "title": "TCP",
+          "layout": "Plot!position"
+        },
+        {
+          "title": "Limits",
+          "layout": "Plot!limits"
+        },
+        {
+          "title": "Clearance",
+          "layout": "Plot!clearance"
+        },
+        {
+          "title": "Velocity",
+          "layout": "Plot!velocity"
+        },
+        {
+          "title": "Acceleration",
+          "layout": "Plot!acceleration"
+        },
+        {
+          "title": "Jerk",
+          "layout": "Plot!jerk"
+        },
+        {
+          "title": "Held TCP position [m]",
+          "layout": "Plot!held"
+        },
+        {
+          "title": "Held TCP orientation [rad]",
+          "layout": "Plot!heldRotation"
+        }
+      ]
+    },
+    "Plot!held": {
+      "paths": [
+        {
+          "value": "/joint_path/status.held_position_error_m",
+          "enabled": true,
+          "timestampMethod": "receiveTime"
+        },
+        {
+          "value": "/joint_path/status.hold_position_tolerance_m",
+          "enabled": true,
+          "timestampMethod": "receiveTime"
+        }
+      ],
+      "showLegend": true,
+      "legendDisplay": "floating",
+      "isSynced": true
+    },
+    "Plot!heldRotation": {
+      "paths": [
+        {
+          "value": "/joint_path/status.held_orientation_error_rad",
+          "enabled": true,
+          "timestampMethod": "receiveTime"
+        },
+        {
+          "value": "/joint_path/status.hold_orientation_tolerance_rad",
+          "enabled": true,
+          "timestampMethod": "receiveTime"
+        }
+      ],
+      "showLegend": true,
+      "legendDisplay": "floating",
+      "isSynced": true
+    },
+    "Plot!pathQuality": {
+      "foxglovePanelTitle": "Normalized joint path length (accepted does not mean optimal)",
+      "paths": [
+        {
+          "enabled": true,
+          "value": "/joint_path/status.path_length_before_simplification",
+          "label": "Before",
+          "timestampMethod": "receiveTime",
+          "showLine": true,
+          "lineSize": 1,
+          "color": "#E69F00"
+        },
+        {
+          "enabled": true,
+          "value": "/joint_path/status.path_length_after_simplification",
+          "label": "After",
+          "timestampMethod": "receiveTime",
+          "showLine": true,
+          "lineSize": 1,
+          "color": "#009E73"
+        }
+      ],
+      "xAxisVal": "timestamp",
+      "showLegend": true,
+      "isSynced": true
+    },
+    "Plot!stops": {
+      "foxglovePanelTitle": "Stops",
+      "paths": [
+        {
+          "enabled": true,
+          "value": "/joint_path/status.waypoints",
+          "label": "Original waypoints",
+          "timestampMethod": "receiveTime",
+          "showLine": true
+        },
+        {
+          "enabled": true,
+          "value": "/joint_path/status.through_waypoint_count",
+          "label": "Through",
+          "timestampMethod": "receiveTime",
+          "showLine": true
+        },
+        {
+          "enabled": true,
+          "value": "/joint_path/status.stop_waypoint_count",
+          "label": "Stops",
+          "timestampMethod": "receiveTime",
+          "showLine": true
+        }
+      ],
+      "xAxisVal": "timestamp",
+      "showLegend": true,
+      "isSynced": true
+    },
+    "Plot!stages": {
+      "foxglovePanelTitle": "Stage times",
+      "paths": [
+        {
+          "enabled": true,
+          "value": "/joint_path/status.search_ms",
+          "label": "Search",
+          "timestampMethod": "receiveTime",
+          "showLine": true
+        },
+        {
+          "enabled": true,
+          "value": "/joint_path/status.simplification_ms",
+          "label": "Shortening",
+          "timestampMethod": "receiveTime",
+          "showLine": true
+        },
+        {
+          "enabled": true,
+          "value": "/joint_path/status.verification_ms",
+          "label": "Core verification",
+          "timestampMethod": "receiveTime",
+          "showLine": true
+        },
+        {
+          "enabled": true,
+          "value": "/joint_path/status.timing_ms",
+          "label": "Timing",
+          "timestampMethod": "receiveTime",
+          "showLine": true
+        },
+        {
+          "enabled": true,
+          "value": "/joint_path/status.request_ms",
+          "label": "Whole request",
+          "timestampMethod": "receiveTime",
+          "showLine": true
+        }
+      ],
+      "xAxisVal": "timestamp",
+      "showLegend": true,
+      "isSynced": true
+    }
+  },
+  "globalVariables": {},
+  "userNodes": {},
+  "playbackConfig": {
+    "speed": 1
+  },
+  "layout": {
+    "direction": "column",
+    "first": {
+      "direction": "row",
+      "first": "3D!jointpath",
+      "second": "RawMessages!status",
+      "splitPercentage": 73
+    },
+    "second": "Tab!metrics",
+    "splitPercentage": 75
+  }
+}

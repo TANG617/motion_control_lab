@@ -1,0 +1,6 @@
+#pragma once
+#include <string>
+namespace motion_control_lab::joint_path_planning {
+inline const std::string kSceneSchema = R"mcl(@MCL_SCENE_SCHEMA@)mcl";
+inline const std::string kStatusSchema = R"mcl(@MCL_STATUS_SCHEMA@)mcl";
+}
