@@ -11,6 +11,12 @@
 
 namespace motion_control_lab::hierarchical_kinematics_step {
 
+using ArmPoses = std::array<Eigen::Isometry3d, 2>;
+Eigen::Isometry3d referenceFromBase(const RobotOptions &robot,
+                                   const Eigen::Isometry3d &base_from_torso);
+ArmPoses referenceWrists(const RobotOptions &robot, const ArmPoses &base_ee,
+                         const Eigen::Isometry3d &base_from_torso);
+
 struct ElbowCircle {
   Eigen::Vector3d center{Eigen::Vector3d::Zero()};
   Eigen::Vector3d u{Eigen::Vector3d::Zero()};
@@ -40,21 +46,28 @@ struct ElbowGeometry {
 struct ElbowWindow {
   std::uint64_t generation{2}, sequence{0};
   double sample_time_s{0};
-  std::array<std::array<double, 16>, 30> poses{};
+  std::array<std::array<std::array<double, 16>, 2>, 30> poses{};
 };
 struct ElbowPrediction {
   std::uint64_t generation{2}, sequence{0};
-  double sample_time_s{0}, cosine{1}, sine{0}, inference_ms{0};
+  double sample_time_s{0}, inference_ms{0};
+  std::array<std::array<double, 2>, 2> arm_angles{};
+};
+struct ElbowArmConsumption {
+  bool enabled{false};
+  std::array<double, 3> target{}, raw{}, executed{};
+  double raw_position_error_m{}, raw_orientation_error_rad{};
+  double executed_position_error_m{}, executed_orientation_error_rad{};
 };
 struct ElbowConsumption {
   bool mirror_tcp_input{false};
   double time_s{0};
   std::uint64_t target_revision{0}, source_index{0};
   std::array<double, 7> left_goal{}, right_goal{};
+  std::array<std::array<double, 7>, 2> ee_reference{};
+  std::array<double, 16> base_from_torso{};
   ElbowPrediction prediction;
-  std::array<double, 3> target{}, raw{}, executed{};
-  double raw_position_error_m{}, raw_orientation_error_rad{};
-  double executed_position_error_m{}, executed_orientation_error_rad{};
+  std::array<ElbowArmConsumption, 2> arms{};
   double selected_shared_hard_violation{};
   double hard_violation{}, primary_position_drift{},
       primary_orientation_drift{}, scale_drift{};
@@ -69,16 +82,19 @@ public:
   ElbowReference(const ElbowReference &) = delete;
   ElbowReference &operator=(const ElbowReference &) = delete;
   // All file access and native predictor initialization finish before periodic workers start.
-  void initialize(const Eigen::Isometry3d &initial_ee,
+  void initialize(const ArmPoses &initial_wrists,
                   std::uint64_t generation = 2);
   ElbowPrediction consume(double active_time_s);
-  void sampleAccepted(double active_time_s, const Eigen::Isometry3d &ee);
+  void sampleAccepted(double active_time_s, const ArmPoses &wrists);
   void record(const ElbowConsumption &value);
   void finish();
   std::string failureDetail() const {
     return failed_.load(std::memory_order_acquire) ? error_.data() : "";
   }
+  const std::string &modelManifest() const { return manifest_json_; }
   double recordedEndTime() const { return recorded_.back().time_s; }
+  std::size_t recordedRowCount() const { return recorded_.size(); }
+  std::size_t consumedRecordedRowCount() const { return recorded_index_ + 1; }
   const ElbowConsumption &recordedConsumption() const {
     return recorded_[recorded_index_];
   }
@@ -92,6 +108,7 @@ private:
   void flushRecords();
   void checkError() const;
   ElbowReferenceOptions options_;
+  std::string manifest_json_;
   double sample_period_s_;
   double next_sample_s_{};
   ElbowWindow window_;

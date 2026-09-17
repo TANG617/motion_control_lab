@@ -35,16 +35,14 @@ ElbowCircle circle(const ElbowGeometry &g, const Eigen::Vector3d &s,
   const Eigen::Vector3d n = (w - s) / distance;
   Eigen::Vector3d axis(-1, 0, 0);
   Eigen::Vector3d u = axis - axis.dot(n) * n;
-  if (u.norm() < 1e-6) {
-    axis = Eigen::Vector3d(0, 1, 0);
-    u = axis - axis.dot(n) * n;
-  }
+  if (u.norm() < 1e-3)
+    throw std::runtime_error("elbow geometry: singular training reference axis");
   u.normalize();
   const double along = (g.upper_length * g.upper_length -
                         g.lower_length * g.lower_length + distance * distance) /
                        (2 * distance);
   const double r2 = g.upper_length * g.upper_length - along * along;
-  if (!(r2 > 1e-18))
+  if (!(r2 >= 1e-6))
     throw std::runtime_error("elbow geometry: zero circle radius");
   return {s + along * n, u, n.cross(u), std::sqrt(r2)};
 }
@@ -70,22 +68,23 @@ std::string encode(const Json::Value &value) {
   return Json::writeString(b, value) + "\n";
 }
 ElbowPrediction prediction(const Json::Value &j) {
-  for (auto key : {"generation", "sequence", "sample_time_s", "cos", "sin",
-                   "inference_ms"})
-    if (!j.isMember(key) || !j[key].isNumeric())
-      throw std::runtime_error(std::string("elbow response missing numeric ") +
-                               key);
-  ElbowPrediction p{
-      j["generation"].asUInt64(),    j["sequence"].asUInt64(),
-      j["sample_time_s"].asDouble(), j["cos"].asDouble(),
-      j["sin"].asDouble(),           j["inference_ms"].asDouble()};
-  const double norm = std::hypot(p.cosine, p.sine);
-  if (!std::isfinite(norm) || norm < 1e-9 || !std::isfinite(p.sample_time_s) ||
-      !std::isfinite(p.inference_ms) || p.inference_ms < 0)
-    throw std::runtime_error(
-        "elbow response contains an invalid arm angle or timing");
-  p.cosine /= norm;
-  p.sine /= norm;
+  if (j["schema_version"] != "dual-arm-elbow-consumption.v1")
+    throw std::runtime_error("recorded requires dual-arm-elbow-consumption.v1; legacy single-arm records are unsupported");
+  ElbowPrediction p;
+  p.generation = j["generation"].asUInt64();
+  p.sequence = j["sequence"].asUInt64();
+  p.sample_time_s = j["sample_time_s"].asDouble();
+  p.inference_ms = j["inference_ms"].asDouble();
+  if (!std::isfinite(p.sample_time_s) || !std::isfinite(p.inference_ms) || p.inference_ms < 0)
+    throw std::runtime_error("recorded prediction contains invalid timing");
+  for (int a = 0; a < 2; ++a) {
+    const auto &angle = j["arm_angles"][a];
+    if (angle.size() != 2) throw std::runtime_error("recorded requires both arm angles");
+    p.arm_angles[a] = {angle[0].asDouble(), angle[1].asDouble()};
+    const double norm = std::hypot(p.arm_angles[a][0], p.arm_angles[a][1]);
+    if (!std::isfinite(norm) || std::abs(norm - 1) > 1e-4)
+      throw std::runtime_error("recorded arm angle must be finite and unit length");
+  }
   return p;
 }
 Json::Value json(const ElbowConsumption &v) {
@@ -94,8 +93,22 @@ Json::Value json(const ElbowConsumption &v) {
   j["generation"] = Json::UInt64(p.generation);
   j["sequence"] = Json::UInt64(p.sequence);
   j["sample_time_s"] = p.sample_time_s;
-  j["cos"] = p.cosine;
-  j["sin"] = p.sine;
+  j["schema_version"] = "dual-arm-elbow-consumption.v1";
+  for (int a = 0; a < 2; ++a) {
+    for (double x : p.arm_angles[a]) j["arm_angles"][a].append(x);
+    for (double x : v.ee_reference[a]) j["ee_reference"][a].append(x);
+    const auto &arm = v.arms[a];
+    auto &out = j["arms"][a];
+    out["enabled"] = arm.enabled;
+    for (double x : arm.target) out["target_elbow"].append(x);
+    for (double x : arm.raw) out["raw_elbow"].append(x);
+    for (double x : arm.executed) out["executed_elbow"].append(x);
+    out["raw_position_error_m"] = arm.raw_position_error_m;
+    out["raw_orientation_error_rad"] = arm.raw_orientation_error_rad;
+    out["executed_position_error_m"] = arm.executed_position_error_m;
+    out["executed_orientation_error_rad"] = arm.executed_orientation_error_rad;
+  }
+  for (double x : v.base_from_torso) j["base_from_torso"].append(x);
   j["inference_ms"] = p.inference_ms;
   j["target_revision"] = Json::UInt64(v.target_revision);
   j["mirror_tcp_input"] = v.mirror_tcp_input;
@@ -106,16 +119,7 @@ Json::Value json(const ElbowConsumption &v) {
     j["right_goal"].append(x);
   j["consume_time_s"] = v.time_s;
   j["age_ms"] = (v.time_s - p.sample_time_s) * 1000;
-  for (int i = 0; i < 3; ++i) {
-    j["target_elbow"].append(v.target[i]);
-    j["raw_elbow"].append(v.raw[i]);
-    j["executed_elbow"].append(v.executed[i]);
-  }
 #define FIELD(name) j[#name] = v.name
-  FIELD(raw_position_error_m);
-  FIELD(raw_orientation_error_rad);
-  FIELD(executed_position_error_m);
-  FIELD(executed_orientation_error_rad);
   FIELD(hard_violation);
   FIELD(selected_shared_hard_violation);
   FIELD(primary_position_drift);
@@ -128,6 +132,23 @@ Json::Value json(const ElbowConsumption &v) {
   return j;
 }
 } // namespace
+Eigen::Isometry3d referenceFromBase(const RobotOptions &robot,
+                                   const Eigen::Isometry3d &base_from_torso) {
+  Eigen::Isometry3d axes = Eigen::Isometry3d::Identity();
+  axes.linear() = robot.reference_from_torso_axes;
+  return axes * base_from_torso.inverse();
+}
+ArmPoses referenceWrists(const RobotOptions &robot, const ArmPoses &base_ee,
+                         const Eigen::Isometry3d &base_from_torso) {
+  ArmPoses result;
+  const auto ref = referenceFromBase(robot, base_from_torso);
+  for (int a = 0; a < 2; ++a) {
+    result[a] = Eigen::Isometry3d::Identity();
+    result[a].translation() = ref * (base_ee[a] * robot.wrist_in_ee);
+    result[a].linear() = ref.linear() * base_ee[a].linear() * robot.ee_to_model_wrist_axes[a];
+  }
+  return result;
+}
 ElbowGeometry ElbowGeometry::fromFk(const Eigen::Isometry3d &s,
                                     const Eigen::Isometry3d &e,
                                     const Eigen::Isometry3d &w,
@@ -135,7 +156,8 @@ ElbowGeometry ElbowGeometry::fromFk(const Eigen::Isometry3d &s,
   ElbowGeometry g{(e.translation() - s.translation()).norm(),
                   (w.translation() - e.translation()).norm(),
                   ee.inverse() * w.translation()};
-  (void)circle(g, s.translation(), w.translation());
+  // FK extracts fixed lengths/offsets for both arms. Only an enabled task
+  // needs a non-degenerate circle; target()/referenceCircle() validate it.
   return g;
 }
 ElbowCircle ElbowGeometry::referenceCircle(const Eigen::Vector3d &s,
@@ -175,14 +197,14 @@ ElbowReference::~ElbowReference() {
   if (worker_.joinable())
     worker_.join();
 }
-void ElbowReference::initialize(const Eigen::Isometry3d &ee,
+void ElbowReference::initialize(const ArmPoses &wrists,
                                 std::uint64_t generation) {
   if (worker_.joinable())
     throw std::runtime_error("ElbowReference initialization requires a new run instance");
   window_.generation = generation;
   window_.sequence = 0;
   window_.sample_time_s = 0;
-  window_.poses.fill(matrix(ee));
+  window_.poses.fill({matrix(wrists[0]), matrix(wrists[1])});
   next_sample_s_ = sample_period_s_;
   if (!options_.record_path.empty() && !options_.recorded_path.empty() &&
       std::filesystem::weakly_canonical(options_.record_path) ==
@@ -198,6 +220,9 @@ void ElbowReference::initialize(const Eigen::Isometry3d &ee,
     stream_.open(options_.record_path);
   }
   if (options_.source == "recorded") {
+    std::ifstream manifest_file(options_.recorded_path + ".model.json");
+    if (!manifest_file) throw std::runtime_error("recorded requires its .model.json provenance");
+    manifest_json_ = std::string(std::istreambuf_iterator<char>(manifest_file), {});
     std::ifstream file(options_.recorded_path);
     if (!file)
       throw std::runtime_error("cannot read elbow references: " +
@@ -209,6 +234,13 @@ void ElbowReference::initialize(const Eigen::Isometry3d &ee,
       ElbowConsumption v;
       v.mirror_tcp_input = j.get("mirror_tcp_input", false).asBool();
       v.prediction = prediction(j);
+      for (int a = 0; a < 2; ++a) {
+        v.arms[a].enabled = j["arms"][a]["enabled"].asBool();
+        if (v.arms[a].enabled != options_.enabled[a])
+          throw std::runtime_error("recorded enabled sides differ from profile");
+        for (int i=0;i<7;++i) v.ee_reference[a][i]=j["ee_reference"][a][i].asDouble();
+      }
+      for (int i=0;i<16;++i) v.base_from_torso[i]=j["base_from_torso"][i].asDouble();
       if (!j["consume_time_s"].isNumeric())
         throw std::runtime_error(
             "recorded elbow reference lacks consume_time_s");
@@ -253,6 +285,7 @@ void ElbowReference::initialize(const Eigen::Isometry3d &ee,
     auto status = harp_->predictor.initialize({options_.harp_model_directory, options_.harp_device});
     if (!status.ok()) throw std::runtime_error(status.message);
     const auto &manifest = harp_->predictor.manifest();
+    manifest_json_ = manifest.json;
     if (manifest.sample_hz != options_.sample_rate_hz)
       throw std::runtime_error("HARP manifest sampling rate does not match application");
     if (!options_.record_path.empty()) {
@@ -267,6 +300,23 @@ void ElbowReference::initialize(const Eigen::Isometry3d &ee,
 #endif
   } else {
     throw std::runtime_error("ElbowReference requires recorded or harp; manual is owned by the control loop");
+  }
+  const auto contract=parse(manifest_json_)["contract"];
+  const auto profile=contract["profile"];
+  if (contract["schema_version"] != "dual-arm-transformer.v1" || profile["name"] != "r1" ||
+      profile["frame"] != "origin at body_link4; axes = diag(-1,-1,+1) times URDF body_link4 axes; x forward, y left, z up")
+    throw std::runtime_error("MCL R1 adapter requires the R1 reference torso contract");
+  for (int r=0;r<3;++r) for(int c=0;c<3;++c) {
+    const double identity=r==c?1.:0.;
+    if(profile["torso_rotation"][r][c].asDouble()!=identity ||
+       profile["wrist_rotations"][0][r][c].asDouble()!=identity ||
+       profile["wrist_rotations"][1][r][c].asDouble()!=identity)
+      throw std::runtime_error("MCL R1 calibration requires unmodified SMPL-H wrist axes");
+  }
+  if (options_.source == "recorded" && !options_.record_path.empty()) {
+    std::ofstream provenance(options_.record_path + ".model.json");
+    provenance.exceptions(std::ios::badbit | std::ios::failbit);
+    provenance << manifest_json_ << '\n';
   }
   auto ready = worker_ready_.get_future();
   worker_ = std::thread([this] { work(); });
@@ -297,7 +347,7 @@ ElbowPrediction ElbowReference::consume(double time) {
     throw std::runtime_error("elbow reference is from the future");
   return latest_;
 }
-void ElbowReference::sampleAccepted(double time, const Eigen::Isometry3d &ee) {
+void ElbowReference::sampleAccepted(double time, const ArmPoses &wrists) {
   if (options_.source != "harp" || time + 1e-9 < next_sample_s_)
     return;
   if (time > next_sample_s_ + 1e-7)
@@ -305,7 +355,7 @@ void ElbowReference::sampleAccepted(double time, const Eigen::Isometry3d &ee) {
         "elbow reference sampling missed an active-time sample");
   std::move(window_.poses.begin() + 1, window_.poses.end(),
             window_.poses.begin());
-  window_.poses.back() = matrix(ee);
+  window_.poses.back() = {matrix(wrists[0]), matrix(wrists[1])};
   window_.sample_time_s = next_sample_s_;
   ++window_.sequence;
   next_sample_s_ = (window_.sequence + 1) * sample_period_s_;
@@ -332,20 +382,24 @@ void ElbowReference::flushRecords() {
 }
 ElbowPrediction ElbowReference::inferHarp(const ElbowWindow &w) {
 #ifdef MCL_HAS_HARP
-  motion_control::core::posture_reference::PoseWindow input;
+  motion_control::core::posture_reference::DualArmPoseWindow input;
   constexpr std::array<int,9> indices{3,7,11,0,1,4,5,8,9};
   for (std::size_t t=0; t<30; ++t)
-    for (std::size_t i=0; i<9; ++i)
-      input.values[t*9+i] = static_cast<float>(w.poses[t][indices[i]]);
-  motion_control::core::posture_reference::PosturePrediction output;
+    for (std::size_t a=0; a<2; ++a)
+      for (std::size_t i=0; i<9; ++i)
+        input.values[t*18+a*9+i] = static_cast<float>(w.poses[t][a][indices[i]]);
+  motion_control::core::posture_reference::DualArmPosturePrediction output;
   auto status = harp_->predictor.predict(input, output);
   if (!status.ok()) throw std::runtime_error(status.message);
-  ElbowPrediction result{w.generation,w.sequence,w.sample_time_s,
-    output.arm_angle[0],output.arm_angle[1],output.inference_ms};
+  ElbowPrediction result;
+  result.generation=w.generation; result.sequence=w.sequence;
+  result.sample_time_s=w.sample_time_s; result.inference_ms=output.inference_ms;
+  for (int a=0;a<2;++a) result.arm_angles[a]={output.arm_angles[a][0],output.arm_angles[a][1]};
   if (harp_->windows.is_open()) {
     Json::Value j;
     j["generation"]=Json::UInt64(w.generation); j["sequence"]=Json::UInt64(w.sequence);
-    j["sample_time_s"]=w.sample_time_s; j["cos"]=result.cosine; j["sin"]=result.sine;
+    j["schema_version"]="dual-arm-elbow-window.v1"; j["sample_time_s"]=w.sample_time_s;
+    for(int a=0;a<2;++a) for(double x:result.arm_angles[a]) j["arm_angles"][a].append(x);
     j["inference_ms"]=result.inference_ms;
     for (float x:input.values) j["window"].append(x);
     harp_->windows << encode(j);

@@ -270,11 +270,12 @@ if(MCL_BUILD_HARP)
     add_executable(test_hierarchical_kinematics_step_harp_lifecycle tests/harp_lifecycle.cpp)
     target_link_libraries(test_hierarchical_kinematics_step_harp_lifecycle
       PRIVATE motion_control_lab::hierarchical_kinematics_step_support)
-    set(MCL_HARP_TEST_MODEL "" CACHE PATH "Optional CUDA model for native HARP lifecycle acceptance")
+    set(MCL_HARP_TEST_MODEL "" CACHE PATH "Optional model for native HARP lifecycle acceptance")
+    set(MCL_HARP_TEST_DEVICE "cpu" CACHE STRING "Native HARP lifecycle device")
     if(MCL_HARP_TEST_MODEL)
       add_test(NAME apps.mcl_hierarchical_kinematics_step_harp_lifecycle
         COMMAND test_hierarchical_kinematics_step_harp_lifecycle "${MCL_HARP_TEST_MODEL}"
-        "${CMAKE_CURRENT_BINARY_DIR}/harp_lifecycle.jsonl")
+        "${CMAKE_CURRENT_BINARY_DIR}/harp_lifecycle.jsonl" "${MCL_HARP_TEST_DEVICE}")
     endif()
   endif()
 endif()
@@ -346,3 +347,5 @@ if(BUILD_TESTING)
         )
       endif()
 endif()
+
+install(DIRECTORY config/ DESTINATION "${CMAKE_INSTALL_LIBEXECDIR}/motion-control-lab/mcl_hierarchical_kinematics_step/config")

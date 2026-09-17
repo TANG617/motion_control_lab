@@ -12,12 +12,13 @@ from _launcher.command import run_recipe  # noqa: E402
 from _launcher.recipe import Recipe  # noqa: E402
 
 _RECIPE = Recipe(
-    profile='planned',
-    name='recorded_elbow_csv_batch',
+    profile='posture-reference-task',
+    name='harp_csv_realtime',
     source='csv',
     options={
         'hqp-layout': 'pose-primary',
-        'elbow-reference': 'recorded',
+        'elbow-reference': 'harp',
+        'harp-device': 'cuda',
         'inactive-joints': 'head_yaw_joint,head_pitch_joint,torso_yaw_joint,torso_pitch_joint,knee_pitch_joint,ankle_pitch_joint',
         'urdf': '/workspace/models/Psi_R1_visual_collision.urdf',
         'input-format': 'csv',
@@ -25,7 +26,7 @@ _RECIPE = Recipe(
         'right-stream': 'right',
         'timestamp-source': 'csv_timestamp',
         'target-period-ms': 10,
-        'execution-mode': 'batch',
+        'execution-mode': 'realtime',
         'red-rate': 1000,
         'yellow-rate': 100,
         'deadline-policy': 'monitor',
@@ -34,7 +35,7 @@ _RECIPE = Recipe(
         'replay-elbow-teleop': False,
         'viz': 'none',
         'mcap': None,
-        'output-root': str(Path(__file__).resolve().parents[5] / 'runs' / 'hierarchical_kinematics_step'),
+        'output-root': '/workspace/runs/mcl_posture_reference',
     },
 )
 

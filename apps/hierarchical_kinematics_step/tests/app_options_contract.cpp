@@ -32,6 +32,25 @@ bool rejects(const std::function<void()> &call) {
 } // namespace
 
 int main() {
+  std::string comparison;
+  for(const auto profile : {app::Profile::PostureReferenceTask,app::Profile::PostureReferenceTaskLeft,app::Profile::PostureReferenceTaskRight}) {
+    auto o=app::profileDefaults(profile);
+    const auto caps=app::profileCapabilities(o);
+    if(!caps.cartesian_planning || !caps.nullspace || caps.joint_otg || caps.admittance ||
+       o.interactive.red_rate_hz!=1000 || o.interactive.yellow_rate_hz!=100 ||
+       o.interactive.solver.hqp_layout!="pose-primary" ||
+       o.interactive.elbow_reference.enabled[0]!=(profile!=app::Profile::PostureReferenceTaskRight) ||
+       o.interactive.elbow_reference.enabled[1]!=(profile!=app::Profile::PostureReferenceTaskLeft))
+      throw std::runtime_error("posture profile/task matrix");
+    if(app::parseProfile(app::profileName(profile))!=profile) throw std::runtime_error("profile name roundtrip");
+    o.profile=app::Profile::PostureReferenceTask;
+    o.interactive.robot.profile_provenance=app::profileName(o.profile);
+    o.interactive.elbow_reference.enabled={true,true};
+    const auto normalized=app::resolvedOptionsJson(o);
+    if(!comparison.empty() && comparison!=normalized) throw std::runtime_error("comparison profiles differ beyond enabled sides");
+    comparison=normalized;
+  }
+
   const auto mirrored = parse({"app", "--profile", "planned", "teleop",
       "--hqp-layout", "pose-primary", "--side", "right", "--mirror-tcp-input"});
   if (!mirrored.interactive.mirror_tcp_input || mirrored.interactive.tui.side != "left" ||

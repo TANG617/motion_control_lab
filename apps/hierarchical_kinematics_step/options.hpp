@@ -18,6 +18,9 @@
 namespace motion_control_lab::hierarchical_kinematics_step {
 
 enum class Profile {
+  PostureReferenceTask,
+  PostureReferenceTaskLeft,
+  PostureReferenceTaskRight,
   Hierarchical,
   Planned,
   PlannedOtg,
@@ -27,6 +30,7 @@ enum class Profile {
 
 const char *profileName(Profile profile);
 Profile parseProfile(const std::string &value);
+bool isPostureReferenceProfile(Profile profile);
 
 struct ProfileCapabilities {
   bool cartesian_planning{false};
@@ -91,6 +95,7 @@ inline const char *jointPlanningAlgorithmName(JointPlanningAlgorithm value) {
 
 struct ElbowReferenceOptions {
   std::string source{"manual"};
+  std::array<bool, 2> enabled{true, true};
   std::string harp_model_directory;
   std::string harp_device{"cuda"};
   std::string recorded_path;
@@ -208,6 +213,14 @@ struct RobotOptions {
   std::string base_frame{"base_link"};
   std::string left_end_effector_frame{"left_arm_ee_link"};
   std::string right_end_effector_frame{"right_arm_ee_link"};
+  std::string torso_frame{"body_link4"};
+  std::string right_shoulder_frame{"right_arm_link2"};
+  std::string right_wrist_frame{"right_arm_link5"};
+  Eigen::Matrix3d reference_from_torso_axes{Eigen::Vector3d(-1, -1, 1).asDiagonal()};
+  Eigen::Vector3d wrist_in_ee{0, 0, -0.097};
+  // Generated from R1 zero pose and SMPL-H neutral zero-beta rest joints.
+  std::array<Eigen::Matrix3d, 2> ee_to_model_wrist_axes;
+  RobotOptions();
   std::string left_shoulder_frame{"left_arm_link2"};
   std::string left_wrist_frame{"left_arm_link5"};
   std::string left_link4_frame{"left_arm_link4"};

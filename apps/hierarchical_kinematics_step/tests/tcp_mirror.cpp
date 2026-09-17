@@ -47,7 +47,7 @@ int main() {
     require(!source.mirrorTcpInput(), "mirror must default off");
     key('c');
     require(source.link4Targets().right_enabled, "right manual target setup");
-    source.setLeftElbowOwned(true);
+    source.setElbowOwned({true,false});
     const auto before = goals();
     source.configureTcpMirror(lo, ro, true);
     for (const std::string name : {"manual", "harp", "recorded"}) {
@@ -56,6 +56,11 @@ int main() {
       require(source.headerContext().find("L " + label + " / R Yellow") != std::string::npos, "actual configured reference label");
     }
     source.setElbowReferenceSource("harp");
+    source.setElbowOwned({true,true});
+    require(source.headerContext().find("L HARP / R HARP")!=std::string::npos,"bilateral ownership label");
+    source.setElbowOwned({false,true});
+    require(source.headerContext().find("L Yellow / R HARP")!=std::string::npos,"right-only ownership label");
+    source.setElbowOwned({true,false});
 
     unchanged(before);
     require(source.mirrorTcpInput() && !source.link4Targets().right_enabled &&

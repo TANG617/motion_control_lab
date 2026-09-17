@@ -12,7 +12,7 @@ from _launcher.command import run_recipe  # noqa: E402
 from _launcher.recipe import Recipe  # noqa: E402
 
 _RECIPE = Recipe(
-    profile='planned',
+    profile='posture-reference-task',
     name='harp_mcap_interactive',
     source='mcap',
     options={
@@ -34,7 +34,7 @@ _RECIPE = Recipe(
         'execution-mode': 'realtime',
         'playback-rate': 1,
         'red-rate': 1000,
-        'yellow-rate': 500,
+        'yellow-rate': 100,
         'deadline-policy': 'monitor',
         'ui': 'tui',
         'terminal-input': True,
@@ -44,14 +44,14 @@ _RECIPE = Recipe(
         'host': '127.0.0.1',
         'port': 8775,
         'mcap': None,
-        'output-root': '/workspace/runs/mcl_hierarchical_kinematics_step',
+        'output-root': '/workspace/runs/mcl_posture_reference',
         'start-paused': True,
-        'max-linear-velocity-mps': 3.0,
-        'max-linear-acceleration-mps2': 20.0,
-        'max-linear-jerk-mps3': 400.0,
+        'max-linear-velocity-mps': 0.9,
+        'max-linear-acceleration-mps2': 5.0,
+        'max-linear-jerk-mps3': 80.0,
         'max-angular-velocity-rps': 3.0,
         'max-angular-acceleration-rps2': 20.0,
-        'max-angular-jerk-rps3': 300.0,
+        'max-angular-jerk-rps3': 200.0,
     },
 )
 

@@ -3,6 +3,7 @@
 #include <Eigen/Geometry>
 
 #include <cstdint>
+#include <array>
 #include <optional>
 #include <string>
 #include <vector>
@@ -84,7 +85,7 @@ public:
   void setExecutedLink4Positions(const Eigen::Vector3d &left,
                                  const Eigen::Vector3d &right);
   void setElbowReferenceSource(std::string source) { elbow_reference_source_ = std::move(source); }
-  void setLeftElbowOwned(bool owned) noexcept { left_elbow_owned_ = owned; }
+  void setElbowOwned(std::array<bool,2> owned) noexcept { elbow_owned_ = owned; }
   void configureTcpMirror(const Pose &left_tcp_offset, const Pose &right_tcp_offset,
                           bool enabled);
   bool mirrorTcpInput() const noexcept { return mirror_tcp_input_; }
@@ -121,7 +122,7 @@ private:
   Eigen::Vector3d executed_left_link4_{Eigen::Vector3d::Zero()};
   Eigen::Vector3d executed_right_link4_{Eigen::Vector3d::Zero()};
   ControlPoint control_point_{ControlPoint::Tcp};
-  bool left_elbow_owned_{false};
+  std::array<bool,2> elbow_owned_{false,false};
   std::string elbow_reference_source_{"manual"};
   bool mirror_available_{false};
   bool mirror_tcp_input_{false};
@@ -143,6 +144,7 @@ struct NullspaceTuiDebug {
   bool pose_primary{false};
   std::string elbow_source{"manual"};
   double reference_age_ms{0}, inference_ms{0};
+  std::array<double,2> predicted_angles_rad{};
   ArmSide selected_side{ArmSide::Left};
   ControlPoint control_point{ControlPoint::Tcp};
   std::optional<ArmSide> held_link4_side;

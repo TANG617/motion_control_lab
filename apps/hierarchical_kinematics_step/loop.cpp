@@ -2358,6 +2358,9 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
   if (learned_elbow) {
     initial_fk_request.frame_names.push_back(robot.left_shoulder_frame);
     initial_fk_request.frame_names.push_back(robot.left_wrist_frame);
+    initial_fk_request.frame_names.push_back(robot.right_shoulder_frame);
+    initial_fk_request.frame_names.push_back(robot.right_wrist_frame);
+    initial_fk_request.frame_names.push_back(robot.torso_frame);
   }
   initial_fk_request.reference_frame_name = robot.base_frame;
   mcc::ForwardKinematicsSolution initial_fk;
@@ -2390,28 +2393,71 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
   std::atomic_bool recorded_elbow_complete{false};
   std::atomic<std::uint64_t> recorded_source_index{0};
   std::unique_ptr<ElbowReference> elbow_reference;
-  ElbowGeometry elbow_geometry;
+  std::array<ElbowGeometry, 2> elbow_geometry;
+  const std::array<std::string,2> shoulder_frames{robot.left_shoulder_frame, robot.right_shoulder_frame};
+  const std::array<std::string,2> wrist_frames{robot.left_wrist_frame, robot.right_wrist_frame};
+  const std::array<std::string,2> elbow_frames{robot.left_link4_frame, robot.right_link4_frame};
   if (learned_elbow) {
-    elbow_geometry = ElbowGeometry::fromFk(
-        requirePose(initial_fk.poses, robot.left_shoulder_frame).pose,
-        requirePose(initial_fk.poses, robot.left_link4_frame).pose,
-        requirePose(initial_fk.poses, robot.left_wrist_frame).pose, warmup_target.left);
+    const auto torso = requirePose(initial_fk.poses, robot.torso_frame).pose;
+    const auto ref = referenceFromBase(robot, torso);
+    const ArmPoses ee{warmup_target.left, warmup_target.right};
     elbow_reference = std::make_unique<ElbowReference>(options.elbow_reference, options.red_rate_hz);
-    elbow_reference->initialize(warmup_target.left);
+    elbow_reference->initialize(referenceWrists(robot, ee, torso));
+    if (!options.elbow_reference.record_path.empty()) {
+      Json::Value calibration;
+      calibration["schema_version"] = "r1-zero_smplh-neutral-zero-beta.v1";
+      calibration["source"] = "hierarchical_kinematics_step/config/r1_wrist_calibration.json";
+      calibration["method"] = "C_side = R_robot_EE_zero.T * R_human_wrist_zero; SMPL-H neutral beta=0; no startup calibration";
+      calibration["torso_frame"] = robot.torso_frame;
+      for (int r=0;r<3;++r) {
+        calibration["wrist_in_ee"].append(robot.wrist_in_ee[r]);
+        for (int c=0;c<3;++c) {
+          calibration["reference_from_torso_axes"][r].append(robot.reference_from_torso_axes(r,c));
+          for (int a=0;a<2;++a)
+            calibration["ee_to_model_wrist_axes"][a][r].append(robot.ee_to_model_wrist_axes[a](r,c));
+        }
+      }
+      std::ofstream provenance;
+      provenance.exceptions(std::ios::badbit | std::ios::failbit);
+      provenance.open(options.elbow_reference.record_path + ".calibration.json");
+      provenance << calibration << '\n';
+    }
     const auto prediction = elbow_reference->consume(0);
+    Json::Value model_manifest;
+    std::istringstream manifest_input(elbow_reference->modelManifest());
+    manifest_input >> model_manifest;
+    const auto &morphology=model_manifest["contract"]["profile"];
     if (recorded_elbow)
       warmup_target.mirror_tcp_input = elbow_reference->recordedConsumption().mirror_tcp_input;
-    initial_link4_target.left = elbow_geometry.target(
-        requirePose(initial_fk.poses, robot.left_shoulder_frame).pose.translation(),
-        warmup_target.left, prediction.cosine, prediction.sine);
-    initial_link4_target.left_enabled = true;
-    ElbowConsumption initial_record;initial_record.prediction=prediction;
+    ElbowConsumption initial_record;
+    initial_record.prediction=prediction;
     initial_record.mirror_tcp_input = warmup_target.mirror_tcp_input;
-    initial_record.left_goal=recordGoal(warmup_target.left);initial_record.right_goal=recordGoal(warmup_target.right);
-    for(int axis=0;axis<3;++axis) {
-      initial_record.target[axis]=initial_link4_target.left[axis];
-      initial_record.raw[axis]=requirePose(initial_fk.poses,robot.left_link4_frame).pose.translation()[axis];
-      initial_record.executed[axis]=initial_record.raw[axis];
+    initial_record.left_goal=recordGoal(warmup_target.left);
+    initial_record.right_goal=recordGoal(warmup_target.right);
+    for(int r=0;r<4;++r) for(int c=0;c<4;++c) initial_record.base_from_torso[r*4+c]=torso.matrix()(r,c);
+    for(int a=0;a<2;++a) {
+      const auto shoulder=ref*requirePose(initial_fk.poses,shoulder_frames[a]).pose;
+      const auto elbow=ref*requirePose(initial_fk.poses,elbow_frames[a]).pose;
+      const auto wrist=ref*requirePose(initial_fk.poses,wrist_frames[a]).pose;
+      elbow_geometry[a] = ElbowGeometry::fromFk(shoulder,elbow,wrist,ref*ee[a]);
+      Eigen::Vector3d model_shoulder;
+      for(int i=0;i<3;++i) model_shoulder[i]=morphology["shoulders_m"][a][i].asDouble();
+      if ((shoulder.translation()-model_shoulder).norm()>1e-8 ||
+          std::abs(elbow_geometry[a].upper_length-morphology["lengths_m"][a][0].asDouble())>1e-8 ||
+          std::abs(elbow_geometry[a].lower_length-morphology["lengths_m"][a][1].asDouble())>1e-8 ||
+          (elbow_geometry[a].wrist_in_ee-robot.wrist_in_ee).norm()>1e-8)
+        throw std::runtime_error("R1 FK geometry differs from the deployment reference morphology");
+      const bool enabled=options.elbow_reference.enabled[a];
+      auto &target=a==0?initial_link4_target.left:initial_link4_target.right;
+      (a==0?initial_link4_target.left_enabled:initial_link4_target.right_enabled)=enabled;
+      if(enabled) target=ref.inverse()*elbow_geometry[a].target(shoulder.translation(),ref*ee[a],prediction.arm_angles[a][0],prediction.arm_angles[a][1]);
+      initial_record.ee_reference[a]=recordGoal(ee[a]);
+      initial_record.arms[a].enabled=enabled;
+      for(int axis=0;axis<3;++axis) {
+        initial_record.arms[a].target[axis]=target[axis];
+        initial_record.arms[a].raw[axis]=requirePose(initial_fk.poses,elbow_frames[a]).pose.translation()[axis];
+        initial_record.arms[a].executed[axis]=initial_record.arms[a].raw[axis];
+      }
     }
     elbow_reference->record(initial_record);
   }
@@ -2595,7 +2641,7 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
       initial_link4_target.left, initial_link4_target.right,
                               capabilities.nullspace,
       capabilities.nullspace && planned_options.replay_elbow_teleop_enabled);
-  input.setLeftElbowOwned(learned_elbow);
+  input.setElbowOwned(learned_elbow ? options.elbow_reference.enabled : std::array<bool,2>{false,false});
   input.setElbowReferenceSource(options.elbow_reference.source);
   input.configureTcpMirror(robot.left_tcp_offset, robot.right_tcp_offset, options.mirror_tcp_input);
   mcl::PlannedGroupedTui tui(options.presentation);
@@ -2814,10 +2860,10 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
     RedAttemptSnapshot attempt = initial_red_attempt;
     std::uint64_t elbow_active_ticks = 0;
     ElbowPrediction elbow_prediction;
-    ElbowReferenceAngleTracker elbow_reference_angle_tracker;
+    std::array<ElbowReferenceAngleTracker,2> elbow_reference_angle_tracker;
     mcc::ForwardKinematicsRequest shoulder_request;
     shoulder_request.reference_frame_name = robot.base_frame;
-    shoulder_request.frame_names = {robot.left_shoulder_frame};
+    shoulder_request.frame_names = {robot.left_shoulder_frame,robot.right_shoulder_frame,robot.torso_frame};
     mcc::ForwardKinematicsSolution shoulder_fk;
     mcc::ForwardKinematicsDiagnostics shoulder_diagnostics;
     std::optional<std::uint64_t> rejected_target_revision;
@@ -3164,10 +3210,15 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
             shoulder_request.state = robotState(ik_state);
             requireOk(solver.computeForwardKinematics(shoulder_request, shoulder_fk, shoulder_diagnostics),
                       "elbow shoulder FK failed");
-            link4_target.left = elbow_geometry.target(
-                requirePose(shoulder_fk.poses, robot.left_shoulder_frame).pose.translation(),
-                reference.left, elbow_prediction.cosine, elbow_prediction.sine);
-            link4_target.left_enabled = true;
+            const auto ref=referenceFromBase(robot,requirePose(shoulder_fk.poses,robot.torso_frame).pose);
+            const ArmPoses ee{reference.left,reference.right};
+            for(int a=0;a<2;++a) {
+              const bool enabled=options.elbow_reference.enabled[a];
+              (a==0?link4_target.left_enabled:link4_target.right_enabled)=enabled;
+              if(enabled) (a==0?link4_target.left:link4_target.right)=ref.inverse()*elbow_geometry[a].target(
+                  ref*requirePose(shoulder_fk.poses,shoulder_frames[a]).pose.translation(),
+                  ref*ee[a],elbow_prediction.arm_angles[a][0],elbow_prediction.arm_angles[a][1]);
+            }
           }
           addLink4Targets(handles, link4_target, request);
           }
@@ -3503,7 +3554,7 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
           }
           if (elbow_reference) {
             ++elbow_active_ticks;
-            elbow_reference->sampleAccepted(elbow_active_ticks / options.red_rate_hz, reference.left);
+            elbow_reference->sampleAccepted(elbow_active_ticks / options.red_rate_hz, referenceWrists(robot,{reference.left,reference.right},requirePose(shoulder_fk.poses,robot.torso_frame).pose));
           }
           state_to_yellow.publish(otg_state);
           accepted_planner_sample = *staged_planner_sample;
@@ -3608,15 +3659,27 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
             record.time_s = output.elbow_reference_time_s; record.prediction = elbow_prediction;
             record.target_revision=target.revision;record.source_index=target.replay_source_index.value_or(0);
             record.left_goal=recordGoal(target.left);record.right_goal=recordGoal(target.right);
-            for(int axis=0;axis<3;++axis) {
-              record.target[axis]=link4_target.left[axis];
-              record.raw[axis]=raw_left_link4_pose.translation()[axis];
-              record.executed[axis]=executed_left_link4_pose.translation()[axis];
+            const ArmPoses ee{reference.left,reference.right};
+            const ArmPoses raw_ee{raw_left_pose,raw_right_pose};
+            const ArmPoses executed_ee{executed_left_pose,executed_right_pose};
+            const ArmPoses raw_elbow{raw_left_link4_pose,raw_right_link4_pose};
+            const ArmPoses executed_elbow{executed_left_link4_pose,executed_right_link4_pose};
+            const auto torso=requirePose(shoulder_fk.poses,robot.torso_frame).pose;
+            for(int r=0;r<4;++r) for(int c=0;c<4;++c) record.base_from_torso[r*4+c]=torso.matrix()(r,c);
+            for(int a=0;a<2;++a) {
+              auto &arm=record.arms[a];
+              arm.enabled=options.elbow_reference.enabled[a];
+              record.ee_reference[a]=recordGoal(ee[a]);
+              for(int axis=0;axis<3;++axis) {
+                arm.target[axis]=(a==0?link4_target.left:link4_target.right)[axis];
+                arm.raw[axis]=raw_elbow[a].translation()[axis];
+                arm.executed[axis]=executed_elbow[a].translation()[axis];
+              }
+              arm.raw_position_error_m=(raw_ee[a].translation()-ee[a].translation()).norm();
+              arm.raw_orientation_error_rad=Eigen::AngleAxisd(raw_ee[a].linear().transpose()*ee[a].linear()).angle();
+              arm.executed_position_error_m=(executed_ee[a].translation()-ee[a].translation()).norm();
+              arm.executed_orientation_error_rad=Eigen::AngleAxisd(executed_ee[a].linear().transpose()*ee[a].linear()).angle();
             }
-            record.raw_position_error_m=(raw_left_pose.translation()-reference.left.translation()).norm();
-            record.raw_orientation_error_rad=Eigen::AngleAxisd(raw_left_pose.linear().transpose()*reference.left.linear()).angle();
-            record.executed_position_error_m=(executed_left_pose.translation()-reference.left.translation()).norm();
-            record.executed_orientation_error_rad=Eigen::AngleAxisd(executed_left_pose.linear().transpose()*reference.left.linear()).angle();
             record.hard_violation=diagnostics.maximum_hard_violation;
             for(const auto &constraint:diagnostics.hierarchy.constraints)
               if(constraint.kind==mcc::HierarchicalConstraintKind::JointBound)
@@ -3634,8 +3697,9 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
               record.selected_priority=priorityNumber(*diagnostics.hierarchy.selected_priority);
             output.elbow_reference_visualization = makeElbowReferenceVisualizationSnapshot(
                 record, elbow_geometry,
-                requirePose(shoulder_fk.poses, robot.left_shoulder_frame).pose.translation(),
-                reference.left, elbow_reference_angle_tracker);
+                {requirePose(shoulder_fk.poses, robot.left_shoulder_frame).pose.translation(),
+                 requirePose(shoulder_fk.poses, robot.right_shoulder_frame).pose.translation()},
+                ee, referenceFromBase(robot,torso), elbow_reference_angle_tracker);
             output.elbow_reference_visualization.left_scale = output.left_scale.scale;
             output.elbow_reference_visualization.right_scale = output.right_scale.scale;
             output.elbow_reference_visualization.left_tcp_position_error_m = output.left_position_error_m;
@@ -3855,7 +3919,9 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
 
   while (true) {
     if (recorded_elbow_complete.load()) {
-      replay_completed = loaded_replay && recorded_source_index.load()+1>=loaded_replay->timeline.timeline.size();
+      // Consumption rows own recorded playback's horizon. The original input
+      // may end with an unchanged goal that never creates another Red target.
+      replay_completed = true;
       break;
     }
     const auto schedule = ui_scheduler.next();
@@ -4908,6 +4974,8 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
       nullspace_debug.elbow_source = options.elbow_reference.source;
       nullspace_debug.reference_age_ms = (latest_output.elbow_reference_time_s - latest_output.elbow_prediction.sample_time_s)*1000;
       nullspace_debug.inference_ms = latest_output.elbow_prediction.inference_ms;
+      for (int a=0;a<2;++a) nullspace_debug.predicted_angles_rad[a]=std::atan2(
+          latest_output.elbow_prediction.arm_angles[a][1],latest_output.elbow_prediction.arm_angles[a][0]);
       nullspace_debug.selected_side = input.selectedSide();
       nullspace_debug.control_point = input.controlPoint();
       nullspace_debug.held_link4_side = input.heldLink4Side();
@@ -5045,6 +5113,10 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
   Json::Value final_release_counts;
   if(planned_options.replay){
     final_release_counts=replayReleaseCounts(planned_options,red_stats,yellow_final_stats,loaded_replay->timeline.timeline.size(),replay_source->consumedFrameCount(),replay_source->droppedFrameCount(),replay_source->sourceIndex(),replay_completed,recorded_fault.has_value(),recorded_elbow);
+    if (recorded_elbow) {
+      final_release_counts["source"]["recorded_row_count"] = Json::UInt64(elbow_reference->recordedRowCount());
+      final_release_counts["source"]["consumed_recorded_row_count"] = Json::UInt64(elbow_reference->consumedRecordedRowCount());
+    }
     execution::writeJson(planned_options.replay->output_dir/"release_counts.json",final_release_counts);
   }
   const auto replay_run_disposition =

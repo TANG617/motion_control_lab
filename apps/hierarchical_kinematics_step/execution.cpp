@@ -402,7 +402,8 @@ Json::Value executionCapabilities() {
   for (auto v : {"snapshot", "trajectory", "replay"})
     j["execution_structures"].append(v);
   for (auto v :
-       {"hierarchical", "planned", "planned-otg", "planned-otg-nullspace",
+       {"posture-reference-task", "posture-reference-task-left", "posture-reference-task-right",
+        "hierarchical", "planned", "planned-otg", "planned-otg-nullspace",
         "planned-otg-nullspace-admittance-kinematic-sim"})
     j["profiles"].append(v);
   for (auto v : {"position-first", "pose-primary",

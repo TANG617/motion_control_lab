@@ -1,8 +1,9 @@
 # mcl_hierarchical_kinematics_step
 
-这是五条历史 Red/Yellow HKS app 的单一入口。`--profile` 必选，并决定完整 topology；
+这是历史 Red/Yellow HKS 控制链及双臂姿态参考的单一入口。`--profile` 必选，并决定完整 topology；
 阶段能力不能用独立开关组合：
 
+- `posture-reference-task` / `posture-reference-task-left` / `posture-reference-task-right`：planned＋pose-primary，分别启用双臂、仅左、仅右 Transformer 肘姿态任务；
 - `hierarchical`：直接 target -> legacy HKS；
 - `planned`：CartesianPlanner -> legacy HKS；
 - `planned-otg`：CartesianPlanner -> legacy HKS -> JointPlanner；
@@ -17,13 +18,13 @@ Secondary 在保持 Primary 位置结果的条件下，优化软姿态、Yellow 
 
 `planned-otg-nullspace` 新增可选 `--hqp-layout pose-primary`：双臂完整 TCP 位姿
 进入 Primary，同臂位置/姿态共用 scale；Secondary 保留 link4 与 Yellow posture。
-左臂在线推理统一使用 MCC 原生 `posture_reference::Predictor`，入口、安装及完整窗口合同见 [HARP.md](HARP.md)。
+双臂在线推理统一使用 MCC 原生 `posture_reference::Predictor`，入口、安装及完整窗口合同见 [HARP.md](HARP.md)。
 `planned + pose-primary` 沿用同一 HARP 任务拓扑，输出接受的 IK P/V。
 当前可视化按肘部参考功能命名；实时 HARP 保留原 topic，录制回放使用 `foxglove/recorded_elbow_reference.layout.json`，只标为 recorded。
 
-历史 PiM 录制及失败记录仍可读取；其[历史运行评估](../../docs/archive/pim/PIM_IK_EVALUATION.md)不代表当前 HARP 模型结果。
+旧单臂 PiM/HARP recorded 格式已移除，历史录制及失败记录原样保留；其[历史运行评估](../../docs/archive/pim/PIM_IK_EVALUATION.md)不代表当前 HARP 模型结果。
 
-position-first 的软姿态配置由以下参数控制（五个 profile 均适用）：
+position-first 的软姿态配置由以下参数控制（历史 profile 适用，新姿态参考 profile 固定 pose-primary）：
 
 - `--red-secondary-task-tcp-orientation-weight`：默认 `100`；
 - `--red-secondary-task-tcp-orientation-servo-gain-per-s`：默认 `10`；
@@ -167,8 +168,8 @@ Red raw IK request 与 OTG 执行状态沿用各 profile 现有来源，不增�
 ## Native HARP posture reference
 
 `--elbow-reference harp` consumes the optional MCC `posture_reference` library
-in an ordinary C++ worker, using the full left-arm 30-frame model. See
-[HARP.md](HARP.md) for build, planned recipes, recording and lifecycle checks.
+in an ordinary C++ worker, using synchronized dual-wrist 30x18 windows and two arm-angle outputs. See
+[HARP.md](HARP.md) for build, comparison profiles, fixed wrist calibration, recording and lifecycle checks.
 
 ## 公开批量执行入口
 

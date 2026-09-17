@@ -75,11 +75,13 @@ std::vector<TuiSection> nullspacePanels(const NullspaceTuiDebug &debug) {
        {"Left correction scale", fixed(debug.left_task_scale)},
        {"Right correction scale", fixed(debug.right_task_scale)},
        {"HQP layout", debug.pose_primary ? "pose-primary" : "position-first"},
-       {"Left elbow source", debug.elbow_source},
+       {"Left elbow source", debug.link4_target.left_enabled ? debug.elbow_source : "Yellow posture"},
+       {"Left predicted angle [deg]", debug.elbow_source == "manual" ? "-" : fixed(debug.predicted_angles_rad[0] * 180.0 / std::acos(-1.0))},
+       {"Right predicted angle [deg]", debug.elbow_source == "manual" ? "-" : fixed(debug.predicted_angles_rad[1] * 180.0 / std::acos(-1.0))},
        {"Reference age [ms]", debug.elbow_source == "manual" ? "-" : fixed(debug.reference_age_ms)},
        {"Source inference [ms]", debug.elbow_source == "manual" ? "-" : fixed(debug.inference_ms)},
        {"Mirror TCP input", debug.mirror_tcp_input ? "ON (left master)" : "OFF"},
-       {"Right elbow source", debug.link4_target.right_enabled ? "manual link4" : "Yellow posture"}},
+       {"Right elbow source", debug.link4_target.right_enabled ? debug.elbow_source : "Yellow posture"}},
       0U));
   sections.push_back(tableSection(
       "TCP hierarchy status",
@@ -115,11 +117,11 @@ std::vector<TuiSection> nullspacePanels(const NullspaceTuiDebug &debug) {
         fixed(debug.right_tcp_orientation_error_rad)},
        {"left link4", yesNo(debug.link4_target.left_enabled),
         fixed(debug.link4_weight, 2),
-        debug.link4_target.left_enabled ? fixed(debug.link4_task_error_m)
+        debug.link4_target.left_enabled ? fixed(debug.left_link4_raw_error_m)
                                         : "-"},
        {"right link4", yesNo(debug.link4_target.right_enabled),
         fixed(debug.link4_weight, 2),
-        debug.link4_target.right_enabled ? fixed(debug.link4_task_error_m)
+        debug.link4_target.right_enabled ? fixed(debug.right_link4_raw_error_m)
                                          : "-"},
        {"Yellow posture coupling", "yes", fixed(debug.yellow_weight, 2),
         fixed(debug.yellow_posture_error_rad)},
@@ -213,13 +215,13 @@ void NullspaceTargetSource::handleSourceEvent(const KeyEvent &event,
     return;
   }
   if (mirror_tcp_input_ && event.code == KeyCode::Character && (event.character == 'c' || event.character == 'C') && !capturingText()) {
-    input_status_.detail = "Mirror controls TCP only; right elbow uses Yellow posture";
+    input_status_.detail = "Mirror controls TCP only; elbow ownership follows the selected profile";
     return;
   }
-  if (left_elbow_owned_ && selectedSide() == ArmSide::Left &&
+  if ((elbow_owned_[selectedSide() == ArmSide::Left ? 0 : 1] || elbow_reference_source_ != "manual") &&
       event.code == KeyCode::Character && (event.character == 'c' ||
       control_point_ == ControlPoint::Link4)) {
-    input_status_.detail = "Left elbow is owned by the configured reference source";
+    input_status_.detail = "Elbow editing is disabled: the reference profile owns model/Yellow task selection";
     return;
   }
   if (mode_ == KeyboardSourceMode::Replay && replay_elbow_teleop_enabled_ &&
@@ -393,8 +395,8 @@ void NullspaceTargetSource::apply(const KeyboardAction &action, double dt) {
   const bool disabled_teleop_motion =
       mode_ == KeyboardSourceMode::Teleop &&
       intent.kind != TeleopIntentKind::SelectArm;
-  if (left_elbow_owned_ && selectedSide() == ArmSide::Left && modifies_link4) {
-    input_status_.detail = "Left elbow is owned by the configured reference source";
+  if ((elbow_owned_[selectedSide() == ArmSide::Left ? 0 : 1] || elbow_reference_source_ != "manual") && modifies_link4) {
+    input_status_.detail = "Elbow editing is disabled: the reference profile owns model/Yellow task selection";
     return;
   }
   if (!motion_input_enabled_ && (disabled_teleop_motion || modifies_link4)) {
@@ -553,7 +555,7 @@ std::string NullspaceTargetSource::headerContext() const {
          (held.has_value() ? armSideName(*held) : "-") + " · step " +
          fixed(stepMetres(), 4) + " m" +
          (mirror_available_ ? std::string{" · 左右臂镜像 "} + (mirror_tcp_input_ ? "ON" : "OFF") +
-          (mirror_tcp_input_ ? (" · L " + (elbow_reference_source_ == "harp" ? std::string("HARP") : elbow_reference_source_) + " / R Yellow") : "") : "");
+          (mirror_tcp_input_ ? (" · L " + (elbow_owned_[0] ? (elbow_reference_source_ == "harp" ? std::string("HARP") : elbow_reference_source_) : std::string("Yellow")) + " / R " + (elbow_owned_[1] ? (elbow_reference_source_ == "harp" ? std::string("HARP") : elbow_reference_source_) : std::string("Yellow"))) : "") : "");
 }
 
 std::string NullspaceTargetSource::footerHints() const {

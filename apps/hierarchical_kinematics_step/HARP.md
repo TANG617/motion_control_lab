@@ -1,114 +1,144 @@
-# Native HARP, phase 1
+# Dual-arm Transformer posture reference
 
-HARP is the native left-arm posture-reference source. Its model and reusable
-`Predictor` live in MCC `posture_reference`; this app owns scheduling, active
-time, reference sampling, recording, robot geometry and HQP task construction.
-The worker evaluates full 30x9 FP32 windows with LibTorch/AOTInductor. It does
-not start or embed a Python model process.
+MCL uses MCC's native `posture_reference::Predictor` and its `model.pt2` package.
+There is no Python model process, socket inference, or Mamba compatibility.
+Python launchers only construct the C++ command; offline calibration and report
+scripts do not run a network.
 
-Build/install MCC with its optional component and staged runtime first, then:
+## Profiles and tasks
 
-```bash
-colcon build --base-paths labs/motion-control-lab \
-  --build-base build/algorithm --install-base install/algorithm --merge-install \
-  --cmake-args -DMCL_BUILD_HARP=ON
+| Profile | Left link4 | Right link4 |
+|---|---|---|
+| `posture-reference-task` | HARP | HARP |
+| `posture-reference-task-left` | HARP | disabled |
+| `posture-reference-task-right` | disabled | HARP |
+
+All three use CartesianPlanner -> HKS (`planned`, `pose-primary`, no joint OTG).
+Both end-effector position and orientation tasks are Primary, with a shared
+per-arm progress scale. Enabled link4 position tasks and the existing Yellow
+posture coupling are Secondary. Yellow posture/collision configuration remains
+identical in all three modes, including its coupling on the enabled arms.
+The default non-arm joints are inactive; Red is 1000 Hz, Yellow 100 Hz.
+A disabled model task leaves the normal Yellow posture preference in control.
+The model always receives both wrists and predicts both arm angles.
+
+These are app-local profiles of the existing executable. Solver bounds,
+acceptance policy and preservation tolerances are unchanged. Native solver
+failures and Primary-only selections are retained in the evidence.
+
+## Input and calibration
+
+The input is `[1,30,18]` FP32 at 100 Hz, oldest first. Each frame is left followed
+by right, each `px,py,pz,R00,R01,R10,R11,R20,R21`. The rotation columns are
+**row-interleaved**. Coordinates are meters; normalization is inside the model.
+The synchronous pair comes from the accepted control step's planner EE reference,
+not the incoming unplanned goal or the executed robot FK.
+
+The adapter uses the `body_link4` origin and `diag(-1,-1,+1)` relative axes.
+Incoming TCP targets first use the existing TCP offset inverse to obtain EE
+poses. The wrist center is `(0,0,-0.097)` m in the EE frame. Wrist orientation is
+converted with a fixed left/right rotation stored in `RobotOptions`:
+
+```
+reference_from_base = reference_from_torso_axes * inverse(base_from_torso)
+p_wrist = reference_from_base * base_from_EE * wrist_in_EE
+R_wrist = R_reference_from_base * R_base_from_EE * C_side
+C_side = transpose(R_robot_EE_zero) * R_human_wrist_zero
 ```
 
-The native options are `--elbow-reference harp`, `--harp-model DIRECTORY` and
-`--harp-device cuda|cpu` (default CUDA). The app rejects unknown phase-1 frames
-and non-100-Hz sampling. `planned/run_harp_{csv,mcap,keyboard}.py` provide the
-existing planned + pose-primary recipes, fixed waist, and ordinary right-arm
-tasks. Explicit launcher arguments retain highest priority. Model directory is
-required; there is no implicit setup or download at launch.
+`config/r1_wrist_calibration.json` records the numeric matrices and source hashes.
+They come from URDF zero pose and SMPL-H neutral, zero-beta rest joints using the
+same torso-basis construction as preprocessing. This is a declared fixed
+zero-pose correspondence, not an empirical hand-sensor calibration. It is never
+re-estimated from a run's initial pose. Reproduce it offline using
+`scripts/harp/calibrate_wrist_axes.py --urdf URDF --smplh smplh.tar.xz --output NEW_JSON`.
+No SMPL-H files are needed at runtime. Model manifests must use the current R1
+reference morphology and unmodified SMPL-H wrist-axis convention; initial robot
+FK geometry is compared to the manifest shoulders and lengths.
 
-To generate the small reachable input used in acceptance, first invoke the CSV
-recipe with `--dump-resolved-options` and save its JSON. Then use
-`scripts/harp/make_reachable_motion.py --resolved-options OPTIONS.json
---output reachable.csv --duration-s 30`. It uses the resolved R1 model/default
-configuration and emits 100 Hz bilateral TCP poses from a small joint motion.
+Enabled elbow targets are reconstructed in the reference torso coordinates:
+`n=normalize(W-S)`, `u=normalize(project([-1,0,0], perpendicular_to=n))`,
+`v=n cross u`, `E=center+radius*(cos(phi)*u+sin(phi)*v)`; then transformed to the
+solver base frame. There is no alternate-axis fallback. Invalid/reach-degenerate
+circles, radius below 1 mm or axis projection below 1e-3 fail the run.
 
-```bash
-MCL_RT_PRIORITY='' python scripts/profiles/planned/run_harp_csv.py \
-  --harp-model /workspace/runs/harp_phase1/models/cuda \
-  --input /path/to/reachable.csv \
-  --elbow-record /path/to/harp-run/consumed.jsonl \
-  --output-root /path/to/harp-run/app --replay-trace
-```
+## Scheduling and failure behavior
 
-The empty RT prefix above reproduces non-RT acceptance. Native Red/Yellow/UI
-affinities remain the recipe defaults. The inference worker explicitly uses
-SCHED_OTHER and is warmed on its own thread before periodic workers start.
-Control does not call Torch or wait for inference. Sampling occurs at 10 ms
-boundaries in accepted-control active time; inference takes the latest full
-window and may skip intermediate requests. Each window still contains 30
-uniformly sampled frames. Startup fills the history with initial EE pose.
+One ordinary SCHED_OTHER C++ worker owns the predictor and warms it before
+periodic workers start. Red publishes the complete dual-arm window to a latest
+value mailbox and never waits for inference. A skipped request does not remove
+frames from the next window. Startup repeats the initial dual wrist pair 30 times.
+Both predictions share generation, sequence, active sample time and latency.
+Sampling follows accepted-control active time at 10 ms boundaries. Pause freezes
+that time; restart creates a new worker/history. Results older than 100 ms,
+model failures and worker failures propagate to the existing failure path.
+No source switching, filtering, synthetic angle or task-weight adjustment occurs.
 
-Results carry generation, sequence, active sample time and result-ready latency.
-The app checks generation and the existing 100 ms age bound. Pause freezes
-active time. A restarted run constructs a new ElbowReference, buffers and
-Predictor after joining the previous worker; model state and in-flight results
-do not cross runs. The class is initialized once per run. Worker failures retain
-the original error for the control exception path. Inference errors, stale
-results and invalid shoulder-wrist geometry stop the run, with no source switch.
+## Build and launch
 
-The control cycle recomputes the shoulder from current state and converts the
-predicted arm angle using the current accepted planner EE reference. It adds the
-existing left link4 Secondary task. Primary pose tasks, right-arm reference,
-hard bounds, solver acceptance and preservation tolerances retain their existing
-semantics. This is a posture reference, not joint-command authority.
+Build/install the current MCC with `MOTION_CONTROL_CORE_BUILD_POSTURE_REFERENCE=ON`
+and its staged native runtime, then build MCL with `MCL_BUILD_HARP=ON`. The predictor
+uses SONAME 1; an old single-arm SDK cannot compile this client. Normal launchers
+use `/workspace/install/algorithm/bin/mcl_hierarchical_kinematics_step`.
+`MCL_BINARY` explicitly selects an isolated test executable. Launchers never build.
 
-`--elbow-record P` produces `P` (actual consumption), `P.windows.jsonl` (full
-FP32 input for each evaluated window plus prediction/identity/latency), and
-`P.model.json` (model manifest), and `P.runtime.json` (SHA256 of actual loaded shared libraries after warmup). Sequence zero also records startup warmups;
-exclude it from steady-state timing statistics. Enable replay trace to join
-window last frames to `reference_left_pose`, not `left_goal`: the latter is the
-incoming goal before Cartesian planning. The existing trace records selected
-priority, task preservation and constraint evidence. HARP visualization uses
-`/mcl/harp/left/{angle,scene}` and HARP schema/marker names.
+From this app directory, for the package delivered on 2026-09-17:
 
 ```bash
-python scripts/harp/verify_online.py --consumed /path/to/consumed.jsonl \
-  --run /path/to/app/run-id --output /path/to/verification.json
+scripts/profiles/posture_reference_task/run_keyboard.py \
+  --harp-model /workspace/components/motion_control_core/python/posture_reference/runs/dual_arm_transformer_deploy_20260917_025645/packages/cuda
+
+scripts/profiles/posture_reference_task_left/run_mcap_interactive.py \
+  --harp-model /workspace/components/motion_control_core/python/posture_reference/runs/dual_arm_transformer_deploy_20260917_025645/packages/cuda
+
+scripts/profiles/posture_reference_task_right/run_csv_realtime.py \
+  --harp-model /workspace/components/motion_control_core/python/posture_reference/runs/dual_arm_transformer_deploy_20260917_025645/packages/cpu \
+  --harp-device cpu --input /path/to/input.csv \
+  --elbow-record /workspace/runs/mcl_posture_reference_example/consumed.jsonl \
+  --output-dir /workspace/runs/mcl_posture_reference_example/app --replay-trace
 ```
 
-The verifier preserves native success/failure status, checks feature order,
-startup filling, history overlap across skipped requests, actual consumed
-predictions and age, and reports Secondary-selected versus Primary-only counts.
-`scripts/harp/record_reference_fixture.py` records a successful run's accepted
-references as a fixed derived 30-second MCAP fixture, with source hashes and an
-explicit synthetic epoch. It is not a hardware recording; original MCAP failures
-remain separate evidence. Neither tool changes control parameters or retimes
-existing recordings.
+Each profile also provides `run_mcap_headless.py`. Native CLI exposes the same
+profile names; request uses `app_config.profile` and ordinary `app_config.options`.
+`--describe-capabilities` and `--dump-resolved-options` do not load the model.
+CUDA is the default; CPU requires an explicit CPU package. The model path is
+always explicit. Use fresh result directories. Online CSV/MCAP uses realtime
+playback, because asynchronous inference must have physical time to complete.
 
-Optional lifecycle acceptance:
+## Recording, replay and Foxglove
 
-```bash
-cmake -S /workspace/labs/motion-control-lab -B /workspace/build/algorithm/motion_control_lab \
-  -DMCL_BUILD_HARP=ON -DMCL_HARP_TEST_MODEL=/workspace/runs/harp_phase1/models/cuda
-cmake --build /workspace/build/algorithm/motion_control_lab \
-  --target test_hierarchical_kinematics_step_harp_lifecycle
-ctest --test-dir /workspace/build/algorithm/motion_control_lab -R harp_lifecycle --output-on-failure
-```
+`--elbow-record P` writes `dual-arm-elbow-consumption.v1` rows to P, evaluated
+540-float windows to `P.windows.jsonl`, model provenance to `P.model.json`, and
+loaded runtime paths/hashes to `P.runtime.json`. `P.calibration.json` saves the
+fixed adapter matrices, reference frame and calibration source, including for
+keyboard runs without a replay manifest. Rows carry both angles, enabled
+sides, accepted EE references, torso transform, consumed elbow targets, raw and
+executed elbow positions, TCP errors and native hierarchy diagnostics.
+Sequence zero contains startup inference and is excluded from steady timing.
 
-Phase 1 does not validate learned posture quality, guarantee 1 kHz deadlines,
-train a new model, or support waist-aware/bilateral model inputs. Original
-recordings with waist motion can become unreachable when replayed with a fixed
-waist; that is an explicit failure, not evidence for relaxing hard bounds.
+Replay with the same profile and input, changing the source to
+`--elbow-reference recorded --elbow-recorded P`. New records require their model
+sidecar and matching task sides. Recorded replay uses the C++ reader, including
+when HARP support is disabled. Old single-arm/PiM records are explicitly rejected;
+historical files and [archived evaluations](../../docs/archive/pim/PIM_IK_EVALUATION.md)
+are preserved and are not relabeled as Transformer results.
 
-The retired `pim-ik` online source, Python model/server and Unix socket manager have been removed.
-Old `--pim-*` and `--elbow-socket` options fail with an explicit migration message; select HARP with an explicit installed MCC model.
-Legacy consumption records remain readable through `recorded`. Historical PiM prose is in the [archive](../../docs/archive/pim/PIM_IK_EVALUATION.md); obsolete inspection tools are retained only in the cleanup source snapshot.
-Model export/packaging/reference inference are owned by MCC; MCL does not keep a second model implementation.
+Import `foxglove/harp.layout.json` for live HARP or
+`foxglove/recorded_elbow_reference.layout.json` for recorded replay. Left/right
+`/mcl/harp/{left,right}/{angle,scene}` topics show the prediction, participation,
+elbow circle, reference and raw/executed targets. A disabled side still publishes
+its predicted angle with `task_enabled=false`; it does not draw an active target.
+Recorded channels use `/mcl/elbow_reference/...` and source `recorded`.
+TCP mirroring mirrors TCP input only; it never mirrors the predicted arm angle.
+In the reference profiles, manual elbow editing is disabled so that each side keeps its selected model/Yellow ownership.
 
-## Visualization and recorded replay
+## Verification
 
-Live HARP keeps `/mcl/harp/left/{angle,scene}`, `mcl.harp.Angle`, and the existing
-`harp_*` marker IDs. Use `foxglove/harp.layout.json`.
-Recorded replay publishes only `/mcl/elbow_reference/left/{angle,scene}` with
-`mcl.elbow_reference.Angle` and `elbow_reference_*` marker IDs; use
-`foxglove/recorded_elbow_reference.layout.json`. Its source is always `recorded`:
-existing consumption rows do not reliably identify the originating model.
-No PiM topic is republished or duplicated in a new run. Old MCAP layouts and
-inspection tools are no longer installed. Their source is preserved in the
-[cleanup snapshot](../../docs/archive/README.md). This does not change recorded values,
-time, generation, pause, exhaustion or failure handling.
+`scripts/harp/verify_online.py --consumed P --run APP_RUN --output REPORT.json`
+checks all 30 frames against independent torso/EE/wrist conversion, window
+overlap, synchronized consumption and task masks. Optional `--cpp-executable`,
+`--model`, `--device` compare the exact windows with the independent MCC native
+consumer (maximum absolute output difference <= 1e-5). It reports timing,
+tracking, elbow errors, angle increments and native failures without inference
+in Python. Three-profile comparisons must use identical inputs and initial
+states; geometric/model validity does not certify hardware control performance.

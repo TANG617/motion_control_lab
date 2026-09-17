@@ -15,6 +15,9 @@
         },
         "/mcl/cartesian/ik/right": {
           "visible": true
+        },
+        "/mcl/elbow_reference/right/scene": {
+          "visible": true
         }
       },
       "cameraState": {
@@ -30,7 +33,7 @@
         "near": 0.01,
         "far": 100
       },
-      "foxglovePanelTitle": "Recorded elbow reference left arm | reference direction"
+      "foxglovePanelTitle": "Recorded elbow reference dual arm | reference direction"
     },
     "Plot!angle": {
       "paths": [
@@ -38,8 +41,17 @@
           "value": "/mcl/elbow_reference/left/angle.angle_unwrapped_deg",
           "enabled": true,
           "timestampMethod": "receiveTime",
-          "label": "Consumed Recorded elbow reference reference angle (deg)",
+          "label": "Left Consumed Recorded elbow reference reference angle (deg)",
           "color": "#26E650",
+          "showLine": true,
+          "lineSize": 1.5
+        },
+        {
+          "value": "/mcl/elbow_reference/right/angle.angle_unwrapped_deg",
+          "enabled": true,
+          "timestampMethod": "receiveTime",
+          "label": "Right Consumed Recorded elbow reference reference angle (deg)",
+          "color": "#56B4E9",
           "showLine": true,
           "lineSize": 1.5
         }
@@ -57,7 +69,16 @@
           "value": "/mcl/elbow_reference/left/angle.reference_age_ms",
           "enabled": true,
           "timestampMethod": "receiveTime",
-          "label": "Active reference age (ms)",
+          "label": "Left Active reference age (ms)",
+          "color": "#56B4E9",
+          "showLine": true,
+          "lineSize": 1.5
+        },
+        {
+          "value": "/mcl/elbow_reference/right/angle.reference_age_ms",
+          "enabled": true,
+          "timestampMethod": "receiveTime",
+          "label": "Right Active reference age (ms)",
           "color": "#56B4E9",
           "showLine": true,
           "lineSize": 1.5
@@ -73,6 +94,52 @@
     "RawMessages!harp": {
       "topicPath": "/mcl/elbow_reference/left/angle",
       "foxglovePanelTitle": "Recorded elbow reference reference and selected HQP level"
+    },
+    "RawMessages!harpRight": {
+      "topicPath": "/mcl/elbow_reference/right/angle",
+      "foxglovePanelTitle": "Right prediction / task participation"
+    },
+    "Plot!errors": {
+      "paths": [
+        {
+          "value": "/mcl/elbow_reference/left/angle.left_tcp_position_error_m",
+          "enabled": true,
+          "timestampMethod": "receiveTime",
+          "label": "left TCP error (m)",
+          "showLine": true,
+          "lineSize": 1.5
+        },
+        {
+          "value": "/mcl/elbow_reference/left/angle.elbow_executed_error_m",
+          "enabled": true,
+          "timestampMethod": "receiveTime",
+          "label": "left elbow error (m)",
+          "showLine": true,
+          "lineSize": 1.5
+        },
+        {
+          "value": "/mcl/elbow_reference/right/angle.right_tcp_position_error_m",
+          "enabled": true,
+          "timestampMethod": "receiveTime",
+          "label": "right TCP error (m)",
+          "showLine": true,
+          "lineSize": 1.5
+        },
+        {
+          "value": "/mcl/elbow_reference/right/angle.elbow_executed_error_m",
+          "enabled": true,
+          "timestampMethod": "receiveTime",
+          "label": "right elbow error (m)",
+          "showLine": true,
+          "lineSize": 1.5
+        }
+      ],
+      "xAxisVal": "timestamp",
+      "showLegend": true,
+      "isSynced": true,
+      "timeWindowMode": "sliding",
+      "followingViewWidth": 20,
+      "foxglovePanelTitle": "TCP / elbow target errors (m)"
     }
   },
   "globalVariables": {},
@@ -85,14 +152,24 @@
     "first": "3D!harp",
     "second": {
       "direction": "column",
-      "first": "Plot!angle",
-      "second": {
+      "first": {
         "direction": "column",
-        "first": "Plot!age",
-        "second": "RawMessages!harp",
-        "splitPercentage": 45
+        "first": "Plot!angle",
+        "second": {
+          "direction": "column",
+          "first": "Plot!age",
+          "second": {
+            "direction": "row",
+            "first": "RawMessages!harp",
+            "second": "RawMessages!harpRight",
+            "splitPercentage": 50
+          },
+          "splitPercentage": 45
+        },
+        "splitPercentage": 40
       },
-      "splitPercentage": 40
+      "second": "Plot!errors",
+      "splitPercentage": 70
     },
     "splitPercentage": 55
   }

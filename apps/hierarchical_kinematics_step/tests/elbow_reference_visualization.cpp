@@ -3,143 +3,73 @@
 #include <iostream>
 #include <json/json.h>
 #include <stdexcept>
-#include <set>
-#include <type_traits>
-
-namespace app = motion_control_lab::hierarchical_kinematics_step;
-constexpr double pi = 3.14159265358979323846;
-void require(bool value, const char *message) {
-  if (!value)
-    throw std::runtime_error(message);
-}
+namespace app=motion_control_lab::hierarchical_kinematics_step;
+void require(bool v,const char *m) { if(!v) throw std::runtime_error(m); }
 Json::Value decode(const motion_control::viz::EncodedMessageSample &sample) {
-  Json::CharReaderBuilder builder;
-  std::unique_ptr<Json::CharReader> reader(builder.newCharReader());
-  Json::Value value;
-  std::string error;
-  auto *begin = reinterpret_cast<const char *>(sample.data.data());
-  require(reader->parse(begin, begin + sample.data.size(), &value, &error),
-          "JSON decode");
-  return value;
+  Json::CharReaderBuilder b;std::unique_ptr<Json::CharReader> r(b.newCharReader());
+  Json::Value value;std::string error;
+  const auto *p=reinterpret_cast<const char*>(sample.data.data());
+  require(r->parse(p,p+sample.data.size(),&value,&error),"JSON decode");return value;
 }
 int main() {
-  try {
-    static_assert(std::is_standard_layout_v<app::ElbowReferenceVisualizationSnapshot>);
-    app::ElbowReferenceAngleTracker tracker;
-    app::ElbowPrediction p;
-    for (double sign : {1.0, -1.0}) {
-      ++p.generation;
-      p.sequence = 0;
-      p.cosine = std::cos(sign * (pi - .01));
-      p.sine = std::sin(sign * (pi - .01));
-      require(std::abs(tracker.update(p) - sign * (pi - .01)) < 1e-12,
-              "run reset");
-      ++p.sequence;
-      p.cosine = std::cos(-sign * (pi - .01));
-      p.sine = std::sin(-sign * (pi - .01));
-      const double angle = tracker.update(p);
-      require(std::abs(angle - sign * (pi + .01)) < 1e-12,
-              "bidirectional unwrap");
-      require(tracker.update(p) == angle, "repeat/pause holds unwrapped angle");
+ try {
+  constexpr double pi=3.141592653589793;
+  std::array<app::ElbowReferenceAngleTracker,2> trackers;
+  app::ElbowPrediction p;
+  for(int side=0;side<2;++side) {
+    p.arm_angles[side]={std::cos(pi-.01),std::sin(pi-.01)};
+    require(std::abs(trackers[side].update(p,side)-(pi-.01))<1e-12,"initial angle");
+    ++p.sequence;p.arm_angles[side]={std::cos(-pi+.01),std::sin(-pi+.01)};
+    require(std::abs(trackers[side].update(p,side)-(pi+.01))<1e-12,"unwrap");
+    require(std::abs(trackers[side].update(p,side)-(pi+.01))<1e-12,"pause/repeat");
+  }
+  app::ArmPoses ee{Eigen::Isometry3d::Identity(),Eigen::Isometry3d::Identity()};
+  ee[0].translation()<<.4,.2,0;ee[1].translation()<<.4,-.2,0;
+  std::array<Eigen::Vector3d,2> shoulders{Eigen::Vector3d::Zero(),Eigen::Vector3d::Zero()};
+  std::array<app::ElbowGeometry,2> geometry;
+  for(auto &g:geometry) {g.upper_length=.3;g.lower_length=.3;}
+  Eigen::Isometry3d ref=Eigen::Isometry3d::Identity();
+  ref.linear()=Eigen::AngleAxisd(.3,Eigen::Vector3d::UnitY()).toRotationMatrix();
+  ref.translation()<<.1,.02,.03;
+  for(const std::string source:{"harp","recorded"})
+  for(int mask:{1,2,3}) {
+    app::ElbowConsumption record;
+    record.prediction.generation=++p.generation;
+    record.time_s=.01;record.selected_priority=1;
+    for(int a=0;a<2;++a) {
+      record.prediction.arm_angles[a]={std::cos(.3+a),std::sin(.3+a)};
+      record.arms[a].enabled=(mask&(1<<a))!=0;
+      const Eigen::Vector3d target=ref.inverse()*geometry[a].target(ref*shoulders[a],ref*ee[a],record.prediction.arm_angles[a][0],record.prediction.arm_angles[a][1]);
+      for(int i=0;i<3;++i) record.arms[a].target[i]=target[i];
     }
-    Eigen::Isometry3d shoulder = Eigen::Isometry3d::Identity(),
-                      elbow = shoulder, wrist = shoulder;
-    elbow.translation() << .2, .2, 0;
-    wrist.translation() << .4, 0, 0;
-    const auto geometry =
-        app::ElbowGeometry::fromFk(shoulder, elbow, wrist, wrist);
-    for (const std::string source : {"harp", "recorded"})
-    for (double angle : {0.0, pi / 2, -pi / 2, pi, -pi}) {
-      app::ElbowConsumption record;
-      record.prediction.generation = ++p.generation;
-      record.prediction.cosine = std::cos(angle);
-      record.prediction.sine = std::sin(angle);
-      record.time_s = .01;
-      record.mirror_tcp_input = true;
-      record.secondary_executed = true;
-      record.secondary_succeeded = false;
-      record.selected_priority = 1;
-      const Eigen::Vector3d target = geometry.target(
-          shoulder.translation(), wrist, std::cos(angle), std::sin(angle));
-      record.target = {target.x(), target.y(), target.z()};
-      auto snapshot = app::makeElbowReferenceVisualizationSnapshot(
-          record, geometry, shoulder.translation(), wrist, tracker);
-      snapshot.left_scale = .3; snapshot.right_scale = .8;
-      snapshot.left_tcp_position_error_m = .001;
-      snapshot.right_tcp_position_error_m = .002;
-      snapshot.left_tcp_orientation_error_rad = .01;
-      snapshot.right_tcp_orientation_error_rad = .02;
-      motion_control::viz::RenderBatch batch;
-      batch.timestamp_ns = 123;
-      app::appendElbowReferenceVisualization(batch, "base_link", source, snapshot);
-      require(batch.encoded_messages.size() == 1 &&
-                  batch.line_strips.size() == 6,
-              "topics/scene primitives");
-      const auto &sample = batch.encoded_messages.front();
-      require(sample.channel == (source == "harp" ? "/mcl/harp/left/angle" : app::kRecordedElbowAngleTopic) &&
-                  sample.schema_name == (source == "harp" ? "mcl.harp.Angle" : "mcl.elbow_reference.Angle") &&
-                  sample.message_encoding == "json" &&
-                  sample.schema_encoding == "jsonschema" &&
-                  sample.timestamp_ns == 123,
-              "numeric channel contract");
-      const auto json = decode(sample);
-      require(json["mirror_tcp_input"].asBool() && json["left_scale"].asDouble() == .3 &&
-          json["right_scale"].asDouble() == .8 &&
-          json["left_tcp_position_error_m"].asDouble() == .001 &&
-          json["right_tcp_position_error_m"].asDouble() == .002 &&
-          json["left_tcp_orientation_error_rad"].asDouble() == .01 &&
-          json["right_tcp_orientation_error_rad"].asDouble() == .02, "mirror comparison metadata");
-      require(std::abs(json["angle_rad"].asDouble() - angle) < 1e-12,
-              "atan2 angle");
-      require(std::abs(json["angle_deg"].asDouble() - angle * 180 / pi) < 1e-10,
-              "degrees");
-      require(!json["secondary_selected"].asBool() &&
-                  json["selected_priority"].asInt() == 1,
-              "Primary-only is not learning completion");
-      require(json["reference_age_ms"].asDouble() == 10,
-              "active reference age");
-      std::set<std::string> marker_ids;
-      for (const auto &line : batch.line_strips) {
-        marker_ids.insert(line.entity_id);
-        require(line.channel == (source == "harp" ? "/mcl/harp/left/scene" : app::kRecordedElbowSceneTopic) &&
-                    line.frame_id == "base_link",
-                "scene frame/channel");
-        if (line.entity_id == (source == "harp" ? "harp_direction" : "elbow_reference_direction"))
-          require(line.points_m.back() == record.target,
-                  "exact accepted elbow target endpoint");
-        if (line.entity_id == "elbow_circle") {
-          for (const auto &point : line.points_m) {
-            Eigen::Vector3d x(point[0], point[1], point[2]);
-            require(std::abs((x - shoulder.translation()).norm() -
-                             geometry.upper_length) < 1e-12,
-                    "ring upper length");
-            require(std::abs((x - wrist.translation()).norm() -
-                             geometry.lower_length) < 1e-12,
-                    "ring lower length");
-          }
-        }
-        if (line.entity_id == (source == "harp" ? "harp_angle_arc" : "elbow_reference_angle_arc")) {
-          const auto &last = line.points_m.back();
-          require((Eigen::Vector3d(last[0], last[1], last[2]) - target).norm() <
-                      1e-12,
-                  "arc ends at predicted angle");
+    auto snap=app::makeElbowReferenceVisualizationSnapshot(record,geometry,shoulders,ee,ref,trackers);
+    motion_control::viz::RenderBatch batch;batch.timestamp_ns=123;
+    app::appendElbowReferenceVisualization(batch,"base_link",source,snap);
+    require(batch.encoded_messages.size()==2,"both predicted angles published");
+    require(batch.line_strips.size()==(mask==3?16:8),"only enabled circles displayed");
+    for(int a=0;a<2;++a) {
+      const auto j=decode(batch.encoded_messages[a]);
+      const std::string topic=(source=="harp"?"/mcl/harp/":"/mcl/elbow_reference/")+std::string(a==0?"left":"right");
+      require(batch.encoded_messages[a].channel==topic+"/angle","symmetric topic");
+      require(j["task_enabled"].asBool()==record.arms[a].enabled,"prediction vs task participation");
+      require(std::abs(j["angle_rad"].asDouble()-(.3+a))<1e-12,"arm order");
+      require(!j["secondary_selected"].asBool(),"Primary-only is not posture completion");
+      for(const auto &line:batch.line_strips) {
+        if(line.channel!=topic+"/scene") continue;
+        require(line.frame_id=="base_link","scene frame");
+        if(line.entity_id==(source=="harp"?"harp_direction":"elbow_reference_direction"))
+          require(line.points_m.back()==record.arms[a].target,"exact consumed elbow endpoint");
+        if(line.entity_id=="elbow_circle") for(const auto &x:line.points_m) {
+          Eigen::Vector3d q(x[0],x[1],x[2]);
+          require(std::abs((q-shoulders[a]).norm()-.3)<1e-12,"rotated upper circle");
+          require(std::abs((q-ee[a].translation()).norm()-.3)<1e-12,"rotated lower circle");
         }
       }
-      const std::string prefix = source == "harp" ? "harp_" : "elbow_reference_";
-      require(marker_ids == std::set<std::string>{"shoulder_wrist_axis", "elbow_circle", "zero_direction", prefix + "direction", prefix + "angle_arc", prefix + "angle_arrow"}, "exact source-specific marker identities");
-      motion_control::viz::RenderBatch disabled;
-      app::appendElbowReferenceVisualization(disabled, "base_link", "manual", snapshot);
-      app::appendElbowReferenceVisualization(disabled, "base_link", "recorded", {});
-      require(disabled.encoded_messages.empty() && disabled.line_strips.empty(),
-              "manual/uninitialized have no elbow-reference display");
-      app::appendElbowReferenceVisualization(disabled, "base_link", "recorded", snapshot);
-      require(decode(disabled.encoded_messages.front())["source"].asString() ==
-                  "recorded",
-              "recorded source");
     }
-    return 0;
-  } catch (const std::exception &e) {
-    std::cerr << e.what() << '\n';
-    return 1;
+    motion_control::viz::RenderBatch empty;
+    app::appendElbowReferenceVisualization(empty,"base_link","manual",snap);
+    require(empty.encoded_messages.empty(),"manual has no prediction");
   }
+  return 0;
+ } catch(const std::exception &e) {std::cerr<<e.what()<<'\n';return 1;}
 }

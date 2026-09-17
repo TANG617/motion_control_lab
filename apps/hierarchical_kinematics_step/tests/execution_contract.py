@@ -34,6 +34,19 @@ def request(name,layout='position-first',execution=None,observation=None,input=N
     return req,rows
 
 cap=json.loads(run(['--describe-capabilities']).stdout);assert cap['solver_mode']=='ServoStep'
+for profile,mask in [('posture-reference-task',[True,True]),('posture-reference-task-left',[True,False]),('posture-reference-task-right',[False,True])]:
+    assert profile in cap['profiles']
+    resolved=json.loads(run(['--profile',profile,'teleop','--harp-model','/not-loaded/model','--dump-resolved-options']).stdout)
+    assert resolved['elbow_reference']['enabled']==mask
+    path=write(profile+'-input.json',{'samples':[{}]})
+    request_doc={'schema_version':'execution_request.v1','app_id':'mcl_hierarchical_kinematics_step','execution_structure':'replay',
+        'input':{'path':str(path),'sha256':hashlib.sha256(path.read_bytes()).hexdigest(),'format':'json'},
+        'app_config':{'profile':profile,'options':{'harp-model':'/not-loaded/model','urdf':'/workspace/models/Psi_R1_visual_collision.urdf','execution-mode':'realtime'}},
+        'execution':{'target_period_ms':10},'observation':{},'tracking':{},'output_dir':str(a.output/(profile+'-request-output'))}
+    request_path=write(profile+'-request.json',request_doc)
+    via_request=json.loads(run(['--request',request_path,'--dump-resolved-options']).stdout)
+    assert via_request['elbow_reference']['enabled']==mask
+
 _,two=request('two')
 req,three=request('three','position-orientation-posture')
 _,primary=request('primary','primary-only')

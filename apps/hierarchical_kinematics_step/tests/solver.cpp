@@ -529,7 +529,7 @@ int main(int argc, char **argv) {
                   .red_primary_task_tcp_position_preservation_tolerance_mps,
               "Secondary changed a Primary position residual beyond tolerance");
     }
-    for (const auto profile : {app::Profile::PlannedOtgNullspace, app::Profile::Planned}) {
+    for (const auto profile : {app::Profile::PlannedOtgNullspace, app::Profile::Planned, app::Profile::PostureReferenceTask, app::Profile::PostureReferenceTaskLeft, app::Profile::PostureReferenceTaskRight}) {
       auto pose_options = app::profileDefaults(profile);
       pose_options.interactive.red_rate_hz = 1000;
       pose_options.interactive.solver.hqp_layout="pose-primary";
@@ -544,6 +544,11 @@ int main(int argc, char **argv) {
           {h.red.right_position,initial_right_tcp.translation()},
           {h.red_left_link4,initial_left_link4+Eigen::Vector3d(.005,0,0),true},
           {h.red_right_link4,initial_right_link4,false}};
+      if(app::isPostureReferenceProfile(profile)) {
+        r.position_targets[2].enabled=pose_options.interactive.elbow_reference.enabled[0];
+        r.position_targets[3].enabled=pose_options.interactive.elbow_reference.enabled[1];
+        r.position_targets[3].position+=Eigen::Vector3d(.005,0,0);
+      }
       r.orientation_targets={{h.red.left_orientation,initial_left_tcp.linear()},
           {h.red.right_orientation,initial_right_tcp.linear()}};
       app::SolverRequest y;y.reference_frame_name=robot.base_frame;y.captured_state={state,1U,1};
@@ -558,6 +563,11 @@ int main(int argc, char **argv) {
         app::requireOk(pose_runtime.solveRed(r,solution,d),"pose-primary solve");
         std::size_t primary=0,tertiary=0;
         for(const auto &task:d.hierarchy.tasks) {
+          if(task.handle_value==h.red_left_link4.value || task.handle_value==h.red_right_link4.value) {
+            const int a=task.handle_value==h.red_left_link4.value?0:1;
+            require(task.enabled==r.position_targets[2+a].enabled,"native solver task mask matches the selected side");
+            require(task.priority==motion_control::core::PriorityLevel::Secondary,"posture remains Secondary");
+          }
           if(task.priority==motion_control::core::PriorityLevel::Primary) {
             ++primary;
             require(task.enforcement==motion_control::core::HierarchicalTaskEnforcement::Scaled,"all pose Primary tasks must be scaled");
