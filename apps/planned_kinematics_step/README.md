@@ -3,8 +3,8 @@
 可独立执行的双臂运动回放程序，执行结构固定为：
 
 ```text
-按时间采样输入目标 → CartesianTrajectoryPlanner → weighted MCC 或 PlaCo ServoStep
-                 → JointTrajectoryPlanner OTG → 理想运动学提交状态 → 下一步反馈
+按时间采样输入目标 → CartesianTrajectoryGenerator → weighted MCC 或 PlaCo ServoStep
+                 → JointPtpTrajectoryGenerator OTG → 理想运动学提交状态 → 下一步反馈
 ```
 
 此程序补齐已有 `step` 无法表达的两个规划器串联结构，可用于独立 CSV/MCAP 运动回放、
@@ -55,10 +55,10 @@ JSON 输入可以使用已有 canonical 形状，必需字段为：
 - `joint_names`、`active_joint_names`：完整状态顺序及活动集合。
 - `root_frame`、`frames.left/right`、`tcp_offsets.left/right`：目标参考系、末端 frame 和局部 TCP 偏移。
 - `initial_state.q/v`：完整初态；不裁剪越界值，不替换为默认姿态。
-- `limits.lower/upper/velocity`：供 PlaCo 及 JointTrajectoryPlanner 使用的完整约束。
+- `limits.lower/upper/velocity`：供 PlaCo 及 JointPtpTrajectoryGenerator 使用的完整约束。
 - `samples[].source_time_s`、`samples[].targets.left/right.{position,rotation}`：按原窗口因果零阶保持的 TCP 目标，米和旋转矩阵。
 
-第一项目标初始化 CartesianTrajectoryPlanner 的起点，后续目标从规划器当前完整 PVA 重规划。
+第一项目标初始化 CartesianTrajectoryGenerator 的起点，后续目标从规划器当前完整 PVA 重规划。
 初始规划参考与机器人的初始关节状态是两个独立输入，程序不会把第一个目标当成实测 FK。
 执行 clock 将 dt/duration 四舍五入至整数纳秒，在半开窗口 `[0,duration_ns)` 内发布，
 release 数由整数除法向上取整，避免 `ceil(0.07/0.01)` 的浮点额外 release；
@@ -93,13 +93,13 @@ MCAP 使用 ROS2 `geometry_msgs/msg/PoseStamped` CDR。CSV mapping 格式与已�
 旋转向量速度/加速度/jerk 上限固定为 1 / 5 / 50；两个规划器使用 Time 同步。
 双臂位置与姿态任务均为单层 soft，位置/姿态权重为原生单位权重；回中目标取初态。
 MCC 使用 `ModelPositionAndVelocity`，由 URDF 提供原生 IK 关节限制；PlaCo 使用输入中的
-位置/速度限制。JointTrajectoryPlanner 使用输入 limits 和上述加速度/jerk 上限。
+位置/速度限制。JointPtpTrajectoryGenerator 使用输入 limits 和上述加速度/jerk 上限。
 这些约束来源和速度/增量正则化语义**不能仅凭配置同名推断两种方法方程一致**，
 公平对比须另外审计实际方程和接受合同。
 
 MCC 要求 `Status::ok` 且 disposition accepted；PlaCo 必须原生 `solve` 返回，异常直接导致
-进程失败。候选未经投影或裁剪，仅原生接受后交给 JointTrajectoryPlanner，后者成功才提交最终状态。
-JointTrajectoryPlanner 终点速度/加速度为零，每步从上一步实际提交 PVA 重规划。
+进程失败。候选未经投影或裁剪，仅原生接受后交给 JointPtpTrajectoryGenerator，后者成功才提交最终状态。
+JointPtpTrajectoryGenerator 终点速度/加速度为零，每步从上一步实际提交 PVA 重规划。
 原生拒绝写出候选、输入状态、原生状态及本次未提交，立即退出 2；后缀 releases 写为 not-run。
 原生异常不被捕获/继续运行，首个异常保留在 stderr；`attempt_begin` 和预写的
 `planned_schedule.json` 能定位缺失尝试及未运行后缀。初始化异常发生时只有初始化前已写出的证据。

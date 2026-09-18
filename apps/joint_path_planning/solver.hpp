@@ -1,6 +1,6 @@
 #pragma once
 #include "motion_control_core/kinematics/solver.hpp"
-#include "motion_control_core/planning/path/constraints.hpp"
+#include "motion_control_core/planning/path/joint_path_constraints.hpp"
 #include "options.hpp"
 #include <array>
 namespace motion_control_lab::joint_path_planning {

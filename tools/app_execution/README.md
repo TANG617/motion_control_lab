@@ -11,7 +11,7 @@ Exx 持有场景、选择、repeat 和来源；app 持有任务、solver、接�
 | step / target | 实际双臂 hard-pose ServoStep / TargetSolve，MCC/PlaCo |
 | hierarchical_kinematics_step | 原 Red/Yellow、命名布局、真实调度和规划 replay |
 | optimization_problem | 显式矩阵 weighted QP / HQP |
-| planned_kinematics_step | CartesianTrajectoryPlanner → weighted IK → JointTrajectoryPlanner |
+| planned_kinematics_step | CartesianTrajectoryGenerator → weighted IK → JointPtpTrajectoryGenerator |
 
 weighted 不是历史 study soft-task 方程的别名；新方法需要独立准入。
 

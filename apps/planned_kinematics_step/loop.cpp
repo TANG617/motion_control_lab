@@ -79,7 +79,7 @@ int loop(const Options &o, Solver &solver, Planning &planning) {
     } else {
       row["ik_solve_call_ns"] = Json::nullValue;
       row["quality_category"] = "not-run";
-      row["ik_missing_reason"] = "CartesianTrajectoryPlanner failure";
+      row["ik_missing_reason"] = "CartesianTrajectoryGenerator failure";
     }
     row["candidate_available"] = !result.q.empty();
     row["raw_ik_q"] = result.q.empty() ? Json::Value() : array(result.q);
@@ -106,7 +106,7 @@ int loop(const Options &o, Solver &solver, Planning &planning) {
     row["a"] = array(a);
     row["execution_state"] = accepted ? "committed" : "terminated";
     row["disposition"] = accepted ? "accepted" : "rejected";
-    row["acceleration_source"] = "JointTrajectoryPlanner-native";
+    row["acceleration_source"] = "JointPtpTrajectoryGenerator-native";
     row["finish_ns"] = Json::Int64(ns());
     row["record_type"] = "attempt";
     emit(row);
@@ -132,7 +132,7 @@ int loop(const Options &o, Solver &solver, Planning &planning) {
   status["not_run"] = total - attempts;
   status["skipped"] = 0;
   status["plant_model"] =
-      "ideal kinematic committed JointTrajectoryPlanner output; no hardware or dynamics";
+      "ideal kinematic committed JointPtpTrajectoryGenerator output; no hardware or dynamics";
   status["failure_policy"] =
       "stop without modifying rejected candidate or state";
   write(o.output / "native_status.json", status);

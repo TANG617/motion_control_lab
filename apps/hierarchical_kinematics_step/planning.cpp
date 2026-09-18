@@ -21,11 +21,11 @@ toCoreSynchronization(PlanningSynchronization value) {
   throw std::logic_error("unknown planning synchronization");
 }
 
-motion_control::core::JointTrajectoryAlgorithm
+motion_control::core::JointPtpTrajectoryAlgorithm
 toCoreJointAlgorithm(JointPlanningAlgorithm value) {
   switch (value) {
   case JointPlanningAlgorithm::JerkLimited:
-    return motion_control::core::JointTrajectoryAlgorithm::JerkLimited;
+    return motion_control::core::JointPtpTrajectoryAlgorithm::JerkLimited;
   }
   throw std::logic_error("unknown joint planning algorithm");
 }
@@ -278,9 +278,9 @@ bool ReplaySettlingCounter::update(bool input_consumed, bool cartesian_finished,
   return consecutive_cycles_ >= options_.required_cycles;
 }
 
-motion_control::core::JointTrajectoryPlannerConfig
-makeJointPlannerConfig(const PlanningOptions &options) {
-  motion_control::core::JointTrajectoryPlannerConfig config;
+motion_control::core::JointPtpTrajectoryConfig
+makeJointPtpTrajectoryConfig(const PlanningOptions &options) {
+  motion_control::core::JointPtpTrajectoryConfig config;
   config.algorithm = toCoreJointAlgorithm(options.joint_algorithm);
   config.synchronization =
       toCoreSynchronization(options.joint_synchronization);
@@ -386,16 +386,17 @@ RetargetClampDiagnostics clampRetargetCurrentState(
   return diagnostics;
 }
 
-const char *plannerStateName(motion_control::core::TrajectoryPlanningState state) {
-  using motion_control::core::TrajectoryPlanningState;
+const char *trajectoryStateName(motion_control::core::TrajectoryGeneratorState state) {
+  using motion_control::core::TrajectoryGeneratorState;
   switch (state) {
-  case TrajectoryPlanningState::Idle:
+  case TrajectoryGeneratorState::Idle:
     return "idle";
-  case TrajectoryPlanningState::Planning:
+  case TrajectoryGeneratorState::Active:
+    // Preserve the existing telemetry/CSV state value across the C++ API rename.
     return "planning";
-  case TrajectoryPlanningState::Finished:
+  case TrajectoryGeneratorState::Finished:
     return "finished";
-  case TrajectoryPlanningState::Error:
+  case TrajectoryGeneratorState::Error:
     return "error";
   }
   return "unknown";

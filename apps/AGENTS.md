@@ -26,7 +26,7 @@
   enforcement、mask、优先级和 task handle 的使用。
 - app 专属的运行流程、状态更新、诊断数据解释和可视化内容组装也必须留在具体 app 中；
   solver-neutral `IkDebugFrame` 的标准 TUI 页面格式可以由共享 component 统一生成。
-- MCC solver、task、constraint、`CartesianTrajectoryPlanner` 和 `JointTrajectoryPlanner` 必须由具体 app 直接
+- MCC solver、task、constraint、`CartesianTrajectoryGenerator` 和 `JointPtpTrajectoryGenerator` 必须由具体 app 直接
   include、构造和调用；不得在 `components/` 中增加二次 facade、controller、统一 runner 或
   mode-driven pipeline 来代替 MCC API。
 - 两个或多个 app 出现相同的 solver、task 或业务流程代码时，允许并鼓励保留重复；不要
@@ -66,7 +66,7 @@
   `--profile` 合并五条历史链，并提供 app-local Python argparse launcher。该例外不允许把
   parser、runner 或 profile pipeline 提取为跨 app 的全局设施。
 - 运动控制 app 按 `main.*`、`options.*`、`solver.*`、`loop.*` 组织；只有实际调用
-  `CartesianTrajectoryPlanner`、`JointTrajectoryPlanner` 或其他规划算法的 app 才增加 `planning.*`：
+  `CartesianTrajectoryGenerator`、`JointPtpTrajectoryGenerator` 或其他规划算法的 app 才增加 `planning.*`：
   `main` 是短 composition root，`solver` 直接持有 MCC topology，`planning` 直接持有 MCC planning，
   `loop` 可以合并 worker、input、replay、presentation、Viz 和 artifact 等非核心胶水。不要为了
   目录看起来极简而把 solver/planning 搬到共享 component，也不要为了形式化分层继续拆分非重点代码。

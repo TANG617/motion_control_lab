@@ -1,7 +1,7 @@
 #include "planning.hpp"
 namespace motion_control_lab::planned_kinematics_step {
 Planning::Planning(const Options &x) : o(x) {
-  mcc::JointTrajectoryPlannerConfig c;
+  mcc::JointPtpTrajectoryConfig c;
   c.synchronization = mcc::TrajectorySynchronization::Time;
   require(jp.configure(c));
   for (auto s : {"left", "right"}) {
@@ -14,7 +14,7 @@ Planning::Planning(const Options &x) : o(x) {
 }
 Json::Value Planning::reference(const Json::Value &goal, bool update,
                                 Json::Value &native) {
-  mcc::TrajectoryPlanningDiagnostics d;
+  mcc::TrajectoryGenerationDiagnostics d;
   if (update) {
     mcc::CartesianRetargetRequest r;
     r.reference_frame_name = o.input["root_frame"].asString();
@@ -41,7 +41,7 @@ Json::Value Planning::reference(const Json::Value &goal, bool update,
       r.segments.push_back(seg);
       i++;
     }
-    auto status = cp.replan(r, d);
+    auto status = cp.retarget(r, d);
     native["cartesian_replan_status"] = status.message;
     native["cartesian_replan_ok"] = status.ok();
     if (!status.ok())
@@ -69,7 +69,7 @@ mcc::JointTrajectorySample Planning::execute(const std::vector<double> &q,
                                              const std::vector<double> &a,
                                              const std::vector<double> &target,
                                              Json::Value &native) {
-  mcc::JointTrajectoryRequest r;
+  mcc::JointPtpTrajectoryRequest r;
   r.joint_names = strings(o.input["joint_names"]);
   r.sample_period = o.config["dt_s"].asDouble();
   r.current = {q, v, a};
@@ -83,8 +83,8 @@ mcc::JointTrajectorySample Planning::execute(const std::vector<double> &q,
       std::vector<double>(q.size(), o.config["joint_acceleration"].asDouble());
   r.limits.max_jerk =
       std::vector<double>(q.size(), o.config["joint_jerk"].asDouble());
-  mcc::TrajectoryPlanningDiagnostics d;
-  auto status = jp.plan(r, d);
+  mcc::TrajectoryGenerationDiagnostics d;
+  auto status = jp.prepare(r, d);
   native["joint_plan_status"] = status.message;
   native["joint_plan_ok"] = status.ok();
   mcc::JointTrajectorySample s;

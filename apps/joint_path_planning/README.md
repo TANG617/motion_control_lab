@@ -7,7 +7,7 @@
 头、腿、手指关节保持请求起点配置；完整机器人几何仍参与环境碰撞检查。
 
 这个入口分别支持 `configs/cube.json` 的立方体绕障与 `configs/free.json` 的无障碍直达。
-它需要离散关节空间搜索，因此独立于现有 CartesianTrajectoryPlanner → IK → JointTrajectoryPlanner app。
+它需要离散关节空间搜索，因此独立于现有 CartesianTrajectoryGenerator → IK → JointPtpTrajectoryGenerator app。
 输入/TUI 复用 `hierarchical_kinematics_step` 所使用的共享组件；业务实现完全保留在本目录。
 
 ## 启动

@@ -435,7 +435,7 @@ Json::Value executionCapabilities() {
       "fixed_level_base_four_wheels_in_contact";
   j["visualization"]["show_com"]["requires"] = "runLoop with visualization enabled";
   j["replay_planning"] =
-      "existing runLoop CartesianTrajectoryPlanner/JointTrajectoryPlanner profiles";
+      "existing runLoop CartesianTrajectoryGenerator/JointPtpTrajectoryGenerator profiles";
   j["native_reference_sources"].append("manual");
   j["native_reference_sources"].append("recorded");
   j["native_reference_sources"].append("harp");

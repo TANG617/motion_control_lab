@@ -11,7 +11,7 @@ MCL 是 R1 运动控制的原生应用与可复现实验仓库。具体 app 直�
 | [step](apps/step/README.md) | 双臂 MCC/PlaCo ServoStep |
 | [target](apps/target/README.md) | 双臂 MCC/PlaCo TargetSolve |
 | [hierarchical_kinematics_step](apps/hierarchical_kinematics_step/README.md) | Red/Yellow、规划、OTG、HARP 与运动学仿真 |
-| [planned_kinematics_step](apps/planned_kinematics_step/README.md) | CartesianTrajectoryPlanner → weighted IK → JointTrajectoryPlanner |
+| [planned_kinematics_step](apps/planned_kinematics_step/README.md) | CartesianTrajectoryGenerator → weighted IK → JointPtpTrajectoryGenerator |
 | [joint_path_planning](apps/joint_path_planning/README.md) | 显式 IK → OMPL 关节避障 → 保持路径的时间参数化与 Foxglove 展示 |
 | [optimization_problem](apps/optimization_problem/README.md) | 显式矩阵 QP/HQP 数值调试 |
 | [hierarchical_inverse_dynamics_torque_sim](apps/hierarchical_inverse_dynamics_torque_sim/README.md) | 固定基座 R1 力矩仿真 |

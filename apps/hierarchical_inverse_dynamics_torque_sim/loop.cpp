@@ -467,9 +467,9 @@ int runLoop(const Options &options, const R1RobotConfig &robot,
     viewer->open();
   }
 
-  mcc::CartesianTrajectoryPlanner planner;
-  mcc::TrajectoryPlanningDiagnostics planning_diagnostics;
-  requireOk(planner.replan(plan_request, planning_diagnostics),
+  mcc::CartesianTrajectoryGenerator planner;
+  mcc::TrajectoryGenerationDiagnostics planning_diagnostics;
+  requireOk(planner.retarget(plan_request, planning_diagnostics),
             "plan dual-hand retarget");
   std::uint64_t planned_target_revision = input->targetFrame().revision;
   std::array<mcc::CartesianFrameSample, 2> planner_reference;
@@ -628,7 +628,7 @@ int runLoop(const Options &options, const R1RobotConfig &robot,
             planner_reference[arm].acceleration;
         plan_request.segments[arm].target_pose = targets.at(arm).target_pose;
       }
-      requireOk(planner.replan(plan_request, planning_diagnostics),
+      requireOk(planner.retarget(plan_request, planning_diagnostics),
                 "replan Cartesian target");
       planned_target_revision = input->targetFrame().revision;
     }

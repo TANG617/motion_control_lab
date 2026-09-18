@@ -3,8 +3,8 @@
 namespace motion_control_lab::planned_kinematics_step {
 class Planning {
   Options o;
-  mcc::CartesianTrajectoryPlanner cp;
-  mcc::JointTrajectoryPlanner jp;
+  mcc::CartesianTrajectoryGenerator cp;
+  mcc::JointPtpTrajectoryGenerator jp;
   mcc::CartesianTrajectorySample last;
 
 public:

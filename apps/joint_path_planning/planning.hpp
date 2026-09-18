@@ -1,7 +1,7 @@
 #pragma once
-#include "motion_control_core/planning/path/joint_planner.hpp"
+#include "motion_control_core/planning/path/joint_path_planner.hpp"
 #include "motion_control_core/planning/trajectory/joint_path_time_parameterizer.hpp"
-#include "motion_control_core/planning/trajectory/joint_path_generator.hpp"
+#include "motion_control_core/planning/trajectory/joint_path_trajectory_generator.hpp"
 #include "motion_control_core/planning/validation/joint_trajectory_validator.hpp"
 #include "options.hpp"
 #include <atomic>

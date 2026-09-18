@@ -403,8 +403,8 @@ int main(int argc, char **argv) {
       app::JointTargetBuilder target_builder(
           app_options.joint_target, 1.0 / app_options.interactive.red_rate_hz,
           robot.joint_names.size());
-      motion_control::core::JointTrajectoryPlanner joint_planner(
-          app::makeJointPlannerConfig(app_options.planning));
+      motion_control::core::JointPtpTrajectoryGenerator joint_generator(
+          app::makeJointPtpTrajectoryConfig(app_options.planning));
       const auto joint_limits = app::makeJointTargetLimits(
           robot, app_options.interactive.robot.joint_stream);
       double maximum_primary_position_drift = 0.0;
@@ -453,7 +453,7 @@ int main(int argc, char **argv) {
         const auto projected =
             app::projectConfiguredLimits(target, joint_limits, projection);
 
-        motion_control::core::JointTrajectoryRequest joint_request;
+        motion_control::core::JointPtpTrajectoryRequest joint_request;
         joint_request.joint_names = robot.joint_names;
         joint_request.current = {otg_positions, otg_velocities,
                                  otg_accelerations};
@@ -464,13 +464,13 @@ int main(int argc, char **argv) {
             joint_limits.max_velocity, joint_limits.max_acceleration,
             joint_limits.max_jerk};
         joint_request.sample_period = 1.0 / app_options.interactive.red_rate_hz;
-        motion_control::core::TrajectoryPlanningDiagnostics plan_diagnostics;
-        app::requireOk(joint_planner.plan(joint_request, plan_diagnostics),
-                       "iterated JointTrajectoryPlanner plan");
+        motion_control::core::TrajectoryGenerationDiagnostics plan_diagnostics;
+        app::requireOk(joint_generator.prepare(joint_request, plan_diagnostics),
+                       "iterated JointPtpTrajectoryGenerator prepare");
         motion_control::core::JointTrajectorySample sample;
-        motion_control::core::TrajectoryPlanningDiagnostics step_diagnostics;
-        app::requireOk(joint_planner.step(sample, step_diagnostics),
-                       "iterated JointTrajectoryPlanner step");
+        motion_control::core::TrajectoryGenerationDiagnostics step_diagnostics;
+        app::requireOk(joint_generator.step(sample, step_diagnostics),
+                       "iterated JointPtpTrajectoryGenerator step");
 
         target_builder.commit(raw_target.positions, projected);
         ik_positions = raw_target.positions;

@@ -326,7 +326,7 @@ PlannedMotion Planning::generate(
                    : "Smooth curve generated; post-generation validation skipped";
     return m;
   }
-  require(mcc::JointPathTimeParameterizer{}.generate(m.path.path, timing,
+  require(mcc::JointPathTimeParameterizer{}.parameterize(m.path.path, timing,
                                                      m.timed, m.timing));
   if (!mcc::isAccepted(m.timed.disposition)) {
     m.reason = "Timing rejected";

@@ -2,7 +2,7 @@
 
 This app is the ROS-free fixed-base R1 torque slice. At 1 kHz it advances:
 
-`CartesianTrajectoryPlanner P/V/A -> optional CartesianAdmittance -> HID -> qfrc_applied -> one mj_step -> measured state`.
+`CartesianTrajectoryGenerator P/V/A -> optional CartesianAdmittance -> HID -> qfrc_applied -> one mj_step -> measured state`.
 
 The R1 hierarchy has three active levels: dual-hand position Primary,
 dual-hand orientation Secondary, and nominal posture Tertiary. There is no

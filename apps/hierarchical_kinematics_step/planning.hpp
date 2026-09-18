@@ -129,8 +129,8 @@ private:
   std::size_t consecutive_cycles_{0U};
 };
 
-motion_control::core::JointTrajectoryPlannerConfig
-makeJointPlannerConfig(const PlanningOptions &options);
+motion_control::core::JointPtpTrajectoryConfig
+makeJointPtpTrajectoryConfig(const PlanningOptions &options);
 
 motion_control::core::CartesianRetargetRequest makeRetargetRequest(
     const motion_control::core::Pose &left_goal,
@@ -142,6 +142,6 @@ motion_control::core::CartesianRetargetRequest makeRetargetRequest(
 RetargetClampDiagnostics clampRetargetCurrentState(
     motion_control::core::CartesianRetargetRequest &request);
 
-const char *plannerStateName(motion_control::core::TrajectoryPlanningState state);
+const char *trajectoryStateName(motion_control::core::TrajectoryGeneratorState state);
 
 } // namespace motion_control_lab::hierarchical_kinematics_step

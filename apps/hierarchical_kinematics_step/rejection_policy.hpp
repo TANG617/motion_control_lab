@@ -27,11 +27,11 @@ bool isRecoverableRedFailure(RedFailureDisposition disposition);
 
 // Once CartesianAdmittance::step() has advanced its state, every downstream
 // failure is fatal because there is no transactional rollback across the
-// admittance, IK, JointTrajectoryPlanner, and executed-FK state machines.
+// admittance, IK, JointPtpTrajectoryGenerator, and executed-FK state machines.
 RedFailureDisposition postAdmittanceFailureDisposition() noexcept;
 
 // Synthetic replay hold frames represent a frozen calculation pipeline.  They
-// must not advance the Cartesian planner, admittance, IK, or JointTrajectoryPlanner.
+// must not advance the Cartesian planner, admittance, IK, or JointPtpTrajectoryGenerator.
 bool shouldFreezeControlPipeline(bool replay_joint_hold) noexcept;
 
 bool shouldSkipRejectedRevision(

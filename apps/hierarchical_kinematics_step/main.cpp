@@ -125,14 +125,14 @@ int run(int argc, char **argv, std::string &normal_exit_detail) {
                          batch_settings, batch_output, runtime, handles);
   }
   const auto capabilities = app::profileCapabilities(options);
-  std::unique_ptr<mcc::CartesianTrajectoryPlanner> cartesian_planner;
-  std::unique_ptr<mcc::JointTrajectoryPlanner> joint_planner;
+  std::unique_ptr<mcc::CartesianTrajectoryGenerator> cartesian_generator;
+  std::unique_ptr<mcc::JointPtpTrajectoryGenerator> joint_generator;
   if (capabilities.cartesian_planning) {
-    cartesian_planner = std::make_unique<mcc::CartesianTrajectoryPlanner>();
+    cartesian_generator = std::make_unique<mcc::CartesianTrajectoryGenerator>();
   }
   if (capabilities.joint_otg) {
-    joint_planner = std::make_unique<mcc::JointTrajectoryPlanner>(
-        app::makeJointPlannerConfig(options.planning));
+    joint_generator = std::make_unique<mcc::JointPtpTrajectoryGenerator>(
+        app::makeJointPtpTrajectoryConfig(options.planning));
   }
 
   std::unique_ptr<app::CenterOfMassVisualization> com_visualization;
@@ -142,7 +142,7 @@ int run(int argc, char **argv, std::string &normal_exit_detail) {
 
   const int result =
       app::runLoop(std::move(options), robot, runtime, handles,
-                   cartesian_planner.get(), joint_planner.get(), com_visualization.get(), joint_limits,
+                   cartesian_generator.get(), joint_generator.get(), com_visualization.get(), joint_limits,
                    active_joint_full_indices, normal_exit_detail);
   if (request)
     app::writeReplaySummary(request->output, result);

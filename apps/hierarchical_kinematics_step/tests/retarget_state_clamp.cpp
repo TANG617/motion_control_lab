@@ -142,7 +142,7 @@ void testPlanningOptionsAreApplied()
   const auto right_goal = mcc::Pose::Identity();
   const auto request = planned::makeRetargetRequest(
     left_goal, right_goal, accepted, robot, options, 50.0);
-  const auto joint_config = planned::makeJointPlannerConfig(options);
+  const auto joint_config = planned::makeJointPtpTrajectoryConfig(options);
 
   require(request.reference_frame_name == robot.base_frame, "wrong planning reference frame");
   require(request.sample_period == 0.02, "planning rate was not applied");
@@ -160,7 +160,7 @@ void testPlanningOptionsAreApplied()
       request.limits.max_rotation_vector_jerk == Eigen::Vector3d::Constant(1.80),
     "Cartesian planning limits were not applied");
   require(
-    joint_config.algorithm == mcc::JointTrajectoryAlgorithm::JerkLimited &&
+    joint_config.algorithm == mcc::JointPtpTrajectoryAlgorithm::JerkLimited &&
       joint_config.synchronization == mcc::TrajectorySynchronization::Time,
     "joint planning options were not applied");
 }
@@ -313,9 +313,9 @@ mcc::CartesianRetargetRequest makePlannerRequest()
 void testClampedRequestPlansWithinAllDerivativeLimits()
 {
   auto request = makePlannerRequest();
-  mcc::TrajectoryPlanningDiagnostics diagnostics;
-  mcc::CartesianTrajectoryPlanner strict_planner;
-  const auto rejected = strict_planner.replan(request, diagnostics);
+  mcc::TrajectoryGenerationDiagnostics diagnostics;
+  mcc::CartesianTrajectoryGenerator strict_planner;
+  const auto rejected = strict_planner.retarget(request, diagnostics);
   require(!rejected.ok(), "Core unexpectedly accepted the unclamped request");
   require(
     rejected.code == mcc::StatusCode::InvalidInput,
@@ -341,8 +341,8 @@ void testClampedRequestPlansWithinAllDerivativeLimits()
       "planner request pose changed during clamp");
   }
 
-  mcc::CartesianTrajectoryPlanner planner;
-  const auto planned = planner.replan(request, diagnostics);
+  mcc::CartesianTrajectoryGenerator planner;
+  const auto planned = planner.retarget(request, diagnostics);
   require(planned.ok(), "Core rejected the clamped request: " + planned.message);
 
   std::array<Eigen::Vector3d, 2> previous_linear_acceleration{
@@ -410,7 +410,7 @@ void testClampedRequestPlansWithinAllDerivativeLimits()
     previous_time = sample.time_from_start;
     ++sample_count;
     require(sample_count < request.maximum_sample_count, "planner did not finish within its budget");
-    if (diagnostics.state == mcc::TrajectoryPlanningState::Finished) {
+    if (diagnostics.state == mcc::TrajectoryGeneratorState::Finished) {
       break;
     }
   }
