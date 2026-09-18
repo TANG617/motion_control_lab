@@ -38,6 +38,11 @@ if(BUILD_TESTING)
       "${CMAKE_CURRENT_SOURCE_DIR}/tests/subscription.py" --binary $<TARGET_FILE:mcl_joint_path_planning>
       --urdf "${MCL_JOINT_PATH_TEST_URDF}" --app "${CMAKE_CURRENT_SOURCE_DIR}"
       --output "${CMAKE_CURRENT_BINARY_DIR}/test-runs")
+    add_test(NAME mcl_joint_path_planning_smooth_validation COMMAND ${Python3_EXECUTABLE}
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/smooth_validation.py" --binary $<TARGET_FILE:mcl_joint_path_planning>
+      --urdf "${MCL_JOINT_PATH_TEST_URDF}" --app "${CMAKE_CURRENT_SOURCE_DIR}"
+      --output "${CMAKE_CURRENT_BINARY_DIR}/test-runs")
+    set_tests_properties(mcl_joint_path_planning_smooth_validation PROPERTIES TIMEOUT 120)
     set_tests_properties(mcl_joint_path_planning_contract PROPERTIES TIMEOUT 120)
     set_tests_properties(mcl_joint_path_planning_subscription PROPERTIES TIMEOUT 45)
   endif()

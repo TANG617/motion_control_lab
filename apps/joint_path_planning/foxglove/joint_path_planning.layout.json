@@ -189,7 +189,7 @@
       "isSynced": true
     },
     "Plot!clearance": {
-      "foxglovePanelTitle": "Final path sampled clearance (m)",
+      "foxglovePanelTitle": "Sampled distance and certified interval lower bounds (m)",
       "paths": [
         {
           "enabled": true,
@@ -199,6 +199,20 @@
           "showLine": true,
           "lineSize": 1,
           "color": "#56B4E9"
+        },
+        {
+          "enabled": true,
+          "value": "/joint_path/status.path_clearance_lower_bound_m",
+          "label": "Path lower bound",
+          "timestampMethod": "receiveTime",
+          "showLine": true
+        },
+        {
+          "enabled": true,
+          "value": "/joint_path/status.trajectory_clearance_lower_bound_m",
+          "label": "Curve lower bound",
+          "timestampMethod": "receiveTime",
+          "showLine": true
         }
       ],
       "xAxisVal": "timestamp",
@@ -442,6 +456,13 @@
           "label": "Stops",
           "timestampMethod": "receiveTime",
           "showLine": true
+        },
+        {
+          "enabled": true,
+          "value": "/joint_path/status.removed_vertices",
+          "label": "Removed vertices",
+          "timestampMethod": "receiveTime",
+          "showLine": true
         }
       ],
       "xAxisVal": "timestamp",
@@ -483,6 +504,20 @@
           "enabled": true,
           "value": "/joint_path/status.request_ms",
           "label": "Whole request",
+          "timestampMethod": "receiveTime",
+          "showLine": true
+        },
+        {
+          "enabled": true,
+          "value": "/joint_path/status.vertex_reduction_ms",
+          "label": "Prune",
+          "timestampMethod": "receiveTime",
+          "showLine": true
+        },
+        {
+          "enabled": true,
+          "value": "/joint_path/status.trajectory_verification_ms",
+          "label": "Final curve validation",
           "timestampMethod": "receiveTime",
           "showLine": true
         }

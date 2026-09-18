@@ -403,7 +403,7 @@ int main(int argc, char **argv) {
       app::JointTargetBuilder target_builder(
           app_options.joint_target, 1.0 / app_options.interactive.red_rate_hz,
           robot.joint_names.size());
-      motion_control::core::JointPlanner joint_planner(
+      motion_control::core::JointTrajectoryPlanner joint_planner(
           app::makeJointPlannerConfig(app_options.planning));
       const auto joint_limits = app::makeJointTargetLimits(
           robot, app_options.interactive.robot.joint_stream);
@@ -464,13 +464,13 @@ int main(int argc, char **argv) {
             joint_limits.max_velocity, joint_limits.max_acceleration,
             joint_limits.max_jerk};
         joint_request.sample_period = 1.0 / app_options.interactive.red_rate_hz;
-        motion_control::core::PlanningDiagnostics plan_diagnostics;
+        motion_control::core::TrajectoryPlanningDiagnostics plan_diagnostics;
         app::requireOk(joint_planner.plan(joint_request, plan_diagnostics),
-                       "iterated JointPlanner plan");
+                       "iterated JointTrajectoryPlanner plan");
         motion_control::core::JointTrajectorySample sample;
-        motion_control::core::PlanningDiagnostics step_diagnostics;
+        motion_control::core::TrajectoryPlanningDiagnostics step_diagnostics;
         app::requireOk(joint_planner.step(sample, step_diagnostics),
-                       "iterated JointPlanner step");
+                       "iterated JointTrajectoryPlanner step");
 
         target_builder.commit(raw_target.positions, projected);
         ik_positions = raw_target.positions;

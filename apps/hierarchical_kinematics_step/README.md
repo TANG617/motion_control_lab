@@ -5,9 +5,9 @@
 
 - `posture-reference-task` / `posture-reference-task-left` / `posture-reference-task-right`：planned＋pose-primary，分别启用双臂、仅左、仅右 Transformer 肘姿态任务；
 - `hierarchical`：直接 target -> legacy HKS；
-- `planned`：CartesianPlanner -> legacy HKS；
-- `planned-otg`：CartesianPlanner -> legacy HKS -> JointPlanner；
-- `planned-otg-nullspace`：双臂 position Primary > soft orientation/posture/link4 Secondary HKS + JointPlanner；
+- `planned`：CartesianTrajectoryPlanner -> legacy HKS；
+- `planned-otg`：CartesianTrajectoryPlanner -> legacy HKS -> JointTrajectoryPlanner；
+- `planned-otg-nullspace`：双臂 position Primary > soft orientation/posture/link4 Secondary HKS + JointTrajectoryPlanner；
 - `planned-otg-nullspace-admittance-kinematic-sim`：再增加导纳、MuJoCo 运动学投影、viewer
   与完整 replay telemetry gate。
 
@@ -126,7 +126,7 @@ TCP goal -> nominal EE Cartesian OTG P/V/A
          -> EE-to-TCP control-point transform
          -> CartesianAdmittance + viewer drag wrench
          -> TCP-to-EE control-point transform
-         -> HKS pose/twist -> joint target projection -> JointPlanner OTG
+         -> HKS pose/twist -> joint target projection -> JointTrajectoryPlanner OTG
          -> committed q/qdot -> MuJoCo setKinematicState + forward
 ```
 
@@ -186,8 +186,8 @@ viewer 交互沿用运动学导纳 app：`Ctrl+左键` 平面拖动 TCP handle�
   calculation/control-point frame、raw/filtered/applied wrench、offset、compliance
   twist/acceleration、饱和状态和 drag 状态。
 
-pause/start-paused 会冻结 Cartesian planner、导纳、HKS 和 JointPlanner 整条计算链，`.` 单步让
-整条链共同推进。导纳推进后的 HKS、JointPlanner 或 executed FK 失败为 fatal；导纳之前的
+pause/start-paused 会冻结 Cartesian planner、导纳、HKS 和 JointTrajectoryPlanner 整条计算链，`.` 单步让
+整条链共同推进。导纳推进后的 HKS、JointTrajectoryPlanner 或 executed FK 失败为 fatal；导纳之前的
 teleop Cartesian replan infeasible 保持原 app 的 recoverable 行为。拖拽释放和普通 retarget
 不会隐式 reset filter 或 compliance state。
 
@@ -233,7 +233,7 @@ JSON `snapshot` / `trajectory` 对应 `hierarchical` profile。输入为 `joint_
 未指定 Cartesian target 保持当前 FK；初始状态不裁剪。snapshot 使用该输入状态；trajectory 只提交原生接受的实际输出。
 普通入口可用 `--profile hierarchical teleop --batch-input INPUT --batch-output NEWDIR --batch-settings SETTINGS`，与请求入口共用批量驱动。
 `target_space` 默认 `frame`，指 app end-effector frame；`tcp` 指乘过 app TCP offset 的物理 TCP。普通入口使用 `--target-space`。
-规划 profile 的公开请求通过原有 `runLoop` 的 CartesianPlanner/JointPlanner；JSON 由 app 将 frame/TCP 明确转换到物理 TCP CSV，并以公开 `--initial-state` 保留输入 q/v。原 CSV/MCAP `replay` 继续直接读取。
+规划 profile 的公开请求通过原有 `runLoop` 的 CartesianTrajectoryPlanner/JointTrajectoryPlanner；JSON 由 app 将 frame/TCP 明确转换到物理 TCP CSV，并以公开 `--initial-state` 保留输入 q/v。原 CSV/MCAP `replay` 继续直接读取。
 转换表和实际 solver target 分别留证，不根据实验编号选择坐标语义。
 
 新增命名布局 `position-orientation-posture` 将 Yellow posture/link4 放到 Tertiary，位置 Primary、姿态 Secondary。

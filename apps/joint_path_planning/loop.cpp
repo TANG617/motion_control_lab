@@ -237,6 +237,27 @@ Attempt generateAttempt(unsigned id, ArmSide side, const Pose &target,
       appendCurve(a.path_curve, a.motion.path.path.waypoints[i - 1],
                   a.motion.path.path.waypoints[i], solver, side);
     }
+  if (a.motion.accepted && a.motion.curve) {
+    for (const auto time : a.motion.smoothing.stop_times) {
+      mcc::JointTrajectorySample sample;
+      require(a.motion.curve->evaluate(time, sample));
+      mcc::RobotState q;
+      q.joint_positions = Eigen::Map<const Eigen::VectorXd>(
+          sample.positions.data(), sample.positions.size());
+      a.smooth_stops.push_back(point(solver.tcp(q, side, false)));
+    }
+    for (const auto &sample : a.motion.timed.trajectory.samples) {
+      if (cancel) {
+        a.motion.accepted = false;
+        a.motion.reason = "Cancelled";
+        break;
+      }
+      mcc::RobotState q;
+      q.joint_positions = Eigen::Map<const Eigen::VectorXd>(
+          sample.positions.data(), sample.positions.size());
+      a.smooth_curve.push_back(point(solver.tcp(q, side, false)));
+    }
+  }
   if (a.motion.accepted && a.path_curve.empty())
     a.path_curve.push_back(point(a.ik_tcp[side == ArmSide::Left ? 0 : 1]));
   return finish();
@@ -245,6 +266,7 @@ Json::Value diagnosticsJson(const Snapshot &s) {
   Json::Value j;
   j["state"] = stageName(s.stage);
   j["timing_mode"] = s.timing_mode;
+  j["smooth_validation"] = s.smooth_validation;
   j["planning_mode"] = s.whole_body ? "whole-body" : "single-arm";
   j["active_dof"] = s.whole_body ? 16 : 7;
   j["execution_complete"] = s.execution_complete;
@@ -323,6 +345,43 @@ Json::Value diagnosticsJson(const Snapshot &s) {
     j["simplification_attempts"] =
         Json::UInt64(m.planning.simplification_attempts);
     j["accepted_shortcuts"] = Json::UInt64(m.planning.accepted_shortcuts);
+    j["removed_vertices"] = Json::UInt64(m.planning.removed_vertices);
+    j["linear_segments_before_reduction"] =
+        Json::UInt64(m.planning.linear_segments_before_reduction);
+    j["linear_segments_after_reduction"] = Json::UInt64(m.planning.linear_segments_after_reduction);
+    j["vertex_reduction_ms"] = m.planning.vertex_reduction_time_ms;
+    j["trajectory_validation_status"] = m.trajectory_validation_status;
+    j["trajectory_verification_ms"] = m.trajectory_validation_ms;
+    const auto &tv = m.trajectory_validation;
+    if (tv.failed_time_s)
+      j["trajectory_failed_time_s"] = *tv.failed_time_s;
+    if (tv.geometry.violating_pair)
+      j["trajectory_violating_pair"] = tv.geometry.violating_pair->first.name +
+                                       " / " +
+                                       tv.geometry.violating_pair->second.name;
+    if (tv.geometry.violating_pair_distance_m)
+      j["trajectory_violating_distance_m"] =
+          *tv.geometry.violating_pair_distance_m;
+    for (Eigen::Index k = 0; k < tv.violating_positions.size(); ++k)
+      j["trajectory_violating_positions"].append(tv.violating_positions[k]);
+    j["trajectory_interval_count"] =
+        Json::UInt64(m.trajectory_validation.geometry.certified_interval_count);
+    j["trajectory_collision_queries"] =
+        Json::UInt64(m.trajectory_validation.geometry.collision_queries);
+    j["smoothing_segments"] = Json::UInt64(m.smoothing.segment_count);
+    for (const auto t : m.smoothing.stop_times)
+      j["smooth_stop_times"].append(t);
+    j["smoothing_scaling_attempts"] =
+        Json::UInt64(m.smoothing.scaling_attempts);
+    if (m.verified.clearance_lower_bound_m)
+      j["path_clearance_lower_bound_m"] = *m.verified.clearance_lower_bound_m;
+    if (m.trajectory_validation.geometry.clearance_lower_bound_m)
+      j["trajectory_clearance_lower_bound_m"] =
+          *m.trajectory_validation.geometry.clearance_lower_bound_m;
+    for (Eigen::Index k = 0;
+         k < m.trajectory_validation.maximum_deviation_bound.size(); ++k)
+      j["maximum_deviation_bound"].append(
+          m.trajectory_validation.maximum_deviation_bound[k]);
     if (m.planning.path_length_before_simplification &&
         m.planning.path_length_after_simplification) {
       const double before = *m.planning.path_length_before_simplification;
@@ -341,7 +400,8 @@ Json::Value diagnosticsJson(const Snapshot &s) {
     j["app_timed_state_checks"] = 0;
     j["through_waypoint_count"] = Json::UInt64(m.timing.through_waypoint_count);
     j["stop_waypoint_count"] =
-        Json::UInt64(m.timing.stop_waypoint_indices.size());
+        Json::UInt64(m.curve ? m.smoothing.stop_times.size()
+                             : m.timing.stop_waypoint_indices.size());
     j["stop_waypoint_indices"] = Json::arrayValue;
     for (const auto i : m.timing.stop_waypoint_indices)
       j["stop_waypoint_indices"].append(Json::UInt64(i));
@@ -381,6 +441,7 @@ int run(const Options &o, std::shared_ptr<const mcc::RobotModel> model,
   Snapshot s;
   s.whole_body = o.planning_mode == "whole-body";
   s.timing_mode = o.timing_mode;
+  s.smooth_validation = o.smooth_validation;
   s.state = initialState(*model, o);
   s.side = parseArmSide(o.side);
   const auto initial = planning.check(s.state);
@@ -559,6 +620,13 @@ int run(const Options &o, std::shared_ptr<const mcc::RobotModel> model,
       while (sample_index < samples.size() &&
              samples[sample_index].time_from_start <= s.progress_s) {
         s.sample = samples[sample_index++];
+        s.state.joint_positions = Eigen::Map<const Eigen::VectorXd>(
+            s.sample.positions.data(), s.sample.positions.size());
+      }
+      if (s.attempt->motion.curve) {
+        require(s.attempt->motion.curve->evaluate(
+            std::min(s.progress_s, s.attempt->motion.curve->duration()),
+            s.sample));
         s.state.joint_positions = Eigen::Map<const Eigen::VectorXd>(
             s.sample.positions.data(), s.sample.positions.size());
       }

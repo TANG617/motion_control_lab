@@ -467,8 +467,8 @@ int runLoop(const Options &options, const R1RobotConfig &robot,
     viewer->open();
   }
 
-  mcc::CartesianPlanner planner;
-  mcc::PlanningDiagnostics planning_diagnostics;
+  mcc::CartesianTrajectoryPlanner planner;
+  mcc::TrajectoryPlanningDiagnostics planning_diagnostics;
   requireOk(planner.replan(plan_request, planning_diagnostics),
             "plan dual-hand retarget");
   std::uint64_t planned_target_revision = input->targetFrame().revision;

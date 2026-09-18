@@ -52,8 +52,8 @@ private:
 
 int runLoop(Options options, const R1RobotConfig &robot, SolverRuntime &solver,
             const SolverHandles &handles,
-            motion_control::core::CartesianPlanner *cartesian_planner,
-            motion_control::core::JointPlanner *joint_planner,
+            motion_control::core::CartesianTrajectoryPlanner *cartesian_planner,
+            motion_control::core::JointTrajectoryPlanner *joint_planner,
             CenterOfMassVisualization *com_visualization,
             const JointTargetLimits &joint_limits,
             const std::vector<std::size_t> &active_joint_full_indices,

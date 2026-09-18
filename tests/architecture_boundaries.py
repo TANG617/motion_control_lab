@@ -31,7 +31,7 @@ FORBIDDEN_OLD = re.compile(
 TEXT_SUFFIXES = {".cpp", ".hpp", ".h", ".cmake", ".txt"}
 MCC_COMPONENT_PATTERNS = (
     re.compile(r"#\s*include\s*[<\"]motion_control_core/"),
-    re.compile(r"\bmotion_control::core::(?:KinematicsSolverBuilder|HierarchicalKinematicsSolver|CartesianPlanner|JointPlanner)\b"),
+    re.compile(r"\bmotion_control::core::(?:KinematicsSolverBuilder|HierarchicalKinematicsSolver|CartesianTrajectoryPlanner|JointTrajectoryPlanner)\b"),
     re.compile(r"\bmotion_control_core(?:::[A-Za-z0-9_]+)?\b"),
 )
 APP_SOURCE_FILES = {
@@ -54,7 +54,7 @@ APP_MAIN_REQUIREMENTS = {
     "psibot_teleop": ("parseOptions", "runLoop"),
     "baseline": ("parseTeleopOptions", "parseReplayOptions", "BaselineSolver", "runLoop", "runReplayLoop"),
     "hierarchical_inverse_dynamics_torque_sim": ("parseOptions", "configureSolver", "runLoop"),
-    "hierarchical_kinematics_step": ("parseOptions", "SolverRuntime", "configureSolver", "CartesianPlanner", "JointPlanner", "runLoop"),
+    "hierarchical_kinematics_step": ("parseOptions", "SolverRuntime", "configureSolver", "CartesianTrajectoryPlanner", "JointTrajectoryPlanner", "runLoop"),
     "replay_plan": ("parseOptions", "runLoop"),
     "step": ("parseOptions", "parseReplayOptions", "MccServoSolver", "PlacoServoSolver", "runLoop", "runReplayLoop"),
     "target": ("parseOptions", "MccTargetSolver", "PlacoTargetSolver", "runLoop"),

@@ -26,7 +26,7 @@ Json::Value capabilities() {
   c["failure_policy"] =
       "record native rejection and stop; remaining releases not-run";
   c["acceptance_contract"] =
-      "native weighted acceptance then native Cartesian/JointPlanner success; "
+      "native weighted acceptance then native Cartesian/JointTrajectoryPlanner success; "
       "no candidate projection";
   return c;
 }

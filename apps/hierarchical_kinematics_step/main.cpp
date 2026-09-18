@@ -125,13 +125,13 @@ int run(int argc, char **argv, std::string &normal_exit_detail) {
                          batch_settings, batch_output, runtime, handles);
   }
   const auto capabilities = app::profileCapabilities(options);
-  std::unique_ptr<mcc::CartesianPlanner> cartesian_planner;
-  std::unique_ptr<mcc::JointPlanner> joint_planner;
+  std::unique_ptr<mcc::CartesianTrajectoryPlanner> cartesian_planner;
+  std::unique_ptr<mcc::JointTrajectoryPlanner> joint_planner;
   if (capabilities.cartesian_planning) {
-    cartesian_planner = std::make_unique<mcc::CartesianPlanner>();
+    cartesian_planner = std::make_unique<mcc::CartesianTrajectoryPlanner>();
   }
   if (capabilities.joint_otg) {
-    joint_planner = std::make_unique<mcc::JointPlanner>(
+    joint_planner = std::make_unique<mcc::JointTrajectoryPlanner>(
         app::makeJointPlannerConfig(options.planning));
   }
 

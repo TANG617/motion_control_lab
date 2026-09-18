@@ -1,6 +1,7 @@
 #include "loop.hpp"
 #include "motion_control_lab/sha256.hpp"
 #include <iostream>
+#include <fstream>
 #include <motion_control_viz/fanout_render_sink.hpp>
 #include <motion_control_viz/foxglove_mcap_sink.hpp>
 #include <motion_control_viz/foxglove_websocket_sink.hpp>
@@ -9,6 +10,7 @@ namespace app = motion_control_lab::joint_path_planning;
 int main(int argc, char **argv) {
   // Fatal boundary only: unwind terminal/worker RAII, expose the original
   // error, exit.
+  std::filesystem::path fatal_log;
   try {
     auto o = app::parseOptions(argc, argv);
     if (o.help) {
@@ -20,7 +22,10 @@ int main(int argc, char **argv) {
              "[--no-viz] [--no-record]\n"
              "[--host HOST] [--port PORT] [--budget SECONDS] "
              "[--simplification-budget SECONDS] [--seed INTEGER]\n"
-             "[--timing-mode straight-through|stop-at-waypoints]\n"
+             "[--timing-mode straight-through|stop-at-waypoints|smooth]\n"
+             "[--smooth-validation full|none]\n"
+             "[--smoothing-budget SECONDS] [--smoothing-revolute-deviation "
+             "RAD]\n"
              "--describe-capabilities | --request FILE "
              "[--dump-resolved-options]\n"
              "Keyboard: w/s a/d q/e translate, arrows arm/step, n i/u rotate, "
@@ -31,7 +36,7 @@ int main(int argc, char **argv) {
     }
     if (o.describe) {
       std::cout
-          << R"({"app_id":"mcl_joint_path_planning","execution_structure":"target-ik-joint-path-timing-kinematic-execution","sources":["keyboard","request"],"robot":"R1","hardware":false,"planning_modes":["whole-body","single-arm"],"default_planning_mode":"whole-body","request_schema":"joint_path_planning.request.v1"})"
+          << R"({"app_id":"mcl_joint_path_planning","execution_structure":"target-ik-joint-path-timing-kinematic-execution","sources":["keyboard","request"],"robot":"R1","hardware":false,"planning_modes":["whole-body","single-arm"],"default_planning_mode":"whole-body","timing_modes":["stop-at-waypoints","straight-through","smooth"],"default_timing_mode":"straight-through","smooth_validation_modes":["full","none"],"default_smooth_validation":"full","request_schema":"joint_path_planning.request.v1"})"
           << '\n';
       return 0;
     }
@@ -42,6 +47,7 @@ int main(int argc, char **argv) {
     if (!std::filesystem::create_directories(o.output))
       throw std::runtime_error("output directory already exists: " +
                                o.output.string());
+    fatal_log = o.output / "native.log";
     auto config = app::resolved(o);
     config["urdf_sha256"] = motion_control_lab::sha256_file(o.urdf);
     config["config_sha256"] = motion_control_lab::sha256_file(o.config);
@@ -72,6 +78,9 @@ int main(int argc, char **argv) {
     return app::run(o, model, solver, planning, sink);
   } catch (const std::exception &e) {
     std::cerr << e.what() << '\n';
+    // SessionLog has restored stderr during unwinding; retain the same fatal error in the run.
+    if (!fatal_log.empty())
+      std::ofstream(fatal_log, std::ios::app) << e.what() << '\n';
     return 1;
   }
 }

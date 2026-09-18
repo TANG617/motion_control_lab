@@ -1,5 +1,6 @@
 #include "planning.hpp"
 #include <algorithm>
+#include <chrono>
 namespace motion_control_lab::joint_path_planning {
 const char *stageName(Stage s) {
   switch (s) {
@@ -9,6 +10,12 @@ const char *stageName(Stage s) {
     return "IK";
   case Stage::Check:
     return "CHECK";
+  case Stage::Prune:
+    return "PRUNE";
+  case Stage::Smooth:
+    return "SMOOTH";
+  case Stage::TrajectoryVerification:
+    return "VERIFY_TRAJECTORY";
   case Stage::Simplify:
     return "SIMPLIFY";
   case Stage::Search:
@@ -16,7 +23,7 @@ const char *stageName(Stage s) {
   case Stage::Timing:
     return "TIMING";
   case Stage::Verification:
-    return "VERIFY";
+    return "VERIFY_PATH";
   case Stage::Preview:
     return "PREVIEW";
   case Stage::Executing:
@@ -96,6 +103,8 @@ const char *validationName(mcc::JointPathValidationReason reason) {
     return "budget or cancellation";
   case R::PoseConstraint:
     return "held TCP tolerance exceeded";
+  case R::ClearanceUncertified:
+    return "clearance interval not certified";
   case R::ConstraintUncertified:
     return "held TCP segment bound not certified";
   }
@@ -163,6 +172,8 @@ PlannedMotion Planning::generate(
     const std::optional<mcc::JointPathPoseConstraint> &constraint,
     std::atomic<bool> &cancel, std::atomic<Stage> &stage) {
   PlannedMotion m;
+  if (options_.timing_mode == "smooth")
+    m.trajectory_validation_status = "not_run";
   m.start = state;
   m.goal = state;
   const auto &model = *scene->description().robot_model;
@@ -190,6 +201,9 @@ PlannedMotion Planning::generate(
       break;
     case S::Searching:
       stage = Stage::Search;
+      break;
+    case S::ReducingVertices:
+      stage = Stage::Prune;
       break;
     case S::Simplifying:
       stage = Stage::Simplify;
@@ -233,6 +247,84 @@ PlannedMotion Planning::generate(
     timing.limits.max_velocity.push_back(l.velocity);
     timing.limits.max_acceleration.push_back(options_.acceleration);
     timing.limits.max_jerk.push_back(options_.jerk);
+  }
+  if (options_.timing_mode == "smooth") {
+    const auto started = std::chrono::steady_clock::now();
+    const auto expired = [&] {
+      return cancel.load() || std::chrono::duration<double>(
+                                  std::chrono::steady_clock::now() - started)
+                                      .count() >= options_.smoothing_budget;
+    };
+    mcc::JointPathTrajectoryOptions smooth;
+    smooth.limits = timing.limits;
+    smooth.sample_period = timing.sample_period;
+    smooth.should_stop = expired;
+    smooth.max_joint_deviation = Eigen::VectorXd::Constant(
+        model.jointNames().size(), options_.smoothing_revolute_deviation);
+    // This app's R1 active joints are revolute. Fixed coordinates get zero
+    // deviation.
+    for (Eigen::Index k = 0; k < smooth.max_joint_deviation.size(); ++k)
+      if (std::all_of(m.path.path.waypoints.begin(),
+                      m.path.path.waypoints.end(), [&](const auto &q) {
+                        return q[k] == m.path.path.waypoints.front()[k];
+                      }))
+        smooth.max_joint_deviation[k] = 0;
+    stage = Stage::Smooth;
+    mcc::JointPathTrajectoryResult generated;
+    require(mcc::JointPathTrajectoryGenerator{}.generate(
+        m.path.path, smooth, generated, m.smoothing));
+    m.timing.calculation_time_ms = m.smoothing.calculation_time_ms;
+    if (!mcc::isAccepted(generated.disposition)) {
+      m.reason = cancel ? "Cancelled" : "Smoothing budget exhausted";
+      return m;
+    }
+    if (options_.smooth_validation == "full") {
+      stage = Stage::TrajectoryVerification;
+      mcc::JointTrajectoryValidator validator;
+      require(validator.configure(scene));
+      mcc::JointTrajectoryValidationOptions verify;
+      verify.geometry.should_stop = expired;
+      verify.limits = smooth.limits;
+      verify.max_joint_deviation = smooth.max_joint_deviation;
+      const auto verify_start = std::chrono::steady_clock::now();
+      require(validator.checkTrajectory(*generated.curve, m.path.path, verify,
+                                        m.path.pose_constraint, m.trajectory_validation));
+      m.trajectory_validation_ms =
+          std::chrono::duration<double, std::milli>(
+              std::chrono::steady_clock::now() - verify_start)
+              .count();
+      m.trajectory_validation_status = m.trajectory_validation.valid ? "passed" : "failed";
+      if (!m.trajectory_validation.valid) {
+        m.reason = cancel      ? "Cancelled"
+                   : expired() ? "Smoothing/validation budget exhausted"
+                               : m.trajectory_validation.reason;
+        return m;
+      }
+    } else {
+      m.trajectory_validation_status = "skipped";
+    }
+    if (expired()) {
+      m.reason = cancel ? "Cancelled" : "Smoothing/validation budget exhausted";
+      return m;
+    }
+    m.curve = std::move(generated.curve);
+    m.timed.trajectory = std::move(generated.trajectory);
+    m.timed.disposition = mcc::ResultDisposition::Accepted;
+    m.timing.duration = m.smoothing.duration;
+    m.timing.sample_count = m.timed.trajectory.samples.size();
+    m.timing.segment_count = m.smoothing.segment_count;
+    m.timing.calculation_time_ms = m.smoothing.calculation_time_ms;
+    m.timing.limits_verified = m.smoothing.limits_verified;
+    m.timing.maximum_velocity_ratio = m.smoothing.maximum_velocity_ratio;
+    m.timing.maximum_acceleration_ratio =
+        m.smoothing.maximum_acceleration_ratio;
+    m.timing.maximum_jerk_ratio = m.smoothing.maximum_jerk_ratio;
+    m.timing.stop_waypoint_indices.clear();
+    m.accepted = true;
+    m.reason = options_.smooth_validation == "full"
+                   ? "Final smooth curve validated"
+                   : "Smooth curve generated; post-generation validation skipped";
+    return m;
   }
   require(mcc::JointPathTimeParameterizer{}.generate(m.path.path, timing,
                                                      m.timed, m.timing));

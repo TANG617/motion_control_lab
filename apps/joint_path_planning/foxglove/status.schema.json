@@ -285,6 +285,83 @@
       "items": {
         "type": "string"
       }
+    },
+    "removed_vertices": {
+      "type": "number"
+    },
+    "linear_segments_before_reduction": {
+      "type": "number"
+    },
+    "linear_segments_after_reduction": {
+      "type": "number"
+    },
+    "vertex_reduction_ms": {
+      "type": "number"
+    },
+    "trajectory_verification_ms": {
+      "type": "number"
+    },
+    "trajectory_interval_count": {
+      "type": "number"
+    },
+    "trajectory_collision_queries": {
+      "type": "number"
+    },
+    "smoothing_segments": {
+      "type": "number"
+    },
+    "smoothing_scaling_attempts": {
+      "type": "number"
+    },
+    "path_clearance_lower_bound_m": {
+      "type": "number"
+    },
+    "trajectory_clearance_lower_bound_m": {
+      "type": "number"
+    },
+    "trajectory_failed_time_s": {
+      "type": "number"
+    },
+    "trajectory_violating_distance_m": {
+      "type": "number"
+    },
+    "smooth_stop_times": {
+      "type": "array",
+      "items": {
+        "type": "number"
+      }
+    },
+    "maximum_deviation_bound": {
+      "type": "array",
+      "items": {
+        "type": "number"
+      }
+    },
+    "trajectory_violating_positions": {
+      "type": "array",
+      "items": {
+        "type": "number"
+      }
+    },
+    "trajectory_violating_pair": {
+      "type": "string"
+    },
+    "smooth_validation": {
+      "type": "string",
+      "enum": [
+        "full",
+        "none"
+      ]
+    },
+    "trajectory_validation_status": {
+      "type": "string",
+      "enum": [
+        "not_applicable",
+        "not_run",
+        "skipped",
+        "passed",
+        "failed"
+      ]
     }
   }
 }

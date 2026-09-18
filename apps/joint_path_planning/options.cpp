@@ -43,6 +43,13 @@ Options parseOptions(int argc, char **argv) {
       o.side = request.get("side", "left").asString();
       o.planning_mode = request.get("planning_mode", "whole-body").asString();
       o.timing_mode = request.get("timing_mode", o.timing_mode).asString();
+      o.smooth_validation = request.get("smooth_validation", o.smooth_validation).asString();
+      o.smoothing_budget =
+          request.get("smoothing_budget", o.smoothing_budget).asDouble();
+      o.smoothing_revolute_deviation = request
+                                           .get("smoothing_revolute_deviation",
+                                                o.smoothing_revolute_deviation)
+                                           .asDouble();
       o.headless = true;
       o.viz = request.get("viz", false).asBool();
       o.record = request.get("record", true).asBool();
@@ -88,6 +95,8 @@ Options parseOptions(int argc, char **argv) {
       o.planning_mode = value();
     else if (a == "--timing-mode")
       o.timing_mode = value();
+    else if (a == "--smooth-validation")
+      o.smooth_validation = value();
     else if (a == "--side")
       o.side = value();
     else if (a == "--port")
@@ -96,6 +105,10 @@ Options parseOptions(int argc, char **argv) {
       o.host = value();
     else if (a == "--budget")
       o.budget = std::stod(value());
+    else if (a == "--smoothing-budget")
+      o.smoothing_budget = std::stod(value());
+    else if (a == "--smoothing-revolute-deviation")
+      o.smoothing_revolute_deviation = std::stod(value());
     else if (a == "--simplification-budget")
       o.simplification_budget = std::stod(value());
     else if (a == "--seed")
@@ -126,10 +139,17 @@ Options parseOptions(int argc, char **argv) {
   if (!std::isfinite(o.simplification_budget) || o.simplification_budget < 0)
     throw std::runtime_error(
         "simplification budget must be finite and non-negative");
-  if (o.timing_mode != "straight-through" &&
-      o.timing_mode != "stop-at-waypoints")
+  if (!std::isfinite(o.smoothing_budget) || o.smoothing_budget <= 0 ||
+      !std::isfinite(o.smoothing_revolute_deviation) ||
+      o.smoothing_revolute_deviation <= 0)
     throw std::runtime_error(
-        "timing mode must be straight-through or stop-at-waypoints");
+        "smoothing budget and deviation must be finite and positive");
+  if (o.timing_mode != "straight-through" &&
+      o.timing_mode != "stop-at-waypoints" && o.timing_mode != "smooth")
+    throw std::runtime_error(
+        "timing mode must be straight-through, stop-at-waypoints or smooth");
+  if (o.smooth_validation != "full" && o.smooth_validation != "none")
+    throw std::runtime_error("smooth validation must be full or none");
   o.scene = readJson(o.config);
   if (o.goal.isNull())
     o.goal = o.scene["goals"][o.side];
@@ -140,6 +160,15 @@ Json::Value resolved(const Options &o) {
   r["app"] = "mcl_joint_path_planning";
   r["planning_mode"] = o.planning_mode;
   r["timing_mode"] = o.timing_mode;
+  r["smooth_validation"] = o.smooth_validation;
+  r["path_policy"] = "adaptive-interval-shortcut-prune-v1";
+  r["trajectory_policy"] = o.timing_mode == "smooth"
+                               ? (o.smooth_validation == "full"
+                                      ? "totg-ruckig-validated-curve-v1"
+                                      : "totg-ruckig-generated-curve-v1")
+                               : "exact-polyline-scalar-ruckig-v1";
+  r["smoothing_budget"] = o.smoothing_budget;
+  r["smoothing_revolute_deviation"] = o.smoothing_revolute_deviation;
   r["method_id"] =
       o.planning_mode == "whole-body" ? "whole-body-held-tcp-v1" : kIkPolicy;
   r["ik_policy"] = r["method_id"];

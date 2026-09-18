@@ -35,6 +35,7 @@ def run(name, config='cube', extra=(), code=0):
 cap = subprocess.run([a.binary, '--describe-capabilities', '--urdf', '/missing'],
                      check=True, capture_output=True, text=True)
 assert json.loads(cap.stdout)['hardware'] is False
+assert 'smooth' in json.loads(cap.stdout)['timing_modes']
 cube, status = run('cube')
 assert status['accepted'] and not status['direct_valid'], status
 assert status['backend_status'] == 'Exact solution' and status['waypoints'] >= 3
@@ -44,6 +45,8 @@ assert 0 <= status['accepted_shortcuts'] <= status['simplification_attempts'] <=
 assert status['simplification_ms'] <= status['planning_ms']
 assert status['simplification_termination'] in ['completed', 'stalled', 'attempt_limit', 'budget_exhausted']
 assert json.loads((cube/'resolved.json').read_text())['simplification_budget_s'] == 1
+assert 0 <= status['linear_segments_after_reduction'] <= status['linear_segments_before_reduction']
+assert 'stops_before_reduction' not in status and 'stops_after_reduction' not in status
 assert status['app_path_checks'] == status['app_timed_state_checks'] == 0
 assert status['timing_mode'] == 'straight-through'
 assert status['collision_queries'] > 0 and status['broadphase_skips'] > 0
@@ -173,3 +176,12 @@ status = json.loads((root/'cancel/status.json').read_text())
 assert status['state'] == 'CANCELLED' and not status['accepted'] and not status['execution_complete']
 assert not list((root/'cancel').glob('*trajectory.csv'))
 print('PASS cancellation and Ctrl+C terminal restoration at 60 columns')
+
+# Smooth mode uses its final curve and independently validates it before execution.
+smooth, ss = run('smooth-free', config='free', extra=('--timing-mode', 'smooth'))
+assert ss['accepted'], ss
+assert ss['timing_mode'] == 'smooth'
+assert ss['trajectory_verification_ms'] > 0
+assert ss['smoothing_scaling_attempts'] > 0
+assert max(ss['maximum_deviation_bound']) <= .005
+assert json.loads((smooth/'resolved.json').read_text())['smoothing_budget'] == 5

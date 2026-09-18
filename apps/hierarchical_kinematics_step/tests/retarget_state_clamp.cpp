@@ -313,8 +313,8 @@ mcc::CartesianRetargetRequest makePlannerRequest()
 void testClampedRequestPlansWithinAllDerivativeLimits()
 {
   auto request = makePlannerRequest();
-  mcc::PlanningDiagnostics diagnostics;
-  mcc::CartesianPlanner strict_planner;
+  mcc::TrajectoryPlanningDiagnostics diagnostics;
+  mcc::CartesianTrajectoryPlanner strict_planner;
   const auto rejected = strict_planner.replan(request, diagnostics);
   require(!rejected.ok(), "Core unexpectedly accepted the unclamped request");
   require(
@@ -341,7 +341,7 @@ void testClampedRequestPlansWithinAllDerivativeLimits()
       "planner request pose changed during clamp");
   }
 
-  mcc::CartesianPlanner planner;
+  mcc::CartesianTrajectoryPlanner planner;
   const auto planned = planner.replan(request, diagnostics);
   require(planned.ok(), "Core rejected the clamped request: " + planned.message);
 
@@ -410,7 +410,7 @@ void testClampedRequestPlansWithinAllDerivativeLimits()
     previous_time = sample.time_from_start;
     ++sample_count;
     require(sample_count < request.maximum_sample_count, "planner did not finish within its budget");
-    if (diagnostics.state == mcc::PlanningState::Finished) {
+    if (diagnostics.state == mcc::TrajectoryPlanningState::Finished) {
       break;
     }
   }

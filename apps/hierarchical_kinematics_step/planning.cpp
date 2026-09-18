@@ -278,9 +278,9 @@ bool ReplaySettlingCounter::update(bool input_consumed, bool cartesian_finished,
   return consecutive_cycles_ >= options_.required_cycles;
 }
 
-motion_control::core::JointPlannerConfig
+motion_control::core::JointTrajectoryPlannerConfig
 makeJointPlannerConfig(const PlanningOptions &options) {
-  motion_control::core::JointPlannerConfig config;
+  motion_control::core::JointTrajectoryPlannerConfig config;
   config.algorithm = toCoreJointAlgorithm(options.joint_algorithm);
   config.synchronization =
       toCoreSynchronization(options.joint_synchronization);
@@ -386,16 +386,16 @@ RetargetClampDiagnostics clampRetargetCurrentState(
   return diagnostics;
 }
 
-const char *plannerStateName(motion_control::core::PlanningState state) {
-  using motion_control::core::PlanningState;
+const char *plannerStateName(motion_control::core::TrajectoryPlanningState state) {
+  using motion_control::core::TrajectoryPlanningState;
   switch (state) {
-  case PlanningState::Idle:
+  case TrajectoryPlanningState::Idle:
     return "idle";
-  case PlanningState::Planning:
+  case TrajectoryPlanningState::Planning:
     return "planning";
-  case PlanningState::Finished:
+  case TrajectoryPlanningState::Finished:
     return "finished";
-  case PlanningState::Error:
+  case TrajectoryPlanningState::Error:
     return "error";
   }
   return "unknown";

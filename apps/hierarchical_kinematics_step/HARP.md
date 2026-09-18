@@ -13,7 +13,7 @@ scripts do not run a network.
 | `posture-reference-task-left` | HARP | disabled |
 | `posture-reference-task-right` | disabled | HARP |
 
-All three use CartesianPlanner -> HKS (`planned`, `pose-primary`, no joint OTG).
+All three use CartesianTrajectoryPlanner -> HKS (`planned`, `pose-primary`, no joint OTG).
 Both end-effector position and orientation tasks are Primary, with a shared
 per-arm progress scale. Enabled link4 position tasks and the existing Yellow
 posture coupling are Secondary. Yellow posture/collision configuration remains

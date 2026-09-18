@@ -220,11 +220,19 @@ Visualization::render(const Snapshot &s, const Options &o,
          s.attempt->motion.direct.valid ? color(.6, .6, .6, .7)
                                         : color(1, .15, .15, .8));
     if (s.attempt->motion.accepted) {
-      line("planned-path", s.attempt->path_curve, color(0, .8, 1, 1));
-      for (const auto waypoint :
-           s.attempt->motion.timing.stop_waypoint_indices) {
-        const std::size_t i = waypoint ? waypoint * 81 - 1 : 0;
-        const auto &p = s.attempt->path_curve.at(i);
+      line("planned-path", s.attempt->path_curve,
+           s.attempt->motion.curve ? color(.5, .5, .5, .6)
+                                   : color(0, .8, 1, 1));
+      if (s.attempt->motion.curve)
+        line("smooth-trajectory", s.attempt->smooth_curve, color(0, .8, 1, 1));
+      std::vector<std::array<double, 3>> stops = s.attempt->smooth_stops;
+      if (!s.attempt->motion.curve)
+        for (const auto waypoint :
+             s.attempt->motion.timing.stop_waypoint_indices)
+          stops.push_back(
+              s.attempt->path_curve.at(waypoint ? waypoint * 81 - 1 : 0));
+      for (std::size_t i = 0; i < stops.size(); ++i) {
+        const auto &p = stops[i];
         auto e = entity("waypoint-" + std::to_string(i));
         Json::Value sphere;
         Pose t = Pose::Identity();

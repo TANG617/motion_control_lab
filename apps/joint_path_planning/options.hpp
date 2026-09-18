@@ -21,10 +21,12 @@ struct Options {
   std::string side{"left"}, host{"127.0.0.1"};
   std::string planning_mode{"whole-body"};
   std::string timing_mode{"straight-through"};
+  std::string smooth_validation{"full"};
   int port{8765};
   bool headless{false}, realtime{false}, viz{true}, record{true};
   bool help{false}, describe{false}, dump{false};
   double simplification_budget{1.0};
+  double smoothing_budget{5.0}, smoothing_revolute_deviation{.005};
   double budget{50.0}, period{0.01}, acceleration{2.0}, jerk{10.0};
   unsigned seed{42};
   Json::Value goal;

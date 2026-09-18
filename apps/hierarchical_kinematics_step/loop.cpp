@@ -762,8 +762,8 @@ struct RedOutputSnapshot {
   TargetSnapshot accepted_target;
   TargetSnapshot source_goal;
   mcc::CartesianTrajectorySample accepted_planner_sample;
-  mcc::PlanningState planner_state{mcc::PlanningState::Idle};
-  mcc::PlanningDiagnostics cartesian_plan_diagnostics;
+  mcc::TrajectoryPlanningState planner_state{mcc::TrajectoryPlanningState::Idle};
+  mcc::TrajectoryPlanningDiagnostics cartesian_plan_diagnostics;
   StateSnapshot state;
   Eigen::VectorXd raw_ik_positions;
   Eigen::VectorXd raw_ik_velocities;
@@ -777,8 +777,8 @@ struct RedOutputSnapshot {
   std::uint64_t projection_event_count{0U};
   std::uint64_t projection_cycle_count{0U};
   bool future_o1_startup{false};
-  mcc::PlanningDiagnostics joint_plan_diagnostics;
-  mcc::PlanningDiagnostics joint_step_diagnostics;
+  mcc::TrajectoryPlanningDiagnostics joint_plan_diagnostics;
+  mcc::TrajectoryPlanningDiagnostics joint_step_diagnostics;
   mcc::Pose raw_left_pose{mcc::Pose::Identity()};
   mcc::Pose raw_right_pose{mcc::Pose::Identity()};
   mcc::Pose raw_left_link4_pose{mcc::Pose::Identity()};
@@ -1146,8 +1146,8 @@ std::string failureLayer(const mcl::GroupedWorkerFault &fault) {
       {{"Cartesian replan", "cartesian-replan"},
        {"Cartesian planner step", "cartesian-step"},
        {"joint target projection", "joint-target-projection"},
-       {"JointPlanner plan", "joint-plan"},
-       {"JointPlanner step", "joint-step"},
+       {"JointTrajectoryPlanner plan", "joint-plan"},
+       {"JointTrajectoryPlanner step", "joint-step"},
        {"OTG execution-state FK", "otg-fk"},
        {"Red", "red-ik"}}};
   for (const auto &layer : layers) {
@@ -1658,7 +1658,7 @@ makeJointTracking(const proto::SampleContext &context,
 proto::PlannerTelemetry makePlannerTelemetry(
     const proto::SampleContext &context, const char *kind,
     const char *algorithm, const char *synchronization, const char *operation,
-    const mcc::PlanningDiagnostics &diagnostics, double sample_time_s) {
+    const mcc::TrajectoryPlanningDiagnostics &diagnostics, double sample_time_s) {
   proto::PlannerTelemetry message;
   *message.mutable_context() = context;
   message.set_planner_kind(kind);
@@ -2406,8 +2406,8 @@ void appendNullspaceElbowScene(motion_control::viz::RenderBatch &batch,
 
 int runLoop(Options planned_options, const R1RobotConfig &robot,
             SolverRuntime &solver, const SolverHandles &handles,
-            mcc::CartesianPlanner *cartesian_planner,
-            mcc::JointPlanner *joint_planner,
+            mcc::CartesianTrajectoryPlanner *cartesian_planner,
+            mcc::JointTrajectoryPlanner *joint_planner,
             CenterOfMassVisualization *com_visualization,
             const JointTargetLimits &joint_otg_limits,
             const std::vector<std::size_t> &active_joint_full_indices,
@@ -2635,7 +2635,7 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
   initial_output.admittance = initialAdmittanceOutput(
       initial_output.accepted_planner_sample, initial_output.left_pose,
       initial_output.right_pose, robot);
-  initial_output.planner_state = mcc::PlanningState::Finished;
+  initial_output.planner_state = mcc::TrajectoryPlanningState::Finished;
   mcc::SelfCollisionDiagnostics initial_collision_diagnostics;
   mcl::SelfCollisionDebug initial_collision_debug;
   mcl::SolverDebug initial_yellow_solver_debug;
@@ -2964,7 +2964,7 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
         affinity_domain.bindCurrentThread(kProgramId, "red", kRedCpuAffinity);
     red_affinity_to_ui.publish(affinity_binding);
     // Keep the accepted raw-IK reference independent from the jerk-limited
-    // execution state. Red advances from ik_state, while JointPlanner and
+    // execution state. Red advances from ik_state, while JointTrajectoryPlanner and
     // Yellow advance from otg_state.
     StateSnapshot ik_state = initial_state;
     StateSnapshot otg_state = initial_state;
@@ -2986,7 +2986,7 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
     mcc::ForwardKinematicsSolution shoulder_fk;
     mcc::ForwardKinematicsDiagnostics shoulder_diagnostics;
     std::optional<std::uint64_t> rejected_target_revision;
-    mcc::PlanningDiagnostics planning_diagnostics;
+    mcc::TrajectoryPlanningDiagnostics planning_diagnostics;
     mcc::CartesianTrajectorySample accepted_planner_sample =
         initial_output.accepted_planner_sample;
     std::optional<mcc::CartesianTrajectorySample> staged_planner_sample;
@@ -3198,7 +3198,7 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
             staged_planner_sample = std::move(direct_sample);
             planned_goal_revision = target.revision;
             planning_diagnostics = {};
-            planning_diagnostics.state = mcc::PlanningState::Finished;
+            planning_diagnostics.state = mcc::TrajectoryPlanningState::Finished;
           } else if (target.revision != planned_goal_revision) {
             auto retarget_request = makeRetargetRequest(
                 target.left, target.right, accepted_planner_sample, robot,
@@ -3493,10 +3493,10 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
           joint_sample.velocities = projected_target.velocities;
           joint_sample.accelerations = projected_target.accelerations;
           joint_sample.jerks.assign(joint_names.size(), 0.0);
-          mcc::PlanningDiagnostics joint_plan_diagnostics;
-          mcc::PlanningDiagnostics joint_step_diagnostics;
-          joint_plan_diagnostics.state = mcc::PlanningState::Finished;
-          joint_step_diagnostics.state = mcc::PlanningState::Finished;
+          mcc::TrajectoryPlanningDiagnostics joint_plan_diagnostics;
+          mcc::TrajectoryPlanningDiagnostics joint_step_diagnostics;
+          joint_plan_diagnostics.state = mcc::TrajectoryPlanningState::Finished;
+          joint_step_diagnostics.state = mcc::TrajectoryPlanningState::Finished;
           if (capabilities.joint_otg) {
             mcc::JointTrajectoryRequest joint_request;
             joint_request.joint_names = joint_names;
@@ -3527,7 +3527,7 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
             attempt.failure_disposition = RedFailureDisposition::Fatal;
             attempt.target = target;
             attempt.detail =
-                "JointPlanner plan failed: " + joint_status.message;
+                "JointTrajectoryPlanner plan failed: " + joint_status.message;
             recordFailure("joint-plan", attempt.detail);
             red_attempt_to_ui.publish(attempt);
             if (telemetry_enabled) {
@@ -3563,7 +3563,7 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
             attempt.failure_disposition = RedFailureDisposition::Fatal;
             attempt.target = target;
             attempt.detail =
-                "JointPlanner step failed: " + joint_status.message;
+                "JointTrajectoryPlanner step failed: " + joint_status.message;
             recordFailure("joint-step", attempt.detail);
             red_attempt_to_ui.publish(attempt);
             if (telemetry_enabled) {
@@ -3845,7 +3845,7 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
                 replay_settling->update(
                 target.replay_source_index == final_source_index &&
                     replay_last_consumed_revision.load() >= target.revision,
-                planning_diagnostics.state == mcc::PlanningState::Finished,
+                planning_diagnostics.state == mcc::TrajectoryPlanningState::Finished,
                     output.left_position_error_m,
                     output.left_orientation_error_rad,
                 output.right_position_error_m,
@@ -4435,7 +4435,7 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
           " projection_events=" +
           std::to_string(latest_output.projection_event_count);
       frame.status +=
-          " | JointPlanner " +
+          " | JointTrajectoryPlanner " +
           std::string{
               mcl::hierarchical_kinematics_step::planningSynchronizationName(
                               planned_options.planning.joint_synchronization)} +
@@ -4930,7 +4930,7 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
           const bool input_consumed =
               replay_last_consumed_revision.load() >= published_target.revision;
           const bool cartesian_finished =
-              latest_output.planner_state == mcc::PlanningState::Finished;
+              latest_output.planner_state == mcc::TrajectoryPlanningState::Finished;
           const bool pose_within =
               latest_output.left_position_error_m <=
                   planned_options.replay_settling.fk_position_m &&
@@ -5271,11 +5271,11 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
     execution.topology = profileName(planned_options.profile);
     execution.solver = "motion_control_core::HierarchicalKinematicsSolver";
     if (capabilities.cartesian_planning)
-      execution.solver += "+CartesianPlanner";
+      execution.solver += "+CartesianTrajectoryPlanner";
     if (capabilities.admittance)
       execution.solver += "+CartesianAdmittance";
     if (capabilities.joint_otg)
-      execution.solver += "+JointPlanner";
+      execution.solver += "+JointTrajectoryPlanner";
     execution.backend = capabilities.joint_otg ? "proxqp+ruckig" : "proxqp";
     if (capabilities.kinematic_simulation)
       execution.backend += "+mujoco-forward";
@@ -5556,7 +5556,7 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
         mcl::hierarchical_kinematics_step::planningSynchronizationName(
             planned_options.planning.joint_synchronization);
     joint_otg["execution_semantics"] =
-        "per Red tick JointPlanner::plan plus first JointPlanner::step sample; "
+        "per Red tick JointTrajectoryPlanner::plan plus first JointTrajectoryPlanner::step sample; "
         "not persistent "
         "Ruckig.update equivalence";
     joint_otg["feedback_topology"] = "split-ik-reference-and-otg-execution";
@@ -5615,7 +5615,7 @@ int runLoop(Options planned_options, const R1RobotConfig &robot,
     }
     if (!capabilities.joint_otg) {
       joint_otg = Json::Value(Json::objectValue);
-      joint_otg["execution_semantics"] = "direct accepted IK P/V; no JointPlanner";
+      joint_otg["execution_semantics"] = "direct accepted IK P/V; no JointTrajectoryPlanner";
       joint_otg["feedback_topology"] = "accepted-ik";
     }
     joint_otg["enabled"] = capabilities.joint_otg;

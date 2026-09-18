@@ -12,13 +12,15 @@ struct Attempt {
   NamedGoal ik;
   std::array<Pose, 2> ik_tcp{Pose::Identity(), Pose::Identity()};
   PlannedMotion motion;
-  std::vector<std::array<double, 3>> direct_curve, path_curve;
+  std::vector<std::array<double, 3>> direct_curve, path_curve, smooth_curve,
+      smooth_stops;
 };
 struct Snapshot {
   Stage stage{Stage::Idle};
   bool execution_complete{false};
   bool whole_body{true};
   std::string timing_mode{"straight-through"};
+  std::string smooth_validation{"full"};
   ArmSide side{ArmSide::Left};
   Pose draft{Pose::Identity()}, actual{Pose::Identity()};
   std::array<Pose, 2> draft_tcp{Pose::Identity(), Pose::Identity()};

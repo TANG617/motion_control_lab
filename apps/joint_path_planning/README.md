@@ -7,7 +7,7 @@
 头、腿、手指关节保持请求起点配置；完整机器人几何仍参与环境碰撞检查。
 
 这个入口分别支持 `configs/cube.json` 的立方体绕障与 `configs/free.json` 的无障碍直达。
-它需要离散关节空间搜索，因此独立于现有 CartesianPlanner → IK → JointPlanner app。
+它需要离散关节空间搜索，因此独立于现有 CartesianTrajectoryPlanner → IK → JointTrajectoryPlanner app。
 输入/TUI 复用 `hierarchical_kinematics_step` 所使用的共享组件；业务实现完全保留在本目录。
 
 ## 启动
@@ -52,6 +52,12 @@ Core 自身默认仍为 5+1 s。原预算包括 Core 搜索及其验证，缩短
 不再重复整路径检查或逐时间样本碰撞检查。性能受模型与机器负载影响，
 超时保留真实拒绝结果，不改变目标或放宽约束。
 
+Core 公开接口按 `planning/path/`、`planning/trajectory/` 和 `planning/validation/` 分层。
+`JointPath` 只保存几何 waypoint；路径结果中的 `pose_constraint` 显式传给独立轨迹验证器。
+本 app 的 smooth 模式默认使用独立验证器验收轨迹；可通过 `--smooth-validation none` 显式跳过二次验收。
+状态中的 `linear_segments_before_reduction` / `linear_segments_after_reduction` 表示简化前后
+最大单调共线段数量；它们是几何指标，实际停车信息仍由轨迹诊断提供。
+
 ## 路径缩短与质量
 
 拿到 exact path 后，Core 用 OMPL 在连接段内部尝试 shortcut，最多 256 次，
@@ -95,7 +101,7 @@ Path 页面及 `/joint_path/status` 显示原路点数、贯通点数、停车�
 `collision_queries`、`narrowphase_calls`、`broadphase_skips`、`pose_checks` 分别计数，
 快速查询未计算的全局最近距离不填造。失败碰撞对与全局最近碰撞对分开报告。
 
-验证复用仅适用于同一不可变场景、已接受路径和保持几何的时间参数化，仍是离散碰撞证据。
+验证复用仅适用于同一不可变场景、已接受路径和保持几何的时间参数化，证据来自 Core 的区间验证，不扩展到未建模几何或变化后的场景。
 独立逐时间样本复核保留在验收脚本，不放在正常执行链中。
 
 ## IK 任务配置
@@ -117,7 +123,7 @@ right_arm_joint1 ... right_arm_joint7
   调用方仍显式验收 disposition、converged 和各任务误差。失败不提交给 OMPL。
 - app 把 solved 关节值与保持目标分别交给路径规划接口。OMPL 只做关节空间搜索，
   路径全过程保持另一 TCP 在 1 mm / 0.01 rad 内；保持目标包括共享 R1 的 TCP offset。
-- Core 对实际关节折线做自适应位姿误差上界检查，碰撞仍按离散步长复核。
+- Core 对实际关节折线做自适应位姿误差上界检查，碰撞与位姿使用相同的自适应区间细分。
   时间参数化保留折线；app 复用同一场景下的 Core 最终验证。
   不对时间参数化后的配置做 IK 投影，不自动放宽容差或切换模式。
 
@@ -264,7 +270,7 @@ python3 apps/joint_path_planning/tests/observability.py --run <包含 visualizat
 ```
 
 该验证脚本需要 Python mcap、jsonschema、protobuf、numpy、Pinocchio 和 Coal；
-独立网格复查采用每段 9 个采样点，Core 的最终验证采用更密的配置空间步长。
+独立网格复查采用每段 9 个采样点，Core 的最终验证在配置空间步长基础上增加自适应区间上界检查。
 对于 whole-body 录制，该脚本还检查每段 101 点与全部轨迹样本的保持误差、
 腰部与保持臂补偿、非活动关节固定、折线保持和实际停车边界。这里只需一个固定场景，
 不需要批量 seed 或全量 benchmark。
@@ -272,4 +278,39 @@ GUI 的图层外观仍需在 Foxglove 客户端目视确认；协议/schema 测�
 
 实现分布：`main` 装配；`solver` 显式 IK/FK；`planning` 碰撞场景与 MCC 规划；
 `loop` 输入、工作线程、执行时钟、证据；`tui_projection` 和 `visualization` 生成展示内容。
-首版只支持静态场景、离散碰撞检查，不承诺连续碰撞保证、动态避障或硬实时规划。
+当前只支持静态场景；区间结论依赖已加载几何及数值后端，不承诺动态避障或硬实时规划。
+
+### 区间验证与平滑模式
+
+默认 `--timing-mode straight-through` 保持最终关节折线，真实转角继续停车。
+规划内部增加 `PRUNE` 路点删除，`VERIFY_PATH` 使用自适应区间验证。
+
+显式指定 `--timing-mode smooth` 可启用 TOTG + Ruckig。R1 转动关节默认允许偏离原路径
+0.005 rad，可用 `--smoothing-revolute-deviation` 设置；固定关节不允许变化。
+`--smoothing-budget` 默认为 5 秒，覆盖平滑生成与最终曲线验证，独立于原来的 50+1 秒规划预算。
+JSON request 对应 `smoothing_budget`、`smoothing_revolute_deviation`。
+原有 held TCP 容差及 5 mm clearance 不随偏差选项放宽。
+
+默认 `--smooth-validation full` 要求 `VERIFY_TRAJECTORY` 通过才执行；不通过时报告原因，不自动切换模式。
+灰线显示规划参考折线，青线显示实际平滑曲线，蓝球标记静止边界。
+执行与预览使用同一曲线，公共 `/mcl/joints/*`、`/mcl/cartesian/*` 话题不变。
+状态新增删除点数、停车数变化、平滑缩放次数、最终曲线验证耗时和区间 clearance 下界。
+
+## Smooth 二次验证开关与错误日志
+
+```bash
+python3 apps/joint_path_planning/scripts/run_keyboard.py --timing-mode smooth --smooth-validation none
+```
+
+`--smooth-validation full|none` 默认 `full`，request JSON 使用 `smooth_validation`。
+`full` 保留独立轨迹验证器的碰撞、姿态保持及全曲线偏差验收；`none` 跳过整个二次验收，
+仍要求路径规划和轨迹生成成功，保留生成器的关节限制检查、取消和预算处理。
+该选项只在 smooth 模式生效，其他 timing 模式保持原行为。
+
+`resolved.json` 和状态记录所选模式；TUI 与 `trajectory_validation_status` 明确区分
+`skipped`、`passed`、`failed`、`not_run`（尚未调用）及 `not_applicable`。
+跳过时二次验证耗时、碰撞查询数为零，不报告曲线 clearance 或全曲线偏差证明。
+
+时间越界错误包含 `query_time_s`、`valid_range_s`、`query_minus_end_s`，使用足以区分相邻
+浮点数的精度。致命错误同时写到终端和本次输出目录的 `native.log`，进程仍以失败退出。
+此开关不改变曲线的合法时间范围，也不掩盖时间越界。

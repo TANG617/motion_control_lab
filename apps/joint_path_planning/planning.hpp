@@ -1,6 +1,8 @@
 #pragma once
-#include "motion_control_core/planning/joint/path_planner.hpp"
-#include "motion_control_core/planning/joint/time_parameterization.hpp"
+#include "motion_control_core/planning/path/joint_planner.hpp"
+#include "motion_control_core/planning/trajectory/joint_path_time_parameterizer.hpp"
+#include "motion_control_core/planning/trajectory/joint_path_generator.hpp"
+#include "motion_control_core/planning/validation/joint_trajectory_validator.hpp"
 #include "options.hpp"
 #include <atomic>
 namespace motion_control_lab::joint_path_planning {
@@ -10,6 +12,9 @@ enum class Stage {
   Search,
   Check,
   Simplify,
+  Prune,
+  Smooth,
+  TrajectoryVerification,
   Timing,
   Verification,
   Preview,
@@ -32,6 +37,11 @@ struct PlannedMotion {
   mcc::JointPathPlanningDiagnostics planning;
   mcc::JointPathTimingResult timed;
   mcc::JointPathTimingDiagnostics timing;
+  std::shared_ptr<const mcc::JointTrajectoryCurve> curve;
+  mcc::JointPathTrajectoryDiagnostics smoothing;
+  mcc::JointTrajectoryValidationResult trajectory_validation;
+  double trajectory_validation_ms{0};
+  std::string trajectory_validation_status{"not_applicable"};
   mcc::JointPathValidationResult direct, verified;
 };
 class Planning {

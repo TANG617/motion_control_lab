@@ -72,7 +72,7 @@ TuiDocument makeDocument(const Snapshot &s, const mcc::RobotModel &model,
   TuiSection ik = section("IK endpoint acceptance", {}),
              path = section("Joint path search", {}),
              collision = section("Full-body collision", {}),
-             trajectory = section("Path-preserving timing", {});
+             trajectory = section("Trajectory timing", {});
   if (s.attempt) {
     const auto &a = *s.attempt;
     const auto &m = a.motion;
@@ -125,11 +125,23 @@ TuiDocument makeDocument(const Snapshot &s, const mcc::RobotModel &model,
     trajectory.rows = {
         {"Duration [s]", n(m.timing.duration)},
         {"Timing mode", s.timing_mode},
+        {"Smooth validation", s.smooth_validation},
+        {"Trajectory validation", m.trajectory_validation_status},
         {"Motion segments", std::to_string(m.timing.segment_count)},
         {"Through waypoints", std::to_string(m.timing.through_waypoint_count)},
         {"Stops (incl. endpoints)",
-         std::to_string(m.timing.stop_waypoint_indices.size())},
+         std::to_string(m.curve ? m.smoothing.stop_times.size()
+                                : m.timing.stop_waypoint_indices.size())},
         {"Timing [ms]", n(m.timing.calculation_time_ms)},
+        {"Pruned waypoints", std::to_string(m.planning.removed_vertices)},
+        {"Trajectory verification [ms]", n(m.trajectory_validation_ms)},
+        {"Certified trajectory intervals",
+         std::to_string(
+             m.trajectory_validation.geometry.certified_interval_count)},
+        {"Smooth deviation bound [rad]",
+         m.trajectory_validation.maximum_deviation_bound.size()
+             ? n(m.trajectory_validation.maximum_deviation_bound.maxCoeff())
+             : "-"},
         {"Request [ms]", n(a.request_time_ms)},
         {"Samples", std::to_string(m.timing.sample_count)},
         {"Peak velocity/limit", n(m.timing.maximum_velocity_ratio)},

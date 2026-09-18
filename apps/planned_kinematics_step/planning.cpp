@@ -1,7 +1,7 @@
 #include "planning.hpp"
 namespace motion_control_lab::planned_kinematics_step {
 Planning::Planning(const Options &x) : o(x) {
-  mcc::JointPlannerConfig c;
+  mcc::JointTrajectoryPlannerConfig c;
   c.synchronization = mcc::TrajectorySynchronization::Time;
   require(jp.configure(c));
   for (auto s : {"left", "right"}) {
@@ -14,7 +14,7 @@ Planning::Planning(const Options &x) : o(x) {
 }
 Json::Value Planning::reference(const Json::Value &goal, bool update,
                                 Json::Value &native) {
-  mcc::PlanningDiagnostics d;
+  mcc::TrajectoryPlanningDiagnostics d;
   if (update) {
     mcc::CartesianRetargetRequest r;
     r.reference_frame_name = o.input["root_frame"].asString();
@@ -83,7 +83,7 @@ mcc::JointTrajectorySample Planning::execute(const std::vector<double> &q,
       std::vector<double>(q.size(), o.config["joint_acceleration"].asDouble());
   r.limits.max_jerk =
       std::vector<double>(q.size(), o.config["joint_jerk"].asDouble());
-  mcc::PlanningDiagnostics d;
+  mcc::TrajectoryPlanningDiagnostics d;
   auto status = jp.plan(r, d);
   native["joint_plan_status"] = status.message;
   native["joint_plan_ok"] = status.ok();
