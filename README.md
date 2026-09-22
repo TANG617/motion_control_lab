@@ -1,5 +1,14 @@
 # Motion Control Lab
 
+> **仓库迁移通知**
+>
+> Motion Control Lab（MCL）已合并到
+> [motion_control_playground](https://github.com/TANG617/motion_control_playground)，
+> 在 `labs/motion-control-lab/` 下继续开发和维护，由该工作区直接管理源码。
+> 迁移后的源码见 [workspace 中的 MCL](https://github.com/TANG617/motion_control_playground/tree/migration/mcl-into-workspace/labs/motion-control-lab)。
+> 后续代码更新、问题反馈和贡献请前往新仓库。
+> 本仓库停止独立维护，将归档保留，供查询历史提交和复现实验版本。
+
 Motion Control Lab 是面向机器人遥操作 whole-body IK 的可复现实验仓库。研究愿景见
 [docs/experiments.md](docs/experiments.md)，实验与证据生命周期见
 [docs/experiment_architecture.md](docs/experiment_architecture.md)，app 与 TUI、Viz、scheduler、
