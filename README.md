@@ -1,5 +1,13 @@
 # Motion Control Lab
 
+> **仓库迁移通知**
+>
+> Motion Control Lab（MCL）已合并到
+> [motion_control_playground](https://github.com/TANG617/motion_control_playground)，
+> 在 `labs/motion-control-lab/` 下继续开发和维护，由该工作区直接管理源码。
+> 后续代码更新、问题反馈和贡献请前往新仓库。
+> 本仓库停止独立维护，将归档保留，供查询历史提交和复现实验版本。
+
 MCL 是 R1 运动控制的原生应用与可复现实验仓库。具体 app 直接使用 MCC/PlaCo，
 共享层负责输入、调度、展示和证据。Core/Sim/Viz 与生产系统具有独立生命周期。
 
